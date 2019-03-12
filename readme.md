@@ -12,11 +12,11 @@ Documentation on the protocol used by the Polaris Service can be found at https:
     * [Building On Mac](#building-on-mac)
 * [Examples](#examples)
     * [Septentrio Example](#septentrio-example)
-    *   [Hardware Setup](#hardware-setup)
-    *   [Configure AsteRx-m2](#configure-asterx-m2)
-    *   [Serial Permissions in Ubuntu](#serial-permissions-in-ubuntu)
-    *   [Running the example](#running-the-example)
-    *   [Verifying Corrections](#verifying-corrections)
+        * [Hardware Setup](#hardware-setup)
+        * [Configure AsteRx-m2](#configure-asterx-m2)
+        * [Serial Permissions in Ubuntu](#serial-permissions-in-ubuntu)
+        * [Running the example](#running-the-example)
+        * [Verifying Corrections](#verifying-corrections)
 
 
 
