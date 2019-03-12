@@ -1,0 +1,8 @@
+# Bazel
+bazel-*
+
+# CMake
+build
+
+# Visual Studio Code
+.vscode

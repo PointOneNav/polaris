@@ -1,0 +1,28 @@
+setDataInOut, COM1, , none
+setDataInOut, COM2, , none
+setDataInOut, COM3, , none
+setDataInOut, COM4, , none
+setDataInOut, USB1, , SBF
+setSBFGroups, Group1, MeasEpoch+MeasExtra+EndOfMeas+GPSRawCA+PVTGeodetic+ExtEvent+ReceiverStatus
+setSBFOutput, Stream1, USB1
+setSBFOutput, Stream2, IPS1
+setSBFOutput, Stream1, , MeasEpoch+MeasExtra+EndOfMeas+GPSRawCA+GPSRawL2C+GPSRawL5+GLORawCA+GALRawFNAV+GALRawINAV+GEORawL1+GEORawL5+GPSNav+GPSAlm+GPSIon+GPSUtc+GLONav+GLOAlm+GLOTime+GALNav+GALAlm+GALIon+GALUtc+GALGstGps+GALSARRLM+GEOMT00+GEOPRNMask+GEOFastCorr+GEOIntegrity+GEOFastCorrDegr+GEONav+GEODegrFactors+GEONetworkTime+GEOAlm+GEOIGPMask+GEOLongTermCorr+GEOIonoDelay+GEOServiceLevel+GEOClockEphCovMatrix+BaseVectorGeod+PVTGeodetic+PosCovGeodetic+VelCovGeodetic+ReceiverTime+BDSRaw+QZSRawL1CA+QZSRawL2C+QZSRawL5+PosLocal+IRNSSRaw
+setSBFOutput, Stream2, , MeasEpoch+MeasExtra+GEORawL1+GPSNav+GPSIon+GPSUtc+GLONav+GLOTime+GALNav+GALIon+GALUtc+GALGstGps+GEONav+PVTGeodetic+ExtEvent+DiffCorrIn+ReceiverSetup+Commands+Comment+BDSNav+QZSNav+BDSIon+BDSUtc
+setSBFOutput, Stream1, , , msec100
+setSBFOutput, Stream2, , , msec100
+setRTCMv2Output, COM1, none
+setRTCMv3Formatting, 680
+setRTCMv3Output, COM1, RTCM1002+RTCM1004+RTCM1005+RTCM1006+RTCM1010+RTCM1012+RTCM1033+RTCM1230
+setIPServerSettings, IPS1, 9000
+setStaticPosCartesian, Cartesian1, -2707827.2500
+setStaticPosCartesian, Cartesian1, , -4260856.5000
+setStaticPosCartesian, Cartesian1, , , 3884899.7500
+setClockSyncThreshold, msec1
+setLEDMode, DIFFCORLED
+setAntennaConnector, Ext
+setWBIMitigation, on
+setNotchFiltering, Notch1, manual
+setNotchFiltering, Notch2, manual
+setNotchFiltering, Notch1, , 1600.000
+setNotchFiltering, Notch2, , 1200.000
+setBBSamplingMode, AfterIM
