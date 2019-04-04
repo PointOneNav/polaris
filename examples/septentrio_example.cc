@@ -32,7 +32,7 @@ DEFINE_string(device, "/dev/ttyACM0", "The reciver com port file handle");
 void PvtCallback(const PVTGeodetic_2_2_t &pvt,
                  point_one::polaris::PolarisAsioClient *polaris_client) {
   LOG_EVERY_N(INFO, 10) << "Week: " << pvt.WNc << " Tow: " << pvt.TOW / 1000.0
-                        << " Solution Type: " << pvt.Mode
+                        << " Solution Type: " << (int)pvt.Mode
                         << " Hacc: " << pvt.HAccuracy
                         << " Vacc: " << pvt.VAccuracy
                         << " Lat: " << pvt.Lat * RAD2DEG

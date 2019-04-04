@@ -86,7 +86,7 @@ class SeptentrioSerialReceiver : public SeptentrioReceiver {
 
   void Send(uint8_t *buf, size_t len) { serial_port.AsyncWrite(buf, len); }
 
-  bool Connect() override { return serial_port.Open(device_path_, 460800); }
+  bool Connect() override { return serial_port.Open(device_path_, 115200); }
 
  private:
   point_one::utils::SimpleAsioSerialPort serial_port;
