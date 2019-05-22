@@ -23,6 +23,10 @@
 namespace point_one {
 namespace polaris {
 
+namespace {
+constexpr int SOCKET_TIMEOUT_MS = 5000;
+}  // namespace
+
 class PolarisAsioClient {
  public:
   PolarisAsioClient(boost::asio::io_service &io_service,
@@ -39,6 +43,8 @@ class PolarisAsioClient {
         socket_(io_service),
         interval_ms_(interval_ms),
         pos_timer_(io_service, boost::posix_time::milliseconds(interval_ms)),
+        socket_timer_(io_service,
+                      boost::posix_time::milliseconds(SOCKET_TIMEOUT_MS)),
         reconnect_timer_(io_service,
                          boost::posix_time::milliseconds(interval_ms)) {}
 
@@ -91,7 +97,7 @@ class PolarisAsioClient {
 
  private:
   // The size of the read buffer.
-  static constexpr int BUF_SIZE = 50;
+  static constexpr int BUF_SIZE = 1024;
 
   // How long to wait before sending a new position update.  Polaris
   // Service expects receiving a message within 5 seconds.
@@ -145,13 +151,9 @@ class PolarisAsioClient {
     LOG(INFO) << "Starting Polaris Client.";
     pos_timer_.async_wait(boost::bind(&PolarisAsioClient::PositionTimer, this,
                                       boost::asio::placeholders::error));
-    
-    LOG(INFO) << "Calling Read.";
-    boost::asio::async_read(
-        socket_, boost::asio::buffer(buf_),
-        boost::bind(&PolarisAsioClient::HandleSocketRead, this,
-                    boost::asio::placeholders::error,
-                    boost::asio::placeholders::bytes_transferred));
+
+    VLOG(3) << "Starting socket read.";
+    ScheduleAsyncReadWithTimeout();
   }
 
   // Handle reading of bytes.
@@ -170,9 +172,19 @@ class PolarisAsioClient {
       polaris_bytes_received_callback_(buf_, bytes);
     }
 
+    ScheduleAsyncReadWithTimeout();
+  }
+
+  void ScheduleAsyncReadWithTimeout() {
+    socket_timer_.expires_from_now(
+        boost::posix_time::milliseconds(SOCKET_TIMEOUT_MS));
+    socket_timer_.async_wait(
+        boost::bind(&PolarisAsioClient::HandleSocketTimeout, this,
+                    boost::asio::placeholders::error));
+
     // Read more bytes if they are available.
     boost::asio::async_read(
-        socket_, boost::asio::buffer(buf_),
+        socket_, boost::asio::buffer(buf_), boost::asio::transfer_at_least(1),
         boost::bind(&PolarisAsioClient::HandleSocketRead, this,
                     boost::asio::placeholders::error,
                     boost::asio::placeholders::bytes_transferred));
@@ -203,6 +215,14 @@ class PolarisAsioClient {
     if (e != boost::asio::error::operation_aborted) {
       VLOG(4) << "Reconnecting...";
       Connect();
+    }
+  }
+
+  // Called when socket fails to read for a given time.
+  void HandleSocketTimeout(const boost::system::error_code &e) {
+    if (e != boost::asio::error::operation_aborted && connected_) {
+      LOG(WARNING) << "Socket timedout on read, scheduling reconnect.";
+      ScheduleReconnect();
     }
   }
 
@@ -250,7 +270,6 @@ class PolarisAsioClient {
         boost::bind(&PolarisAsioClient::HandlePositionWrite, this, buf,
                     boost::asio::placeholders::error));
     VLOG(6) << "Scheduled position";
-
   }
 
   // Handles writing position to Polaris Service. Attempts reconnect on failure.
@@ -302,6 +321,9 @@ class PolarisAsioClient {
 
   // A timer for connecting retries.
   boost::asio::deadline_timer reconnect_timer_;
+
+  // A timer for managing read timeouts.
+  boost::asio::deadline_timer socket_timer_;
 
   // Tracks whether the reconnect_timer_ has ever been initiated.
   bool reconnect_set_ = false;

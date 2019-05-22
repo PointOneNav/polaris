@@ -1,0 +1,14 @@
+[Unit]
+Description=Ntrip Proxy Service
+
+[Service]
+ExecStart=/home/pointone/polaris/examples/ntrip/ntrip_proxy.sh
+WorkingDirectory=/home/pointone/polaris/examples/ntrip
+Restart=always
+RestartSec=10
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=ntrip-proxy
+
+[Install]
+WantedBy=multi-user.target

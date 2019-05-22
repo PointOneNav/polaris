@@ -12,11 +12,14 @@ Documentation on the protocol used by the Polaris Service can be found at https:
     * [Building On Mac](#building-on-mac)
 * [Examples](#examples)
     * [Septentrio Example](#septentrio-example)
-        * [Hardware Setup](#hardware-setup)
-        * [Configure AsteRx-m2](#configure-asterx-m2)
-        * [Serial Permissions in Ubuntu](#serial-permissions-in-ubuntu)
-        * [Running the example](#running-the-example)
-        * [Verifying Corrections](#verifying-corrections)
+    *   [Hardware Setup](#hardware-setup)
+    *   [Configure AsteRx-m2](#configure-asterx-m2)
+    *   [Serial Permissions in Ubuntu](#serial-permissions-in-ubuntu)
+    *   [Running the example](#running-the-example)
+    *   [Verifying Corrections](#verifying-corrections)
+    * [Generic Serial Receiver Example](#generic-serial-receiver-example)
+    * [Ntrip Proxy Example](#ntrip-proxy-example)
+    *   [Running Ntrip Caster](#running-ntrip-caster)
 
 
 
@@ -154,3 +157,17 @@ You may also use RxTools, which is distributed as part as the septentrio receive
 `RxTools > View > DiffCorr Info View`
 
 ![RxTools > View > DiffCorr Info View](/docs/septentrio_rxtools_example.png?raw=true "Septentrio Rxtools example")
+
+### Generic Serial Receiver Example ###
+
+The example binary `asio_example` can be used to connect to a receiver that can take rtcm corrections over serial.  If the receiver is configured to send ascii nmea GPGGA strings, the example will update the polaris server to assure the best rtk baseline possible.
+
+To run the application:
+```bazel run examples:asio -- --logtostderr --polaris_api_key=MYAPPKEY1234 --device=/dev/ttyACM0```
+
+
+### Ntrip Proxy Example ###
+
+The example binary `ntrip_example` proxies polaris RTK corrections as a simple Ntrip caster for use with devices that take Ntrip corrections.
+
+#### Running Ntrip Caster ####
