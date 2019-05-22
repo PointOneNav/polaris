@@ -24,7 +24,7 @@ namespace point_one {
 namespace polaris {
 
 namespace {
-constexpr double SOCKET_TIMEOUT_MS = 5000;
+constexpr int SOCKET_TIMEOUT_MS = 5000;
 }  // namespace
 
 class PolarisAsioClient {
