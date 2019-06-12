@@ -161,7 +161,6 @@ class PolarisAsioClient {
     if (err) {
       connected_ = false;
       LOG(ERROR) << "Error reading bytes.";
-      ScheduleReconnect();
       return;
     }
 
