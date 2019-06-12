@@ -62,7 +62,7 @@ class PolarisAsioClient {
       endpoint_ = iter->endpoint();
     } catch (boost::system::system_error &e) {
       LOG(WARNING) << "Error connecting to Polaris at tcp://" << host_ << ":"
-                   << port_ << " -> " << e.what();
+                   << port_;
       ScheduleReconnect();
       return;
     }
