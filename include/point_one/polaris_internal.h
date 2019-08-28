@@ -40,7 +40,7 @@ constexpr size_t POLARIS_HEADER_SIZE = sizeof(PolarisHeader);
 
 typedef uint16_t Checksum;
 constexpr size_t POLARIS_CHECKSUM_SIZE = sizeof(Checksum);
-Checksum GetChecksum(const uint8_t bytes[], size_t length) {
+static Checksum GetChecksum(const uint8_t bytes[], size_t length) {
   uint8_t ckA = 0;
   uint8_t ckB = 0;
 
@@ -52,13 +52,13 @@ Checksum GetChecksum(const uint8_t bytes[], size_t length) {
 }
 
 // Gets a polaris message size including header and CRC.
-size_t GetMessageSize(size_t message_len) {
+static size_t GetMessageSize(size_t message_len) {
   return POLARIS_HEADER_SIZE + message_len + POLARIS_CHECKSUM_SIZE;
 }
 
 // Serializes Polaris message with header and CRC.
-void SerializeMessage(const PolarisHeader &header, const uint8_t *message,
-                      uint8_t *buf) {
+static void SerializeMessage(const PolarisHeader &header,
+                             const uint8_t *message, uint8_t *buf) {
   std::memcpy(buf, &header, POLARIS_HEADER_SIZE);
   std::memcpy(buf + POLARIS_HEADER_SIZE, message, header.length);
   Checksum checksum = GetChecksum(buf, POLARIS_HEADER_SIZE + header.length);
