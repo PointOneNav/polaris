@@ -48,10 +48,23 @@ class PolarisAsioClient {
         reconnect_timer_(io_service,
                          boost::posix_time::milliseconds(interval_ms)) {}
 
+  ~PolarisAsioClient() {
+    polaris_bytes_received_callback_ = nullptr;
+    pos_timer_.cancel();
+    socket_timer_.cancel();
+    reconnect_timer_.cancel();
+
+    std::unique_lock<std::recursive_mutex> guard(lock_);
+    if (socket_.is_open()) {
+      socket_.close();
+    }
+  }
+
   // Connect to Polaris Client and start sending position.
   // Throws Boost system error if url cannot be resolved
   void Connect() {
     LOG(INFO) << "Attempting to open socket tcp://" << host_ << ":" << port_;
+    std::unique_lock<std::recursive_mutex> guard(lock_);
     try {
       // Close socket if already open.
       socket_.close();
@@ -125,6 +138,8 @@ class PolarisAsioClient {
 
     auto buf = std::make_shared<std::vector<uint8_t>>(request.GetSize());
     request.Serialize(buf->data());
+
+    std::unique_lock<std::recursive_mutex> guard(lock_);
     boost::asio::async_write(
         socket_, boost::asio::buffer(*buf),
         boost::bind(&PolarisAsioClient::HandleAuthTokenWrite, this, buf,
@@ -182,6 +197,7 @@ class PolarisAsioClient {
                     boost::asio::placeholders::error));
 
     // Read more bytes if they are available.
+    std::unique_lock<std::recursive_mutex> guard(lock_);
     boost::asio::async_read(
         socket_, boost::asio::buffer(buf_), boost::asio::transfer_at_least(1),
         boost::bind(&PolarisAsioClient::HandleSocketRead, this,
@@ -264,6 +280,8 @@ class PolarisAsioClient {
 
     auto buf = std::make_shared<std::vector<uint8_t>>(request->GetSize());
     request->Serialize(buf->data());
+
+    std::unique_lock<std::recursive_mutex> guard(lock_);
     boost::asio::async_write(
         socket_, boost::asio::buffer(*buf),
         boost::bind(&PolarisAsioClient::HandlePositionWrite, this, buf,
@@ -282,6 +300,9 @@ class PolarisAsioClient {
       ScheduleReconnect();
     }
   }
+
+  // Synchronization for the socket.
+  std::recursive_mutex lock_;
 
   // The host of the TCP connection.
   std::string host_;
