@@ -24,7 +24,7 @@ namespace point_one {
 namespace polaris {
 
 namespace {
-constexpr int SOCKET_TIMEOUT_MS = 5000;
+constexpr int SOCKET_TIMEOUT_MS = 7000;
 }  // namespace
 
 class PolarisAsioClient {
@@ -63,6 +63,7 @@ class PolarisAsioClient {
   // Connect to Polaris Client and start sending position.
   // Throws Boost system error if url cannot be resolved
   void Connect() {
+    connected_ = false;
     LOG(INFO) << "Attempting to open socket tcp://" << host_ << ":" << port_;
     std::unique_lock<std::recursive_mutex> guard(lock_);
     try {
@@ -236,8 +237,10 @@ class PolarisAsioClient {
   // Called when socket fails to read for a given time.
   void HandleSocketTimeout(const boost::system::error_code &e) {
     if (e != boost::asio::error::operation_aborted && connected_) {
+      reconnect_timer_.cancel();
+      connected_ = false;
       LOG(WARNING) << "Socket timedout on read, scheduling reconnect.";
-      ScheduleReconnect();
+      ScheduleReconnect(0);
     }
   }
 
