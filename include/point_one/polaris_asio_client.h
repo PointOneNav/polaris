@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <boost/asio.hpp>
 #include <boost/bind.hpp>
+#include <boost/property_tree/json_parser.hpp>
+#include <boost/property_tree/ptree.hpp>
 #include <cmath>
 #include <iostream>
 #include <istream>
@@ -29,24 +31,27 @@ constexpr int SOCKET_TIMEOUT_MS = 7000;
 
 class PolarisAsioClient {
  public:
+  // How long to wait before sending a new position update.  Polaris
+  // Service expects receiving a message within 5 seconds.
+  static constexpr int DEFAULT_POSITION_SEND_INTERVAL_MSECS = 3000;
+
   PolarisAsioClient(boost::asio::io_service &io_service,
                     const std::string &api_key,
-                    const std::string &host = DEFAULT_POLARIS_API_URL,
-                    int port = DEFAULT_POLARIS_API_PORT,
-                    int interval_ms = DEFAULT_POSITION_SEND_INTERVAL_MSECS)
-      : host_(host),
-        port_(port),
+                    const std::string &tracking_id = "",
+                    const PolarisConnectionSettings &connection_settings =
+                        DEFAULT_CONNECTION_SETTINGS)
+      : connection_settings_(connection_settings),
         api_key_(api_key),
-        auth_token_(api_key),
         io_service_(io_service),
         resolver_(io_service),
         socket_(io_service),
-        interval_ms_(interval_ms),
-        pos_timer_(io_service, boost::posix_time::milliseconds(interval_ms)),
+        tracking_id_(tracking_id),
+        pos_timer_(io_service, boost::posix_time::milliseconds(
+                                   connection_settings.interval_ms)),
         socket_timer_(io_service,
                       boost::posix_time::milliseconds(SOCKET_TIMEOUT_MS)),
-        reconnect_timer_(io_service,
-                         boost::posix_time::milliseconds(interval_ms)) {}
+        reconnect_timer_(io_service, boost::posix_time::milliseconds(
+                                         connection_settings.interval_ms)) {}
 
   ~PolarisAsioClient() {
     polaris_bytes_received_callback_ = nullptr;
@@ -64,19 +69,22 @@ class PolarisAsioClient {
   // Throws Boost system error if url cannot be resolved
   void Connect() {
     connected_ = false;
-    LOG(INFO) << "Attempting to open socket tcp://" << host_ << ":" << port_;
+    LOG(INFO) << "Attempting to open socket tcp://" << connection_settings_.host
+              << ":" << connection_settings_.port;
     std::unique_lock<std::recursive_mutex> guard(lock_);
     try {
       // Close socket if already open.
       socket_.close();
 
       // Resolve TCP endpoint.
-      boost::asio::ip::tcp::resolver::query query(host_, std::to_string(port_));
+      boost::asio::ip::tcp::resolver::query query(
+          connection_settings_.host, std::to_string(connection_settings_.port));
       boost::asio::ip::tcp::resolver::iterator iter = resolver_.resolve(query);
       endpoint_ = iter->endpoint();
     } catch (boost::system::system_error &e) {
-      LOG(WARNING) << "Error connecting to Polaris at tcp://" << host_ << ":"
-                   << port_;
+      LOG(WARNING) << "Error connecting to Polaris at tcp://"
+                   << connection_settings_.host << ":"
+                   << connection_settings_.port;
       ScheduleReconnect();
       return;
     }
@@ -113,9 +121,106 @@ class PolarisAsioClient {
   // The size of the read buffer.
   static constexpr int BUF_SIZE = 1024;
 
-  // How long to wait before sending a new position update.  Polaris
-  // Service expects receiving a message within 5 seconds.
-  static constexpr int DEFAULT_POSITION_SEND_INTERVAL_MSECS = 3000;
+  bool RequestToken() {
+    try {
+      // Get a list of endpoints corresponding to the server name.
+      boost::asio::ip::tcp::resolver resolver(io_service_);
+      boost::asio::ip::tcp::resolver::query query(connection_settings_.api_host,
+                                                  "http");
+      boost::asio::ip::tcp::resolver::iterator endpoint_iterator =
+          resolver.resolve(query);
+
+      // Try each endpoint until we successfully establish a connection.
+      boost::asio::ip::tcp::socket socket(io_service_);
+      boost::asio::connect(socket, endpoint_iterator);
+
+      // Form the request. We specify the "Connection: close" header so that the
+      // server will close the socket after transmitting the response. 
+      boost::asio::streambuf request;
+      std::ostream request_stream(&request);
+
+      std::stringstream post_body;
+      post_body << "{\"grant_type\": \"authorization_code\", "
+                     << "\"token_type\":  \"Bearer\", "
+                     << "\"tracking_id\": \"" << tracking_id_ << "\", "
+                     << "\"authorization_code\": \"" << api_key_ << "\"}\r\n";
+      std::string post_body_str = post_body.str();
+
+      request_stream << "POST "
+                     << "/api/v1/auth/token"
+                     << " HTTP/1.1\r\n";
+      request_stream << "Host: " << connection_settings_.api_host << ":80\r\n";
+      request_stream << "Content-Type: application/json\r\n";
+      request_stream << "Content-Length: " << post_body_str.size()
+                     << "\r\n";
+      request_stream << "Accept: */*\r\n";
+      request_stream << "Connection: close\r\n";
+      request_stream << "Cache-Control: no-cache\r\n";
+      request_stream << "\r\n";
+      request_stream << post_body_str;
+
+      // Send the request.
+      boost::asio::write(socket, request);
+
+      // Read the response status line. The response streambuf will
+      // automatically grow to accommodate the entire line. The growth may be
+      // limited by passing a maximum size to the streambuf constructor.
+      boost::asio::streambuf response;
+      boost::asio::read_until(socket, response, "\r\n");
+
+      // Check that response is OK.
+      std::istream response_stream(&response);
+      std::string http_version;
+      response_stream >> http_version;
+      unsigned int status_code;
+      response_stream >> status_code;
+      std::string status_message;
+      std::getline(response_stream, status_message);
+      if (!response_stream || http_version.substr(0, 5) != "HTTP/") {
+        std::cout << "Invalid response\n";
+        return false;
+      }
+
+      switch(status_code) {
+        case 200:
+          LOG(INFO) << "Succesfully received polaris authentication token.";
+          break;
+        case 403:
+          LOG(ERROR) << "Received a 403 from Polaris, check your API key.";
+          return false;
+        default:
+          LOG(ERROR) << "Response returned with status code " << status_code;
+          return false;
+      }
+
+      // Process the response headers.
+      boost::asio::read_until(socket, response, "\r\n\r\n");
+      std::string header;
+      while (std::getline(response_stream, header) && header != "\r") {
+        DLOG(INFO) << header;
+      }
+
+      // Parse json.
+      boost::property_tree::ptree pt;
+      if (response.size() > 0) {
+        boost::property_tree::read_json(response_stream, pt);
+      }
+
+      try {
+        api_token_.access_token = pt.get<std::string>("access_token");
+        api_token_.expires_in = pt.get<double>("expires_in");
+        api_token_.issued_at = pt.get<double>("issued_at");
+      } catch (std::exception &e) {
+        LOG(ERROR) << "Exception: " << e.what();
+        return false;
+      }
+
+      return true;
+    } catch (std::exception &e) {
+      LOG(ERROR) << "Exception: " << e.what();
+    }
+    return false;
+  }
 
   // Send authentication if connection is successful, otherwise reconnect..
   void HandleConnect(const boost::system::error_code &err) {
@@ -125,8 +230,8 @@ class PolarisAsioClient {
       SendAuth();
     } else {
       connected_ = false;
-      LOG(ERROR) << "Failed to connect to tcp://" << host_ << ":" << port_
-                 << ".";
+      LOG(ERROR) << "Failed to connect to tcp://" << connection_settings_.host
+                 << ":" << connection_settings_.port << ".";
       ScheduleReconnect();
     }
   }
@@ -135,7 +240,10 @@ class PolarisAsioClient {
   // HandleAuthTokenWrite.
   void SendAuth() {
     LOG(INFO) << "Authenticating with service using auth token.";
-    AuthRequest request(auth_token_);
+    if (api_token_.access_token.empty()) {
+      RequestToken();
+    }
+    AuthRequest request(api_token_.access_token);
 
     auto buf = std::make_shared<std::vector<uint8_t>>(request.GetSize());
     request.Serialize(buf->data());
@@ -157,6 +265,7 @@ class PolarisAsioClient {
     } else {
       connected_ = false;
       LOG(ERROR) << "Polaris authentication failed.";
+      api_token_ = PolarisAuthToken();  // Reset token.
       ScheduleReconnect();
     }
   }
@@ -254,10 +363,10 @@ class PolarisAsioClient {
     }
   }
 
-  // Timer that sends position to polaris every interval_ms_ milliseconds.
-  // If the Polaris Server does not receive a message from the client after
-  // 5 seconds it will close the socket.  Sending position functions as a
-  // connection heartbeat.
+  // Timer that sends position to polaris every connection_settings_.interval_ms
+  // milliseconds. If the Polaris Server does not receive a message from the
+  // client after 5 seconds it will close the socket.  Sending position
+  // functions as a connection heartbeat.
   void PositionTimer(const boost::system::error_code &err) {
     if (err == boost::asio::error::operation_aborted) {
       VLOG(6) << "Position callback canceled";
@@ -265,7 +374,8 @@ class PolarisAsioClient {
     }
     SendPosition();
     VLOG(6) << "Scheduling position timer.";
-    pos_timer_.expires_from_now(boost::posix_time::milliseconds(interval_ms_));
+    pos_timer_.expires_from_now(
+        boost::posix_time::milliseconds(connection_settings_.interval_ms));
     pos_timer_.async_wait(boost::bind(&PolarisAsioClient::PositionTimer, this,
                                       boost::asio::placeholders::error));
   }
@@ -307,15 +417,13 @@ class PolarisAsioClient {
   // Synchronization for the socket.
   std::recursive_mutex lock_;
 
-  // The host of the TCP connection.
-  std::string host_;
-
-  // The port to connect via TCP.
-  int port_;
+  // Settings for reaching polaris services.
+  const PolarisConnectionSettings connection_settings_;
 
   // The serial number of the device for connecting with Polaris.
   std::string api_key_;
-  std::string auth_token_;
+
+  PolarisAuthToken api_token_;
 
   // The asio event loop service.
   boost::asio::io_service &io_service_;
@@ -336,8 +444,9 @@ class PolarisAsioClient {
   // framed.
   std::function<void(uint8_t *, uint16_t)> polaris_bytes_received_callback_;
 
-  // How frequently to send last position.
-  int interval_ms_;
+  // Optionally a unique id that can be used to aid in debugging when sharing an api key
+  // with multiple clients.
+  std::string tracking_id_;
 
   // A deadline time for resending postion.
   boost::asio::deadline_timer pos_timer_;

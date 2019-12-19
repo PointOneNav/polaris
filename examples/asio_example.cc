@@ -14,10 +14,10 @@
 
 // Options for connecting to Polaris Server:
 DEFINE_string(
-    polaris_host, point_one::polaris::DEFAULT_POLARIS_API_URL,
+    polaris_host, point_one::polaris::DEFAULT_POLARIS_URL,
     "The Point One Navigation Polaris server tcp URI to which to connect");
 
-DEFINE_int32(polaris_port, point_one::polaris::DEFAULT_POLARIS_API_PORT,
+DEFINE_int32(polaris_port, point_one::polaris::DEFAULT_POLARIS_PORT,
              "The tcp port to which to connect");
 
 DEFINE_string(polaris_api_key, "",
@@ -137,9 +137,12 @@ int main(int argc, char* argv[]) {
     LOG(FATAL) << "You must supply a Polaris API key to connect to the server.";
     return 1;
   }
-
+  
+  point_one::polaris::PolarisConnectionSettings settings;
+  settings.host = FLAGS_polaris_host;
+  settings.port = FLAGS_polaris_port;
   point_one::polaris::PolarisAsioClient polaris_client(
-      io_loop, FLAGS_polaris_api_key, FLAGS_polaris_host, FLAGS_polaris_port);
+      io_loop, FLAGS_polaris_api_key, "asio_example", settings);
   polaris_client.SetPolarisBytesReceived(
       std::bind(&point_one::utils::SimpleAsioSerialPort::Write,
                 &serial_port_correction_forwarder, std::placeholders::_1,
