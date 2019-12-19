@@ -6,10 +6,10 @@
 
 #pragma once
 
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <cmath>
 #include <string>
 
 #include "polaris_internal.h"
@@ -26,8 +26,34 @@ static constexpr double METERS_TO_MILLIMETERS = 1000.0;
 }  // namespace
 
 // Polaris Service connection defaults.
-static const std::string DEFAULT_POLARIS_API_URL = "polaris.pointonenav.com";
-static constexpr int DEFAULT_POLARIS_API_PORT = 8088;
+static const std::string DEFAULT_POLARIS_URL = "polaris.pointonenav.com";
+static constexpr int DEFAULT_POLARIS_PORT = 8088;
+
+// Point One api for requesting access token.
+static const std::string DEFAULT_POINTONE_API_URL = "api.pointonenav.com";
+
+// How frequently to send position to polaris backend.
+static constexpr int DEFAULT_POSITION_SEND_INTERVAL_MSECS = 3000;
+
+struct PolarisConnectionSettings {
+  PolarisConnectionSettings()
+      : host(DEFAULT_POLARIS_URL),
+        port(DEFAULT_POLARIS_PORT),
+        api_host(DEFAULT_POINTONE_API_URL),
+        interval_ms(DEFAULT_POSITION_SEND_INTERVAL_MSECS) {}
+  std::string host;
+  int port;
+  std::string api_host;
+  int interval_ms;
+};
+
+static const PolarisConnectionSettings DEFAULT_CONNECTION_SETTINGS;
+
+struct PolarisAuthToken {
+  std::string access_token;
+  double issued_at;
+  double expires_in;
+};
 
 #pragma pack(1)
 
@@ -48,9 +74,12 @@ struct PositionEcef {
 
 struct PolarisPositionEcef {
   PolarisPositionEcef(const PositionEcef &ecef) {
-    x_cm = static_cast<int32_t>(std::round(ecef.pos[0] * METERS_TO_CENTIMETERS));
-    y_cm = static_cast<int32_t>(std::round(ecef.pos[1] * METERS_TO_CENTIMETERS));
-    z_cm = static_cast<int32_t>(std::round(ecef.pos[2] * METERS_TO_CENTIMETERS));
+    x_cm =
+        static_cast<int32_t>(std::round(ecef.pos[0] * METERS_TO_CENTIMETERS));
+    y_cm =
+        static_cast<int32_t>(std::round(ecef.pos[1] * METERS_TO_CENTIMETERS));
+    z_cm =
+        static_cast<int32_t>(std::round(ecef.pos[2] * METERS_TO_CENTIMETERS));
   }
 
   int32_t x_cm;
@@ -62,9 +91,7 @@ struct PolarisPositionEcef {
 // Altitude (cm)
 struct PositionLla {
   PositionLla() {}
-  PositionLla(const double pos_lla[3]) {
-    std::copy(pos_lla, pos_lla + 3, pos);
-  }
+  PositionLla(const double pos_lla[3]) { std::copy(pos_lla, pos_lla + 3, pos); }
   PositionLla(double lat_deg, double lon_deg, double alt_m) {
     pos[0] = lat_deg;
     pos[1] = lon_deg;
@@ -77,7 +104,8 @@ struct PolarisPositionLla {
   PolarisPositionLla(const PositionLla &lla) {
     lat_deg_ = static_cast<int32_t>(std::round(lla.pos[0] * 1e7));
     lon_deg_ = static_cast<int32_t>(std::round(lla.pos[1] * 1e7));
-    alt_mm_ = static_cast<int32_t>(std::round(lla.pos[2] * METERS_TO_MILLIMETERS));
+    alt_mm_ =
+        static_cast<int32_t>(std::round(lla.pos[2] * METERS_TO_MILLIMETERS));
   }
   int32_t lat_deg_;
   int32_t lon_deg_;
@@ -166,7 +194,6 @@ class PositionRequest : public PolarisRequest {
  private:
   T pos_;
 };
-
 // Request for sending ECEF postion.
 typedef PositionRequest<PolarisPositionEcef, internal::SYSTEM_ECEF>
     PositionEcefRequest;

@@ -25,6 +25,18 @@ cc_binary(
     ],
 )
 
+# Example that starts the septentrio receiver.
+cc_binary(
+    name = "simple_polaris_client",
+    srcs = ["simple_polaris_client.cc"],
+    linkopts = ["-lboost_system"],
+    deps = [
+        "//external:gflags",
+        "//external:glog",
+        "//:polaris_asio_client",
+    ],
+)
+
 # Simple asio sepetentrio client uisng septentrio's official library.
 cc_library(
     name = "septentrio_service",
