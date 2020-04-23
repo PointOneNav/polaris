@@ -124,13 +124,16 @@ void request_handler::handle_request(const request& req, reply& rep) {
     }
   }
 
-  LOG(INFO) << ntrip_user_agent;
-  if (!ntrip_user_agent) {
+  VLOG(2) << "Ntrip user agent: " << ntrip_user_agent;
+  VLOG(2) << req.uri;
+
+  // The ntrip user agent makes this respond with NTRIP standard responses
+  // that dont have the normal HTTP codes (as expected by receviers)
+  if (!ntrip_user_agent) {    
     handle_normal_http_request(req, rep);
   } else if (mountpoints_.find(req.uri) != mountpoints_.end()) {
     handle_mountpoint_request(req.uri, ntrip_gga, rep);
-  } else {
-    LOG(INFO) << req.uri;
+  } else {    
     handle_source_table_request(rep);
   }
 }

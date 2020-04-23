@@ -36,7 +36,8 @@ double ConvertGGADegrees(double gga_degrees) {
 
 void OnGpgga(const std::string &gpgga,
                  point_one::polaris::PolarisAsioClient *polaris_client) {
-  LOG(INFO) << "Got gpgga: " << gpgga;
+  LOG_FIRST_N(INFO, 1) << "Got first receiver GPGGA: " << gpgga;
+  VLOG(1) << "Got receiver GPGGA: " << gpgga;
   std::stringstream ss(gpgga);
   std::vector<std::string> result;
 
@@ -54,11 +55,11 @@ void OnGpgga(const std::string &gpgga,
     double lon = ConvertGGADegrees(std::stod(result[4], &sz)) * (result[5] == "E" ? 1 : -1);
     double alt = std::stod(result[8], &sz);
     
-    LOG(INFO) << "Setting position: lat: " << lat << " lon: " << lon << " alt: " << alt; 
+    VLOG(2) << "Setting position: lat: " << lat << " lon: " << lon << " alt: " << alt; 
     polaris_client->SetPositionLLA(lat, lon, alt);
   }
-  catch ( std::exception){ 
-    LOG(ERROR) << "Bad parse of string " << gpgga;
+  catch (const std::exception&){ 
+    LOG(WARNING) << "GPGGA Bad parse of string " << gpgga;
     return;
   }
 }
@@ -66,15 +67,18 @@ void OnGpgga(const std::string &gpgga,
 
 int main(int argc, char* argv[]) {
   ParseCommandLineFlags(&argc, &argv, true);
+  
+  //set output to std err on by default
+  FLAGS_logtostderr = true;
+  FLAGS_colorlogtostderr = true;
+
   InitGoogleLogging(argv[0]);
+
   try {
     // Check command line arguments.
     if (argc != 4) {
-      std::cerr << "Usage: http_server <address> <port> <doc_root>\n";
-      std::cerr << "  For IPv4, try:\n";
-      std::cerr << "    receiver 0.0.0.0 80 .\n";
-      std::cerr << "  For IPv6, try:\n";
-      std::cerr << "    receiver 0::0 80 .\n";
+      LOG(INFO) << "Usage: ntrip_example --polaris_api_key=KEY <address> <port> <doc_root>\n";
+      LOG(INFO) << "For IPv4, try: --polaris_api_key=KEY 0.0.0.0 2101 examples/ntrip\n";
       return 1;
     }
 
@@ -99,6 +103,7 @@ int main(int argc, char* argv[]) {
         io_loop, FLAGS_polaris_api_key, "ntrip_example", settings);
 
     // Initialise the server.
+    LOG(INFO) << "Starting NTRIP server on " << argv[1] << ":" << argv[2];
     ntrip::server ntrip_server(io_loop, argv[1], argv[2], argv[3]);
 
     // This callback will forward RTCM correction bytes received from the server

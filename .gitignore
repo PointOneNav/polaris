@@ -6,3 +6,5 @@ build
 
 # Visual Studio Code
 .vscode
+# Clion
+.clwb/

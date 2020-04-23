@@ -1,34 +1,42 @@
 workspace(name = "polaris")
 
+load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
-# External dependency: Google Log; has Bazel build already.
-http_archive(
-    name = "com_github_google_glog",
-    sha256 = "7083af285bed3995b5dc2c982f7de39bced9f0e6fd78d631f3285490922a0c3d",
-    strip_prefix = "glog-3106945d8d3322e5cbd5658d482c9ffed2d892c0",
-    urls = [
-        "https://github.com/drigz/glog/archive/3106945d8d3322e5cbd5658d482c9ffed2d892c0.tar.gz",
-    ],
-)
-
-bind(
-    name = "glog",
-    actual = "@com_github_google_glog//:glog",
-)
-
-# External dependency: Google Flags; has Bazel build already.
+#----------- gflags ---------------
 http_archive(
     name = "com_github_gflags_gflags",
-    sha256 = "6e16c8bc91b1310a44f3965e616383dbda48f83e8c1eaa2370a215057b00cabe",
-    strip_prefix = "gflags-77592648e3f3be87d6c7123eb81cbad75f9aef5a",
-    urls = [
-        "https://mirror.bazel.build/github.com/gflags/gflags/archive/77592648e3f3be87d6c7123eb81cbad75f9aef5a.tar.gz",
-        "https://github.com/gflags/gflags/archive/77592648e3f3be87d6c7123eb81cbad75f9aef5a.tar.gz",
-    ],
+    sha256 = "34af2f15cf7367513b352bdcd2493ab14ce43692d2dcd9dfc499492966c64dcf",
+    strip_prefix = "gflags-2.2.2",
+    urls = ["https://github.com/gflags/gflags/archive/v2.2.2.tar.gz"],
 )
 
 bind(
     name = "gflags",
     actual = "@com_github_gflags_gflags//:gflags",
 )
+
+#----------- glog ---------------
+git_repository(
+    name = "com_google_glog",
+    commit = "781096619d3dd368cfebd33889e417a168493ce7",
+    remote = "https://github.com/google/glog.git",
+    shallow_since = "1542766478 +0900",
+)
+
+bind(
+    name = "glog",
+    actual = "@com_google_glog//:glog",
+)
+
+#----------- boost ---------------
+git_repository(
+    name = "com_github_nelhage_rules_boost",
+    commit = "9f9fb8b2f0213989247c9d5c0e814a8451d18d7f",
+    remote = "https://github.com/nelhage/rules_boost",
+    shallow_since = "1570056263 -0700",
+)
+
+load("@com_github_nelhage_rules_boost//:boost/boost.bzl", "boost_deps")
+
+boost_deps()

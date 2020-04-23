@@ -177,7 +177,7 @@ class PolarisAsioClient {
       std::string status_message;
       std::getline(response_stream, status_message);
       if (!response_stream || http_version.substr(0, 5) != "HTTP/") {
-        std::cout << "Invalid response\n";
+        LOG(ERROR) << "Invalid HTTP response\n";
         return false;
       }
 
@@ -197,7 +197,7 @@ class PolarisAsioClient {
       boost::asio::read_until(socket, response, "\r\n\r\n");
       std::string header;
       while (std::getline(response_stream, header) && header != "\r") {
-        DLOG(INFO) << header;
+        VLOG(2) << header;
       }
 
       // Parse json.

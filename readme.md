@@ -10,7 +10,8 @@ Documentation on the protocol used by the Polaris Service can be found at https:
     * [Building with CMake](#building-with-cmake)
     * [Building With Bazel](#building-with-bazel)
     * [Building On Mac](#building-on-mac)
-* [Examples](#examples)
+* [Example Applications](#example-applications)
+    * [NTRIP Proxy Example](#ntrip-proxy-example)
     * [Septentrio Example](#septentrio-example)
     *   [Hardware Setup](#hardware-setup)
     *   [Configure AsteRx-m2](#configure-asterx-m2)
@@ -18,8 +19,7 @@ Documentation on the protocol used by the Polaris Service can be found at https:
     *   [Running the example](#running-the-example)
     *   [Verifying Corrections](#verifying-corrections)
     * [Generic Serial Receiver Example](#generic-serial-receiver-example)
-    * [Ntrip Proxy Example](#ntrip-proxy-example)
-    *   [Running Ntrip Caster](#running-ntrip-caster)
+        
 
 
 
@@ -31,24 +31,13 @@ The Polaris Client can be built by Bazel or CMake. Follow instructions below for
 
 To establish a connection, you must provide a valid Polaris API key. Please contact the administrator of your Point One Navigation contract or sales@pointonenav.com if you do not have one.
 
-### Dependencies ###
-
-The example code uses the [Boost.ASIO](http://www.boost.org/libs/asio) library for both TCP and serial connections. Boost is quite a large package and may already be installed on your machine. If not, it can be built from source using the following [instructions](https://www.boost.org/doc/libs/1_58_0/more/getting_started/unix-variants.html), or can be installed using your system package manager. For example:
-
-```
-sudo apt-get install libboost-all-dev
-```
-
-The sample application was tested against Boost 1.58.0 but other versions may work.
-
-The sample code also uses [gflags](https://gflags.github.io/gflags/) command-line argument support and [glog](https://github.com/google/glog/blob/master/cmake/INSTALL.md) for logging support. If you are using Bazel, these will download automatically. If you are using CMake, you must install them using your system's package manager or build them from source.
 
 ### Building with CMake ###
 
-To build using CMake install the dependencies if you do not have them already.
+To build using CMake, install the dependencies if you do not have them already.
 
 ```
-sudo apt-get install build-essential cmake libgflags-dev libgoogle-glog-dev
+sudo apt-get install libboost-all-dev build-essential cmake libgflags-dev libgoogle-glog-dev
 ```
 
 From the root of the repo execute:
@@ -66,8 +55,7 @@ This will produce a binary `septentrio_example` which can be executed.
 
 ### Building With Bazel ###
 
-[Bazel](https://docs.bazel.build/versions/master/install.html "Install Bazel") is a build system developed by Google. It provides an alternative to make based build systems. 
-
+All dependencies are automatically built when using [Bazel](https://docs.bazel.build/versions/master/install.html "Install Bazel").
 
 To build and run the example using Bazel, from the root of the repo:
 ```
@@ -83,9 +71,22 @@ These can be installed with [homebrew](http://osxdaily.com/2018/03/07/how-instal
 
 When using CMake, you will need to use a directory other than `build` as there is a BUILD file in the root of the repo and the likely disk formatting of your Mac is HFS+ which does not include letter case when determining file uniqueness.
 
-## Examples ##
+## Example Applications ##
 
-### Septentrio Example ###
+### NTRIP Proxy Example ###
+
+The example binary `ntrip_example` proxies Polaris RTK corrections as a simple NTRIP caster for use with devices that take NTRIP corrections.
+
+Any receiver that uses a NTRIP connection can simply connect to the computer running this application on port 2101 using the following command:
+```
+bazel run -c opt examples/ntrip:ntrip_example -- --polaris_api_key=${MY_POLARIS_APP_KEY} 0.0.0.0 2101 examples/ntrip
+```
+
+Your receiver should be configured to send NMEA GGA messages at a regaulr cadence (usually 1hz) so it is properly receiving corrections for the right region. The default mount point for the examples is `/Polaris` and no username or password is required.
+
+The examples directory also contains a simple `ntrip-proxy.service` that can be used to turn the example into a standard Linux service.
+
+### Septentrio Receiver Example ###
 
 The example binary `septentrio_example` streams RTK corrections to a Septentrio receiver over serial and reports back the receivers PVT message to the console. This has been tested on Septentrio's [AsteRx-m2](https://www.septentrio.com/en/products/gnss-receivers/rover-base-receivers/oem-receiver-boards/asterx-m2). The example can be easily modified for receivers that may receive corrections over other interfaces. 
 
@@ -166,8 +167,3 @@ To run the application:
 ```bazel run examples:asio -- --logtostderr --polaris_api_key=MYAPPKEY1234 --device=/dev/ttyACM0```
 
 
-### Ntrip Proxy Example ###
-
-The example binary `ntrip_example` proxies polaris RTK corrections as a simple Ntrip caster for use with devices that take Ntrip corrections.
-
-#### Running Ntrip Caster ####
