@@ -5,11 +5,12 @@ package(default_visibility = ["//visibility:public"])
 cc_binary(
     name = "asio_example",
     srcs = ["asio_example.cc"],
-    linkopts = ["-lboost_system"],
     deps = [
-        "//external:gflags",
-        "//:polaris_asio_client",
         ":simple_serial_port",
+        "//:polaris_asio_client",
+        "//external:gflags",
+        "@boost//:asio",
+        "@boost//:system",
     ],
 )
 
@@ -18,10 +19,10 @@ cc_binary(
     name = "septentrio_example",
     srcs = ["septentrio_example.cc"],
     deps = [
+        ":septentrio_service",
+        "//:polaris_asio_client",
         "//external:gflags",
         "//external:glog",
-        "//:polaris_asio_client",
-        ":septentrio_service",
     ],
 )
 
@@ -29,11 +30,10 @@ cc_binary(
 cc_binary(
     name = "simple_polaris_client",
     srcs = ["simple_polaris_client.cc"],
-    linkopts = ["-lboost_system"],
     deps = [
+        "//:polaris_asio_client",
         "//external:gflags",
         "//external:glog",
-        "//:polaris_asio_client",
     ],
 )
 
@@ -41,11 +41,10 @@ cc_binary(
 cc_library(
     name = "septentrio_service",
     hdrs = [
-        "septentrio_service.h",
         "sbf_framer.h",
         "septentrio_interface.h",
+        "septentrio_service.h",
     ],
-    linkopts = ["-lboost_system"],
     deps = [
         ":simple_serial_port",
         "//external:glog",
@@ -59,8 +58,9 @@ cc_library(
     hdrs = [
         "simple_asio_serial_port.h",
     ],
-    linkopts = ["-lboost_system"],
     deps = [
         "//external:glog",
+        "@boost//:asio",
+        "@boost//:system",
     ],
 )
