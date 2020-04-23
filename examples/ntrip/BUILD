@@ -7,8 +7,7 @@ cc_binary(
     deps = [
         "//external:gflags",
         "//external:glog",
-        "@boost//:asio",
-        "@boost//:system",
+        "@boost//:asio",        
     ],
 )
 
@@ -23,8 +22,7 @@ cc_binary(
         "//:polaris_asio_client",
         "//external:gflags",
         "//external:glog",
-        "@boost//:asio",
-        "@boost//:system",
+        "@boost//:asio",        
     ],
 )
 

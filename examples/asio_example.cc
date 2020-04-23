@@ -85,7 +85,7 @@ void OnNmea(const std::string& nmea_str,
     VLOG(3) << "Setting position: lat: " << lat << " lon: " << lon
               << " alt: " << alt;
     polaris_client->SetPositionLLA(lat, lon, alt);
-  } catch (std::exception) {
+  } catch (const std::exception&) {
     LOG(ERROR) << "Bad parse of received NMEA string: " << nmea_str;
     LOG(WARNING) << "Could not send position to server for bad NMEA string.";
     return;
