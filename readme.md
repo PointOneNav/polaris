@@ -1,3 +1,5 @@
+[![Total alerts](https://img.shields.io/lgtm/alerts/g/PointOneNav/polaris.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/PointOneNav/polaris/alerts/)
+
 # Point One Navigation Polaris Service #
 
 This repo provides a library for interacting with the Point One Navigation Polaris Service to receive GNSS RTK corrections. Compatible GNSS receivers can acheive better than 10cm accuracy when used with the service. Supported receivers are currently available from Septentrio and u-Blox. We also offer a hardware SDK you can request by emailing [info@pointonenav.com](mailto:info@pointonenav.com)
