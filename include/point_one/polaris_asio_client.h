@@ -69,6 +69,7 @@ class PolarisAsioClient {
   // Throws Boost system error if url cannot be resolved
   void Connect() {
     connected_ = false;
+    connection_active_ = false;
     LOG(INFO) << "Attempting to open socket tcp://" << connection_settings_.host
               << ":" << connection_settings_.port;
     std::unique_lock<std::recursive_mutex> guard(lock_);
@@ -230,6 +231,7 @@ class PolarisAsioClient {
       SendAuth();
     } else {
       connected_ = false;
+      connection_active_ = false;
       LOG(ERROR) << "Failed to connect to tcp://" << connection_settings_.host
                  << ":" << connection_settings_.port << ".";
       ScheduleReconnect();
@@ -261,9 +263,12 @@ class PolarisAsioClient {
   void HandleAuthTokenWrite(std::shared_ptr<std::vector<uint8_t>> buf,
                             const boost::system::error_code &err) {
     if (!err) {
+      LOG(INFO) << "Authentication succeeded.";
+      connected_ = true;
       RunStream();
     } else {
       connected_ = false;
+      connection_active_ = false;
       LOG(ERROR) << "Polaris authentication failed.";
       api_token_ = PolarisAuthToken();  // Reset token.
       ScheduleReconnect();
@@ -285,14 +290,15 @@ class PolarisAsioClient {
   void HandleSocketRead(const boost::system::error_code err, size_t bytes) {
     if (err) {
       connected_ = false;
+      connection_active_ = false;
       LOG(ERROR) << "Error reading bytes.";
       return;
     }
 
     if (bytes && polaris_bytes_received_callback_) {
       VLOG(4) << "Received " << bytes << " bytes from Polaris service.";
-      LOG_IF(INFO, !connected_) << "Connected and receiving corrections.";
-      connected_ = true;
+      LOG_IF(INFO, !connection_active_) << "Connected and receiving corrections.";
+      connection_active_ = true;
       polaris_bytes_received_callback_(buf_, bytes);
     }
 
@@ -345,9 +351,9 @@ class PolarisAsioClient {
 
   // Called when socket fails to read for a given time.
   void HandleSocketTimeout(const boost::system::error_code &e) {
-    if (e != boost::asio::error::operation_aborted && connected_) {
+    if (e != boost::asio::error::operation_aborted && connection_active_) {
       reconnect_timer_.cancel();
-      connected_ = false;
+      connection_active_ = false;
       LOG(WARNING) << "Socket timedout on read, scheduling reconnect.";
       ScheduleReconnect(0);
     }
@@ -460,8 +466,11 @@ class PolarisAsioClient {
   // Tracks whether the reconnect_timer_ has ever been initiated.
   bool reconnect_set_ = false;
 
-  // Whether or not the system is connected and receiving data.
+  // Whether or not the system is connected and authenticated.
   bool connected_ = false;
+
+  // Whether or not the system is receiving data.
+  bool connection_active_ = false;
 
   // Whether to send last position as ecef or meters.
   bool pos_is_ecef_ = true;
