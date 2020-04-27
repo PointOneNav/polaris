@@ -243,7 +243,11 @@ class PolarisAsioClient {
   void SendAuth() {
     LOG(INFO) << "Authenticating with service using auth token.";
     if (api_token_.access_token.empty()) {
-      RequestToken();
+      if (!RequestToken()) {
+        // Token request failures are fatal - probably an invalid API key. Don't
+        // schedule a reconnect.
+        return;
+      }
     }
     AuthRequest request(api_token_.access_token);
 
