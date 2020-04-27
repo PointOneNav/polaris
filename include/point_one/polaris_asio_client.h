@@ -117,6 +117,12 @@ class PolarisAsioClient {
                                  lat_deg, lon_deg, alt_m, false));
   }
 
+  // Request data from a specific beacon.
+  void SetBeaconID(const std::string& beacon_id) {
+    io_service_.post(
+        boost::bind(&PolarisAsioClient::HandleSetBeacon, this, beacon_id));
+  }
+
  private:
   // The size of the read buffer.
   static constexpr int BUF_SIZE = 1024;
@@ -282,9 +288,14 @@ class PolarisAsioClient {
   // socket.
   void RunStream() {
     LOG(INFO) << "Starting Polaris Client.";
-    pos_timer_.expires_from_now(boost::posix_time::milliseconds(0));
-    pos_timer_.async_wait(boost::bind(&PolarisAsioClient::PositionTimer, this,
-                                      boost::asio::placeholders::error));
+
+    if (stream_selection_source_ == StreamSelectionSource::POSITION) {
+      pos_timer_.expires_from_now(boost::posix_time::milliseconds(0));
+      pos_timer_.async_wait(boost::bind(&PolarisAsioClient::PositionTimer, this,
+                                        boost::asio::placeholders::error));
+    } else if (stream_selection_source_ == StreamSelectionSource::BEACON) {
+      HandleSetBeacon(beacon_id_);
+    }
 
     VLOG(3) << "Starting socket read.";
     ScheduleAsyncReadWithTimeout();
@@ -371,6 +382,17 @@ class PolarisAsioClient {
     } else {
       lla_pos_ = PositionLla(a, b, c);
     }
+
+    if (stream_selection_source_ != StreamSelectionSource::POSITION) {
+      VLOG(2) << "Scheduling first position send.";
+      stream_selection_source_ = StreamSelectionSource::POSITION;
+      if (connected_) {
+        pos_timer_.expires_from_now(boost::posix_time::milliseconds(0));
+        pos_timer_.async_wait(boost::bind(&PolarisAsioClient::PositionTimer,
+                                          this,
+                                          boost::asio::placeholders::error));
+      }
+    }
   }
 
   // Timer that sends position to polaris every connection_settings_.interval_ms
@@ -407,22 +429,48 @@ class PolarisAsioClient {
     std::unique_lock<std::recursive_mutex> guard(lock_);
     boost::asio::async_write(
         socket_, boost::asio::buffer(*buf),
-        boost::bind(&PolarisAsioClient::HandlePositionWrite, this, buf,
-                    boost::asio::placeholders::error));
+        boost::bind(&PolarisAsioClient::HandleResponse, this,
+                    boost::asio::placeholders::error, "position update"));
     VLOG(6) << "Scheduled position";
   }
 
-  // Handles writing position to Polaris Service. Attempts reconnect on failure.
-  void HandlePositionWrite(std::shared_ptr<std::vector<uint8_t>> buf,
-                           const boost::system::error_code &err) {
+  // Issue a request for the specified beacon.
+  void HandleSetBeacon(const std::string& beacon_id) {
+    if (stream_selection_source_ == StreamSelectionSource::POSITION) {
+      pos_timer_.cancel();
+    }
+
+    stream_selection_source_ = StreamSelectionSource::BEACON;
+    beacon_id_ = beacon_id;
+
+    if (connected_) {
+      VLOG(4) << "Sending request for beacon '" << beacon_id << "'.";
+      BeaconRequest request(beacon_id);
+      auto buf = std::make_shared<std::vector<uint8_t>>(request.GetSize());
+      request.Serialize(buf->data());
+
+      std::unique_lock<std::recursive_mutex> guard(lock_);
+      boost::asio::async_write(
+          socket_, boost::asio::buffer(*buf),
+          boost::bind(&PolarisAsioClient::HandleResponse, this,
+                      boost::asio::placeholders::error, "beacon request"));
+    }
+  }
+
+  // Schedule a service reconnect if a request fails to send.
+  void HandleResponse(const boost::system::error_code &err,
+                      const std::string &data_type = "data") {
     if (!err) {
-      VLOG(5) << "Successfully sent position to service.";
+      VLOG(5) << "Successfully sent " << data_type << " to service.";
     } else {
-      LOG(ERROR) << "Error sending position to service. Bad connection or "
-                    "authentication?";
+      LOG(ERROR) << "Error sending " << data_type
+                 << " to service. Bad connection or authentication? Scheduling "
+                    "reconnect.";
       ScheduleReconnect();
     }
   }
+
+  enum class StreamSelectionSource { NONE, BEACON, POSITION };
 
   // Synchronization for the socket.
   std::recursive_mutex lock_;
@@ -476,6 +524,9 @@ class PolarisAsioClient {
   // Whether or not the system is receiving data.
   bool connection_active_ = false;
 
+  // The typeof input used to select a data stream.
+  StreamSelectionSource stream_selection_source_ = StreamSelectionSource::NONE;
+
   // Whether to send last position as ecef or meters.
   bool pos_is_ecef_ = true;
 
@@ -484,6 +535,9 @@ class PolarisAsioClient {
 
   // Last position in Latitude(deg), Longitude(deg), alt(m).
   PositionLla lla_pos_;
+
+  // The desired beacon ID.
+  std::string beacon_id_;
 };
 
 }  // namespace polaris
