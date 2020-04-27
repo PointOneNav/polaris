@@ -150,7 +150,7 @@ class AuthRequest : public PolarisRequest {
   std::string auth_token_;
 };
 
-// A request that gets the list of available beacons.
+// Request data from a specific beacon.
 class BeaconRequest : public PolarisRequest {
  public:
   explicit BeaconRequest(const std::string &beacon_id)

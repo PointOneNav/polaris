@@ -136,7 +136,7 @@ class PolarisAsioClient {
       boost::asio::connect(socket, endpoint_iterator);
 
       // Form the request. We specify the "Connection: close" header so that the
-      // server will close the socket after transmitting the response. 
+      // server will close the socket after transmitting the response.
       boost::asio::streambuf request;
       std::ostream request_stream(&request);
 
@@ -478,7 +478,7 @@ class PolarisAsioClient {
   // Last position in ECEF XYZ meters.
   PositionEcef ecef_pos_;
 
-  // Last position in Lattitude(deg), Longitude(deg), alt(m).
+  // Last position in Latitude(deg), Longitude(deg), alt(m).
   PositionLla lla_pos_;
 };
 
