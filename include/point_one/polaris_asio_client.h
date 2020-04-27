@@ -46,8 +46,7 @@ class PolarisAsioClient {
         resolver_(io_service),
         socket_(io_service),
         tracking_id_(tracking_id),
-        pos_timer_(io_service, boost::posix_time::milliseconds(
-                                   connection_settings.interval_ms)),
+        pos_timer_(io_service),
         socket_timer_(io_service,
                       boost::posix_time::milliseconds(SOCKET_TIMEOUT_MS)),
         reconnect_timer_(io_service, boost::posix_time::milliseconds(
@@ -283,6 +282,7 @@ class PolarisAsioClient {
   // socket.
   void RunStream() {
     LOG(INFO) << "Starting Polaris Client.";
+    pos_timer_.expires_from_now(boost::posix_time::milliseconds(0));
     pos_timer_.async_wait(boost::bind(&PolarisAsioClient::PositionTimer, this,
                                       boost::asio::placeholders::error));
 
