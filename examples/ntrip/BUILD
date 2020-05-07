@@ -56,5 +56,6 @@ cc_library(
         "@boost//:asio",
         "@boost//:date_time",
         "@boost//:system",
+        "@boost//:tribool",
     ],
 )
