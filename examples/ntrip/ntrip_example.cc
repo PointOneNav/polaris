@@ -100,7 +100,7 @@ int main(int argc, char* argv[]) {
     settings.host = FLAGS_polaris_host;
     settings.port = FLAGS_polaris_port;
     point_one::polaris::PolarisAsioClient polaris_client(
-        io_loop, FLAGS_polaris_api_key, "ntrip_example", settings);
+        io_loop, FLAGS_polaris_api_key, "ntrip-device12345", settings);
 
     // Initialise the server.
     LOG(INFO) << "Starting NTRIP server on " << argv[1] << ":" << argv[2];
