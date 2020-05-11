@@ -37,7 +37,7 @@ class PolarisAsioClient {
 
   PolarisAsioClient(boost::asio::io_service &io_service,
                     const std::string &api_key,
-                    const std::string &tracking_id = "",
+                    const std::string &unique_id = "",
                     const PolarisConnectionSettings &connection_settings =
                         DEFAULT_CONNECTION_SETTINGS)
       : connection_settings_(connection_settings),
@@ -45,7 +45,7 @@ class PolarisAsioClient {
         io_service_(io_service),
         resolver_(io_service),
         socket_(io_service),
-        tracking_id_(tracking_id),
+        unique_id_(unique_id),
         pos_timer_(io_service),
         socket_timer_(io_service,
                       boost::posix_time::milliseconds(SOCKET_TIMEOUT_MS)),
@@ -148,7 +148,7 @@ class PolarisAsioClient {
       std::stringstream post_body;
       post_body << "{\"grant_type\": \"authorization_code\", "
                      << "\"token_type\":  \"Bearer\", "
-                     << "\"tracking_id\": \"" << tracking_id_ << "\", "
+                     << "\"unique_id\": \"" << unique_id_ << "\", "
                      << "\"authorization_code\": \"" << api_key_ << "\"}\r\n";
       std::string post_body_str = post_body.str();
 
@@ -507,7 +507,7 @@ class PolarisAsioClient {
 
   // Optionally a unique id that can be used to aid in debugging when sharing an api key
   // with multiple clients.
-  std::string tracking_id_;
+  std::string unique_id_;
 
   // A deadline time for resending postion.
   boost::asio::deadline_timer pos_timer_;

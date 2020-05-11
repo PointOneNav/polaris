@@ -142,7 +142,7 @@ int main(int argc, char* argv[]) {
   settings.host = FLAGS_polaris_host;
   settings.port = FLAGS_polaris_port;
   point_one::polaris::PolarisAsioClient polaris_client(
-      io_loop, FLAGS_polaris_api_key, "asio_example", settings);
+      io_loop, FLAGS_polaris_api_key, "ntrip-device12345", settings);
   polaris_client.SetPolarisBytesReceived(
       std::bind(&point_one::utils::SimpleAsioSerialPort::Write,
                 &serial_port_correction_forwarder, std::placeholders::_1,

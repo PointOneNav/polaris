@@ -74,7 +74,7 @@ int main(int argc, char *argv[], char *envp[]) {
   settings.host = FLAGS_polaris_host;
   settings.port = FLAGS_polaris_port;
   point_one::polaris::PolarisAsioClient polaris_client(
-      io_loop, FLAGS_polaris_api_key, "septentrio_example", settings);
+      io_loop, FLAGS_polaris_api_key, "septentrio12345", settings);
 
   // This callback will forward RTCM correction bytes received from the server
   // to the septentrio.
