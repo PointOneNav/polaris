@@ -32,14 +32,14 @@ class SeptentrioReceiver {
 
   virtual bool Connect() = 0;
 
-  void SetCallbackSBF(std::function<void(uint16_t, uint8_t *)> callback) {
+  void SetCallbackSBF(std::function<void(size_t, const void *)> callback) {
     this->callbackSBF = callback;
     LOG(INFO) << "Set Septentrio Receiver Callback";
   }
 
  protected:
   std::ofstream bin_log_;
-  std::function<void(uint16_t, uint8_t *)> callbackSBF;
+  std::function<void(size_t, const void *)> callbackSBF;
 
   void InitBinLog(const std::string &raw_log_path) {
     if (!raw_log_path.empty()) {
@@ -57,9 +57,9 @@ class SeptentrioReceiver {
     }
   }
 
-  void OnSBF(uint16_t len, uint8_t *data) {
+  void OnSBF(uint16_t len, const void *data) {
     if (bin_log_.is_open()) {
-      bin_log_.write((char *)data, len);
+      bin_log_.write((const char *)data, len);
       bin_log_.flush();
     }
     if (callbackSBF != nullptr) {
@@ -84,7 +84,7 @@ class SeptentrioSerialReceiver : public SeptentrioReceiver {
 
   ~SeptentrioSerialReceiver() {}
 
-  void Send(uint8_t *buf, size_t len) { serial_port.AsyncWrite(buf, len); }
+  void Send(const void *buf, size_t len) { serial_port.AsyncWrite(buf, len); }
 
   bool Connect() override { return serial_port.Open(device_path_, 115200); }
 
@@ -93,9 +93,9 @@ class SeptentrioSerialReceiver : public SeptentrioReceiver {
   std::string device_path_;
   SBFFramer framer;
 
-  void OnData(uint8_t *data, uint16_t len) {
-    for (int i = 0; i < len; i++) {
-      framer.OnByte(data[i]);  // optimize...
+  void OnData(const void *data, size_t len) {
+    for (size_t i = 0; i < len; i++) {
+      framer.OnByte(static_cast<const uint8_t *>(data)[i]);  // optimize...
     }
   }
 };

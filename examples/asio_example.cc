@@ -12,14 +12,7 @@
 #include <point_one/polaris_asio_client.h>
 #include "simple_asio_serial_port.h"
 
-// Options for connecting to Polaris Server:
-DEFINE_string(
-    polaris_host, point_one::polaris::DEFAULT_POLARIS_URL,
-    "The Point One Navigation Polaris server tcp URI to which to connect");
-
-DEFINE_int32(polaris_port, point_one::polaris::DEFAULT_POLARIS_PORT,
-             "The tcp port to which to connect");
-
+// Polaris options:
 DEFINE_string(polaris_api_key, "",
               "The service API key. Contact account administrator or "
               "sales@pointonenav.com if unknown.");
@@ -94,9 +87,9 @@ void OnNmea(const std::string& nmea_str,
 
 // Process receiver incomming messages.  This example code expects received data
 // to be ascii nmea messages.
-void OnSerialData(uint8_t* data, uint16_t length,
+void OnSerialData(const void* data, size_t length,
                   point_one::polaris::PolarisAsioClient* polaris_client) {
-  std::string nmea_data((char*)data, length);
+  std::string nmea_data((const char*)data, length);
   for (const char& c : nmea_data) {
     if (c == '$') {
       OnNmea(nmea_sentence_buffer, polaris_client);
@@ -137,12 +130,9 @@ int main(int argc, char* argv[]) {
     LOG(FATAL) << "You must supply a Polaris API key to connect to the server.";
     return 1;
   }
-  
-  point_one::polaris::PolarisConnectionSettings settings;
-  settings.host = FLAGS_polaris_host;
-  settings.port = FLAGS_polaris_port;
+
   point_one::polaris::PolarisAsioClient polaris_client(
-      io_loop, FLAGS_polaris_api_key, "ntrip-device12345", settings);
+      io_loop, FLAGS_polaris_api_key, "ntrip-device12345");
   polaris_client.SetPolarisBytesReceived(
       std::bind(&point_one::utils::SimpleAsioSerialPort::Write,
                 &serial_port_correction_forwarder, std::placeholders::_1,

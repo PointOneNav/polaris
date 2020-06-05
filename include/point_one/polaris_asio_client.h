@@ -47,10 +47,10 @@ class PolarisAsioClient {
         socket_(io_service),
         unique_id_(unique_id),
         pos_timer_(io_service),
-        socket_timer_(io_service,
-                      boost::posix_time::milliseconds(SOCKET_TIMEOUT_MS)),
         reconnect_timer_(io_service, boost::posix_time::milliseconds(
-                                         connection_settings.interval_ms)) {}
+                                         connection_settings.interval_ms)),
+        socket_timer_(io_service,
+                      boost::posix_time::milliseconds(SOCKET_TIMEOUT_MS)) {}
 
   ~PolarisAsioClient() {
     polaris_bytes_received_callback_ = nullptr;
@@ -219,6 +219,10 @@ class PolarisAsioClient {
         api_token_.access_token = pt.get<std::string>("access_token");
         api_token_.expires_in = pt.get<double>("expires_in");
         api_token_.issued_at = pt.get<double>("issued_at");
+        VLOG(3) << "Access token: " << api_token_.access_token;
+        VLOG(3) << "Expires in: " << std::fixed << api_token_.expires_in;
+        VLOG(3) << "Issued at: " << std::fixed << api_token_.issued_at;
+
       } catch (std::exception &e) {
         LOG(ERROR) << "Exception: " << e.what();
         return false;

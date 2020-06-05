@@ -14,7 +14,7 @@ cc_binary(
     ],
 )
 
-# Example that starts the septentrio receiver.
+# Example of forwarding RTCM corrections to a Septentrio receiver over serial.
 cc_binary(
     name = "septentrio_example",
     srcs = ["septentrio_example.cc"],
@@ -26,7 +26,7 @@ cc_binary(
     ],
 )
 
-# Example that starts the septentrio receiver.
+# Simple example of connecting to the Polaris service.
 cc_binary(
     name = "simple_polaris_client",
     srcs = ["simple_polaris_client.cc"],
@@ -37,7 +37,7 @@ cc_binary(
     ],
 )
 
-# Simple asio sepetentrio client uisng septentrio's official library.
+# Simple asio Sepetentrio client uisng Septentrio's official library.
 cc_library(
     name = "septentrio_service",
     hdrs = [

@@ -10,14 +10,7 @@
 
 #include <point_one/polaris_asio_client.h>
 
-// Options for connecting to Polaris Server:
-DEFINE_string(
-    polaris_host, point_one::polaris::DEFAULT_POLARIS_URL,
-    "The Point One Navigation Polaris server tcp URI to which to connect");
-
-DEFINE_int32(polaris_port, point_one::polaris::DEFAULT_POLARIS_PORT,
-             "The tcp port to which to connect");
-
+// Polaris options:
 DEFINE_string(polaris_api_key, "",
               "The service API key. Contact account administrator or "
               "sales@pointonenav.com if unknown.");
@@ -29,10 +22,10 @@ namespace google {}
 using namespace gflags;
 using namespace google;
 
-// Process receiver incomming messages.  This example code expects received data
+// Process receiver incoming messages.  This example code expects received data
 // to be ascii nmea messages.
-void ReceivedData(uint8_t* data, uint16_t length) {
-  LOG(INFO) << "Received " << (int)length << " bytes.";
+void ReceivedData(const void* data, size_t length) {
+  LOG(INFO) << "Received " << length << " bytes.";
 }
 
 int main(int argc, char* argv[]) {
@@ -51,12 +44,9 @@ int main(int argc, char* argv[]) {
     LOG(FATAL) << "You must supply a Polaris API key to connect to the server.";
     return 1;
   }
-  
-  point_one::polaris::PolarisConnectionSettings settings;
-  settings.host = FLAGS_polaris_host;
-  settings.port = FLAGS_polaris_port;
+
   point_one::polaris::PolarisAsioClient polaris_client(
-      io_loop, FLAGS_polaris_api_key, "device12345", settings);
+      io_loop, FLAGS_polaris_api_key, "device12345");
   polaris_client.SetPolarisBytesReceived(
       std::bind(&ReceivedData, std::placeholders::_1, std::placeholders::_2));
   // Application can set position at any time to change associated beacon(s) and
