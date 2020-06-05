@@ -11,14 +11,7 @@
 
 #include "septentrio_service.h"
 
-// Options for connecting to Polaris Server:
-DEFINE_string(
-    polaris_host, point_one::polaris::DEFAULT_POLARIS_URL,
-    "The URI of the Point One Navigation Polaris server.");
-
-DEFINE_int32(polaris_port, point_one::polaris::DEFAULT_POLARIS_PORT,
-             "The Polaris server TCP port.");
-
+// Polaris options:
 DEFINE_string(polaris_api_key, "",
               "The service API key. Contact account administrator or "
               "sales@pointonenav.com if unknown.");
@@ -98,11 +91,8 @@ int main(int argc, char *argv[], char *envp[]) {
   }
 
   // Create the Polaris client.
-  point_one::polaris::PolarisConnectionSettings settings;
-  settings.host = FLAGS_polaris_host;
-  settings.port = FLAGS_polaris_port;
   point_one::polaris::PolarisAsioClient polaris_client(
-      io_loop, FLAGS_polaris_api_key, "septentrio12345", settings);
+      io_loop, FLAGS_polaris_api_key, "septentrio12345");
 
   // This callback will forward RTCM correction bytes received from Polaris to
   // the Septentrio, and to an output UDP port if enabled.
