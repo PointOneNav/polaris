@@ -27,6 +27,15 @@ DEFINE_string(polaris_api_key, "",
 DEFINE_string(device, "/dev/ttyACM0",
               "The serial device on which the Septentrio is connected.");
 
+DEFINE_string(
+    udp_host, "",
+    "If set, forward RTCM corrections over UDP to the specified hostname/IP in "
+    "addition to the Septentrio receiver (over serial).");
+
+DEFINE_uint32(
+    udp_port, 0,
+    "The UDP port to which RTCM corrections will be forwarded.");
+
 #ifndef RAD2DEG
 #define RAD2DEG (57.295779513082320876798154814105)  //!< 180.0/PI
 #endif
@@ -57,10 +66,28 @@ int main(int argc, char *argv[], char *envp[]) {
   boost::asio::io_service io_loop;
   boost::asio::io_service::work work(io_loop);
 
+  bool udp_enabled = false;
+  boost::asio::ip::udp::socket udp_socket(io_loop);
+  boost::asio::ip::udp::endpoint udp_endpoint;
+
   // Validate arguments.
   if (FLAGS_polaris_api_key == "") {
     LOG(ERROR) << "You must supply a Polaris API key to connect to the server.";
     return 1;
+  }
+
+  if (!FLAGS_udp_host.empty()) {
+    if (FLAGS_udp_port < 1 || FLAGS_udp_port > 65535) {
+      LOG(ERROR)
+          << "You must specify a valid UDP port when enabling UDP output.";
+      return 1;
+    }
+    else {
+      udp_enabled = true;
+      udp_endpoint = boost::asio::ip::udp::endpoint(
+          boost::asio::ip::address_v4::from_string(FLAGS_udp_host),
+          static_cast<unsigned short>(FLAGS_udp_port));
+    }
   }
 
   // Connect to the Septentrio receiver.
@@ -78,10 +105,14 @@ int main(int argc, char *argv[], char *envp[]) {
       io_loop, FLAGS_polaris_api_key, "septentrio12345", settings);
 
   // This callback will forward RTCM correction bytes received from Polaris to
-  // the Septentrio.
+  // the Septentrio, and to an output UDP port if enabled.
   polaris_client.SetPolarisBytesReceived(
-      std::bind(&point_one::gpsreceiver::SeptentrioService::SendRtcm,
-                &septentrio, std::placeholders::_1, std::placeholders::_2));
+      [&](const uint8_t *data, size_t length) {
+        septentrio.SendRtcm(data, length);
+        if (udp_enabled) {
+          udp_socket.send_to(boost::asio::buffer(data, length), udp_endpoint);
+        }
+      });
 
   // This callback will send position updates from the Septentrio to Polaris.
   // Polaris uses the positions to associate the connection with a corrections
@@ -89,6 +120,9 @@ int main(int argc, char *argv[], char *envp[]) {
   //
   // Position updates should be sent periodically to ensure the incoming
   // corrections are from the most appropriate stream.
+  //
+  // Note that positions are supplied by the Septentrio over serial. The UDP
+  // interface does not support receiving positions.
   septentrio.SetPvtCallback(
       std::bind(PvtCallback, std::placeholders::_1, &polaris_client));
 
