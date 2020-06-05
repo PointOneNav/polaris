@@ -47,10 +47,10 @@ class PolarisAsioClient {
         socket_(io_service),
         unique_id_(unique_id),
         pos_timer_(io_service),
-        socket_timer_(io_service,
-                      boost::posix_time::milliseconds(SOCKET_TIMEOUT_MS)),
         reconnect_timer_(io_service, boost::posix_time::milliseconds(
-                                         connection_settings.interval_ms)) {}
+                                         connection_settings.interval_ms)),
+        socket_timer_(io_service,
+                      boost::posix_time::milliseconds(SOCKET_TIMEOUT_MS)) {}
 
   ~PolarisAsioClient() {
     polaris_bytes_received_callback_ = nullptr;
