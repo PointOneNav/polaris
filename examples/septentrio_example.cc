@@ -95,7 +95,7 @@ int main(int argc, char *argv[], char *envp[]) {
       io_loop, FLAGS_polaris_api_key, "septentrio12345");
 
   // This callback will forward RTCM correction bytes received from Polaris to
-  // the Septentrio, and to an output UDP port if enabled.
+  // the Septentrio, as well as to an output UDP port if enabled.
   polaris_client.SetPolarisBytesReceived(
       [&](const uint8_t *data, size_t length) {
         septentrio.SendRtcm(data, length);
