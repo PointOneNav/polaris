@@ -29,10 +29,10 @@ namespace google {}
 using namespace gflags;
 using namespace google;
 
-// Process receiver incomming messages.  This example code expects received data
+// Process receiver incoming messages.  This example code expects received data
 // to be ascii nmea messages.
-void ReceivedData(uint8_t* data, uint16_t length) {
-  LOG(INFO) << "Received " << (int)length << " bytes.";
+void ReceivedData(const void* data, size_t length) {
+  LOG(INFO) << "Received " << length << " bytes.";
 }
 
 int main(int argc, char* argv[]) {
@@ -51,7 +51,7 @@ int main(int argc, char* argv[]) {
     LOG(FATAL) << "You must supply a Polaris API key to connect to the server.";
     return 1;
   }
-  
+
   point_one::polaris::PolarisConnectionSettings settings;
   settings.host = FLAGS_polaris_host;
   settings.port = FLAGS_polaris_port;

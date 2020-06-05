@@ -45,14 +45,14 @@ class SimpleAsioSerialPort {
     return true;
   }
 
-  void Write(uint8_t* buf, size_t len) {
+  void Write(const void* buf, size_t len) {
     VLOG(6) << "Forwarding " << len << " bytes to serial port.";
     sp_.write_some(boost::asio::buffer(buf, len));
   }
 
-  void AsyncWrite(uint8_t* buf, size_t len) {
+  void AsyncWrite(const void* buf, size_t len) {
     VLOG(6) << "Forwarding " << len << " bytes to serial port.";
-    std::string data((char*)buf, len);
+    std::string data((const char*)buf, len);
     sp_.async_write_some(
         boost::asio::buffer(buf, len),
         boost::bind(&SimpleAsioSerialPort::OnWrite, this, data,
@@ -60,14 +60,15 @@ class SimpleAsioSerialPort {
                     boost::asio::placeholders::bytes_transferred));
   }
 
-  void OnWrite(const std::string &buffer_data, const boost::system::error_code& error_code,
+  void OnWrite(const std::string& buffer_data,
+               const boost::system::error_code& error_code,
                size_t bytes_transferred) {
     if (error_code) {
       LOG(ERROR) << "ERROR on receive " << error_code.message().c_str();
     }
   }
 
-  void SetCallback(std::function<void(uint8_t* data, uint16_t len)> callback) {
+  void SetCallback(std::function<void(const void* data, size_t len)> callback) {
     this->callback = callback;
   }
 
@@ -95,7 +96,7 @@ class SimpleAsioSerialPort {
     }
 
     if (this->callback != nullptr) {
-      callback((uint8_t*)buf_, bytes_transferred);
+      callback(buf_, bytes_transferred);
     }
     AsyncReadData();
   }
@@ -105,7 +106,7 @@ class SimpleAsioSerialPort {
   static const int READ_SIZE = 1024;
   char buf_[READ_SIZE];
 
-  std::function<void(uint8_t*, uint16_t)> callback;
+  std::function<void(const void*, size_t)> callback;
 };
 
 }  // namespace utils

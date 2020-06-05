@@ -20,14 +20,15 @@ class SeptentrioService {
  public:
   SeptentrioService(std::string device_path) : device_path_(device_path) {}
 
-  void SendRtcm(uint8_t *buf, size_t len) {
+  void SendRtcm(const void *buf, size_t len) {
     if (!sp_) {
       return;
     }
     sp_->Send(buf, len);
   }
 
-  void SetPvtCallback(const std::function<void(const PVTGeodetic_2_2_t &data)> &callback) {
+  void SetPvtCallback(
+      const std::function<void(const PVTGeodetic_2_2_t &data)> &callback) {
     pvt_callback_ = callback;
   }
 
@@ -46,8 +47,8 @@ class SeptentrioService {
   std::unique_ptr<point_one::gpsreceiver::SeptentrioSerialReceiver> sp_;
   std::function<void(const PVTGeodetic_2_2_t &data)> pvt_callback_;
 
-  void OnSBF(uint16_t len, uint8_t *data) {
-    BlockHeader_t *blockHeader = (BlockHeader_t *)data;
+  void OnSBF(size_t len, const void *data) {
+    const BlockHeader_t *blockHeader = (const BlockHeader_t *)data;
 
     // Top 3 bits represent the version of the message.
     uint16_t msg_id = blockHeader->ID & 0x1FFF;
@@ -55,7 +56,7 @@ class SeptentrioService {
     uint8_t msg_id_version = (blockHeader->ID >> 13) & 0x07;
 
     if (msg_id == sbfnr_PVTGeodetic_2 && msg_id_version >= 2) {
-      PVTGeodetic_2_2_t *PVT = (PVTGeodetic_2_2_t *)data;
+      const PVTGeodetic_2_2_t *PVT = (const PVTGeodetic_2_2_t *)data;
       if (pvt_callback_ != nullptr) pvt_callback_(*PVT);
     }
   }

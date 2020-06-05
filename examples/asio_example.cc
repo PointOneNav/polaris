@@ -94,9 +94,9 @@ void OnNmea(const std::string& nmea_str,
 
 // Process receiver incomming messages.  This example code expects received data
 // to be ascii nmea messages.
-void OnSerialData(uint8_t* data, uint16_t length,
+void OnSerialData(const void* data, size_t length,
                   point_one::polaris::PolarisAsioClient* polaris_client) {
-  std::string nmea_data((char*)data, length);
+  std::string nmea_data((const char*)data, length);
   for (const char& c : nmea_data) {
     if (c == '$') {
       OnNmea(nmea_sentence_buffer, polaris_client);
@@ -137,7 +137,7 @@ int main(int argc, char* argv[]) {
     LOG(FATAL) << "You must supply a Polaris API key to connect to the server.";
     return 1;
   }
-  
+
   point_one::polaris::PolarisConnectionSettings settings;
   settings.host = FLAGS_polaris_host;
   settings.port = FLAGS_polaris_port;
