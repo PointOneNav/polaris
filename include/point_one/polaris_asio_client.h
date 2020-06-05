@@ -219,6 +219,10 @@ class PolarisAsioClient {
         api_token_.access_token = pt.get<std::string>("access_token");
         api_token_.expires_in = pt.get<double>("expires_in");
         api_token_.issued_at = pt.get<double>("issued_at");
+        VLOG(3) << "Access token: " << api_token_.access_token;
+        VLOG(3) << "Expires in: " << std::fixed << api_token_.expires_in;
+        VLOG(3) << "Issued at: " << std::fixed << api_token_.issued_at;
+
       } catch (std::exception &e) {
         LOG(ERROR) << "Exception: " << e.what();
         return false;
