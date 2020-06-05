@@ -1,28 +1,31 @@
 // Copyright (C) Point One Navigation - All Rights Reserved
 
-#include <iomanip>
 #include <iostream>
 
-#include "gflags/gflags.h"
-#include "glog/logging.h"
+#include <boost/asio.hpp>
+
+#include <gflags/gflags.h>
+#include <glog/logging.h>
 
 #include <point_one/polaris_asio_client.h>
+
 #include "septentrio_service.h"
 
 // Options for connecting to Polaris Server:
 DEFINE_string(
     polaris_host, point_one::polaris::DEFAULT_POLARIS_URL,
-    "The Point One Navigation Polaris server tcp URI to which to connect");
+    "The URI of the Point One Navigation Polaris server.");
 
 DEFINE_int32(polaris_port, point_one::polaris::DEFAULT_POLARIS_PORT,
-             "The tcp port to which to connect");
+             "The Polaris server TCP port.");
 
 DEFINE_string(polaris_api_key, "",
               "The service API key. Contact account administrator or "
               "sales@pointonenav.com if unknown.");
 
-// Serial options.
-DEFINE_string(device, "/dev/ttyACM0", "The reciver com port file handle");
+// Septentrio/output options:
+DEFINE_string(device, "/dev/ttyACM0",
+              "The serial device on which the Septentrio is connected.");
 
 #ifndef RAD2DEG
 #define RAD2DEG (57.295779513082320876798154814105)  //!< 180.0/PI
@@ -54,15 +57,13 @@ int main(int argc, char *argv[], char *envp[]) {
   boost::asio::io_service io_loop;
   boost::asio::io_service::work work(io_loop);
 
-  // Create connection to receiver to forward correction data received from
-  // Polaris Server.
-
-  // Construct a Polaris client.
+  // Validate arguments.
   if (FLAGS_polaris_api_key == "") {
-    LOG(FATAL) << "You must supply a Polaris API key to connect to the server.";
+    LOG(ERROR) << "You must supply a Polaris API key to connect to the server.";
     return 1;
   }
 
+  // Connect to the Septentrio receiver.
   point_one::gpsreceiver::SeptentrioService septentrio(FLAGS_device);
   LOG(INFO) << "Connecting to receiver...";
   if (!septentrio.Connect(io_loop)) {
@@ -76,26 +77,27 @@ int main(int argc, char *argv[], char *envp[]) {
   point_one::polaris::PolarisAsioClient polaris_client(
       io_loop, FLAGS_polaris_api_key, "septentrio12345", settings);
 
-  // This callback will forward RTCM correction bytes received from the server
-  // to the septentrio.
+  // This callback will forward RTCM correction bytes received from Polaris to
+  // the Septentrio.
   polaris_client.SetPolarisBytesReceived(
       std::bind(&point_one::gpsreceiver::SeptentrioService::SendRtcm,
                 &septentrio, std::placeholders::_1, std::placeholders::_2));
 
-  // Add callback for when we get a position updated.
+  // This callback will send position updates from the Septentrio to Polaris.
+  // Polaris uses the positions to associate the connection with a corrections
+  // stream.
+  //
+  // Position updates should be sent periodically to ensure the incoming
+  // corrections are from the most appropriate stream.
   septentrio.SetPvtCallback(
       std::bind(PvtCallback, std::placeholders::_1, &polaris_client));
 
-  // Application can set position at any time to change associated beacon(s) and
-  // corrections. Example setting postion to SF in ECEF meters.
-  // It is required to call SetPositionECEF at some cadence to assure the
-  // corrections received are the best and relevant.
-  // In this example the position will be overwritten upon a successful
-  // connection to the receiver.
-  polaris_client.SetPositionECEF(-2707071, -4260565, 3885644);
+  // Connect to Polaris.
   polaris_client.Connect();
 
+  // Run indefinitely.
   LOG(INFO) << "Starting services...";
   io_loop.run();
+
   return 0;
 }
