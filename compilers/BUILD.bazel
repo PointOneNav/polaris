@@ -1,0 +1,32 @@
+# This is the entry point for --crosstool_top.  Toolchains are found
+# by lopping off the name of --crosstool_top and searching for
+# 'cc-compiler-${CPU}' in this BUILD file, where CPU is the target CPU
+# specified in --cpu.
+
+package(default_visibility = ["//compilers:__pkg__"])
+
+# This file group should include
+#   * all cc_toolchain targets supported
+#   * all file groups that said cc_toolchain might refer to
+filegroup(
+    name = "toolchain_fg",
+    srcs = [
+        "//compilers/arm/linaro_linux_gcc_aarch64:cc-compiler-aarch64-linux-gnu",
+        "//compilers/arm/linaro_linux_gcc_armv7:cc-compiler-armeabi-v7a",
+        "//compilers/k8:cc-compiler-k8",
+    ],
+)
+
+cc_toolchain_suite(
+    name = "toolchain",
+    # target_cpu | compiler
+    toolchains = {
+        "k8": "//compilers/k8:cc-compiler-k8",
+        "k8|compiler": "//compilers/k8:cc-compiler-k8",
+        "armeabi-v7a": "//compilers/arm/linaro_linux_gcc_armv7:cc-compiler-armeabi-v7a",
+        "armeabi-v7a|gcc": "//compilers/arm/linaro_linux_gcc_armv7:cc-compiler-armeabi-v7a",
+        "aarch64-linux-gnu": "//compilers/arm/linaro_linux_gcc_aarch64:cc-compiler-aarch64-linux-gnu",
+        "aarch64-linux-gnu|gcc": "//compilers/arm/linaro_linux_gcc_aarch64:cc-compiler-aarch64-linux-gnu",
+    },
+    visibility = ["//visibility:public"],
+)

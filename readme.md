@@ -23,7 +23,7 @@ Documentation on the protocol used by the Polaris Service can be found at https:
     *   [Running the example](#running-the-example)
     *   [Verifying Corrections](#verifying-corrections)
     * [Generic Serial Receiver Example](#generic-serial-receiver-example)
-        
+
 
 
 
@@ -66,6 +66,18 @@ To build and run the example using Bazel, from the root of the repo:
 bazel run examples:septentrio_example -- --help
 ```
 
+#### Cross-Compiling With Bazel ####
+
+The Bazel build flow supports cross-compilation for 32- and 64-bit ARM architectures. To build for either architecture,
+specify the `--config` argument to Bazel with one of the following values:
+- `armv7hf` - 32-bit ARM v7
+- `aarch64` - 64-bit ARM
+
+For example:
+```
+bazel build --config=aarch64 examples:septentrio_example
+```
+
 ### Building On Mac ###
 
 The example can be built on mac using CMake or Bazel and Clang. Assure that you have a c++ toolchain and the associated dependencies.
@@ -92,7 +104,7 @@ The examples directory also contains a simple `ntrip-proxy.service` that can be 
 
 ### Septentrio Receiver Example ###
 
-The example binary `septentrio_example` streams RTK corrections to a Septentrio receiver over serial and reports back the receivers PVT message to the console. This has been tested on Septentrio's [AsteRx-m2](https://www.septentrio.com/en/products/gnss-receivers/rover-base-receivers/oem-receiver-boards/asterx-m2). The example can be easily modified for receivers that may receive corrections over other interfaces. 
+The example binary `septentrio_example` streams RTK corrections to a Septentrio receiver over serial and reports back the receivers PVT message to the console. This has been tested on Septentrio's [AsteRx-m2](https://www.septentrio.com/en/products/gnss-receivers/rover-base-receivers/oem-receiver-boards/asterx-m2). The example can be easily modified for receivers that may receive corrections over other interfaces.
 
 #### Hardware Setup ####
 
