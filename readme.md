@@ -1,4 +1,7 @@
+![Polaris Build](https://github.com/adamshapiro0/polaris/workflows/Polaris%20Build/badge.svg?branch=master)
+
 [![Total alerts](https://img.shields.io/lgtm/alerts/g/PointOneNav/polaris.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/PointOneNav/polaris/alerts/)
+
 [![Language grade: C/C++](https://img.shields.io/lgtm/grade/cpp/g/PointOneNav/polaris.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/PointOneNav/polaris/context:cpp)
 
 
@@ -181,5 +184,3 @@ The example binary `asio_example` can be used to connect to a receiver that can 
 
 To run the application:
 ```bazel run examples:asio -- --logtostderr --polaris_api_key=MYAPPKEY1234 --device=/dev/ttyACM0```
-
-
