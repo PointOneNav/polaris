@@ -1,4 +1,7 @@
+![Polaris Build](https://github.com/PointOneNav/polaris/workflows/Polaris%20Build/badge.svg?branch=master)
+
 [![Total alerts](https://img.shields.io/lgtm/alerts/g/PointOneNav/polaris.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/PointOneNav/polaris/alerts/)
+
 [![Language grade: C/C++](https://img.shields.io/lgtm/grade/cpp/g/PointOneNav/polaris.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/PointOneNav/polaris/context:cpp)
 
 
@@ -9,23 +12,21 @@ This repo provides a library for interacting with the Point One Navigation Polar
 Documentation on the protocol used by the Polaris Service can be found at https://pointonenav.github.io/docs.
 
 * [Usage](#usage)
-    * [Polaris API Key](#polaris-api-key)
-    * [Dependencies](#dependencies)
-    * [Building with CMake](#building-with-cmake)
-    * [Building With Bazel](#building-with-bazel)
-    * [Building On Mac](#building-on-mac)
+  * [Polaris API Key](#polaris-api-key)
+  * [Dependencies](#dependencies)
+  * [Building with CMake](#building-with-cmake)
+  * [Building With Bazel](#building-with-bazel)
+    * [Cross-Compilig With Bazel](#cross-compiling-with-bazel)
+  * [Building On Mac](#building-on-mac)
 * [Example Applications](#example-applications)
-    * [NTRIP Proxy Example](#ntrip-proxy-example)
-    * [Septentrio Example](#septentrio-example)
-    *   [Hardware Setup](#hardware-setup)
-    *   [Configure AsteRx-m2](#configure-asterx-m2)
-    *   [Serial Permissions in Ubuntu](#serial-permissions-in-ubuntu)
-    *   [Running the example](#running-the-example)
-    *   [Verifying Corrections](#verifying-corrections)
-    * [Generic Serial Receiver Example](#generic-serial-receiver-example)
-        
-
-
+  * [NTRIP Proxy Example](#ntrip-proxy-example)
+  * [Septentrio Example](#septentrio-example)
+    * [Hardware Setup](#hardware-setup)
+    * [Configure AsteRx-m2](#configure-asterx-m2)
+    * [Serial Permissions in Ubuntu](#serial-permissions-in-ubuntu)
+    * [Running the example](#running-the-example)
+    * [Verifying Corrections](#verifying-corrections)
+  * [Generic Serial Receiver Example](#generic-serial-receiver-example)
 
 ## Usage ##
 
@@ -66,6 +67,18 @@ To build and run the example using Bazel, from the root of the repo:
 bazel run examples:septentrio_example -- --help
 ```
 
+#### Cross-Compiling With Bazel ####
+
+The Bazel build flow supports cross-compilation for 32- and 64-bit ARM architectures. To build for either architecture,
+specify the `--config` argument to Bazel with one of the following values:
+- `armv7hf` - 32-bit ARM v7 (e.g., Raspberry Pi v1/2/Zero)
+- `aarch64` - 64-bit ARM (e.g., Raspberry Pi v3+, Nvidia Jetson/Pegasus, Variscite DART-MX8M-MINI)
+
+For example:
+```
+bazel build --config=aarch64 examples:septentrio_example
+```
+
 ### Building On Mac ###
 
 The example can be built on mac using CMake or Bazel and Clang. Assure that you have a c++ toolchain and the associated dependencies.
@@ -92,7 +105,7 @@ The examples directory also contains a simple `ntrip-proxy.service` that can be 
 
 ### Septentrio Receiver Example ###
 
-The example binary `septentrio_example` streams RTK corrections to a Septentrio receiver over serial and reports back the receivers PVT message to the console. This has been tested on Septentrio's [AsteRx-m2](https://www.septentrio.com/en/products/gnss-receivers/rover-base-receivers/oem-receiver-boards/asterx-m2). The example can be easily modified for receivers that may receive corrections over other interfaces. 
+The example binary `septentrio_example` streams RTK corrections to a Septentrio receiver over serial and reports back the receivers PVT message to the console. This has been tested on Septentrio's [AsteRx-m2](https://www.septentrio.com/en/products/gnss-receivers/rover-base-receivers/oem-receiver-boards/asterx-m2). The example can be easily modified for receivers that may receive corrections over other interfaces.
 
 #### Hardware Setup ####
 
@@ -169,5 +182,3 @@ The example binary `asio_example` can be used to connect to a receiver that can 
 
 To run the application:
 ```bazel run examples:asio -- --logtostderr --polaris_api_key=MYAPPKEY1234 --device=/dev/ttyACM0```
-
-

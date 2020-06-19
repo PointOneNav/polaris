@@ -3,6 +3,10 @@ workspace(name = "polaris")
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
+#----------- Cross-Compilation Support ---------------
+load("//compilers:dependencies.bzl", "cross_compiler_dependencies")
+cross_compiler_dependencies()
+
 #----------- gflags ---------------
 http_archive(
     name = "com_github_gflags_gflags",
