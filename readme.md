@@ -1,4 +1,4 @@
-![Polaris Build](https://github.com/adamshapiro0/polaris/workflows/Polaris%20Build/badge.svg?branch=master)
+![Polaris Build](https://github.com/PointOneNav/polaris/workflows/Polaris%20Build/badge.svg?branch=master)
 
 [![Total alerts](https://img.shields.io/lgtm/alerts/g/PointOneNav/polaris.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/PointOneNav/polaris/alerts/)
 
@@ -12,23 +12,21 @@ This repo provides a library for interacting with the Point One Navigation Polar
 Documentation on the protocol used by the Polaris Service can be found at https://pointonenav.github.io/docs.
 
 * [Usage](#usage)
-    * [Polaris API Key](#polaris-api-key)
-    * [Dependencies](#dependencies)
-    * [Building with CMake](#building-with-cmake)
-    * [Building With Bazel](#building-with-bazel)
-    * [Building On Mac](#building-on-mac)
+  * [Polaris API Key](#polaris-api-key)
+  * [Dependencies](#dependencies)
+  * [Building with CMake](#building-with-cmake)
+  * [Building With Bazel](#building-with-bazel)
+    * [Cross-Compilig With Bazel](#cross-compiling-with-bazel)
+  * [Building On Mac](#building-on-mac)
 * [Example Applications](#example-applications)
-    * [NTRIP Proxy Example](#ntrip-proxy-example)
-    * [Septentrio Example](#septentrio-example)
-    *   [Hardware Setup](#hardware-setup)
-    *   [Configure AsteRx-m2](#configure-asterx-m2)
-    *   [Serial Permissions in Ubuntu](#serial-permissions-in-ubuntu)
-    *   [Running the example](#running-the-example)
-    *   [Verifying Corrections](#verifying-corrections)
-    * [Generic Serial Receiver Example](#generic-serial-receiver-example)
-
-
-
+  * [NTRIP Proxy Example](#ntrip-proxy-example)
+  * [Septentrio Example](#septentrio-example)
+    * [Hardware Setup](#hardware-setup)
+    * [Configure AsteRx-m2](#configure-asterx-m2)
+    * [Serial Permissions in Ubuntu](#serial-permissions-in-ubuntu)
+    * [Running the example](#running-the-example)
+    * [Verifying Corrections](#verifying-corrections)
+  * [Generic Serial Receiver Example](#generic-serial-receiver-example)
 
 ## Usage ##
 
@@ -73,8 +71,8 @@ bazel run examples:septentrio_example -- --help
 
 The Bazel build flow supports cross-compilation for 32- and 64-bit ARM architectures. To build for either architecture,
 specify the `--config` argument to Bazel with one of the following values:
-- `armv7hf` - 32-bit ARM v7
-- `aarch64` - 64-bit ARM
+- `armv7hf` - 32-bit ARM v7 (e.g., Raspberry Pi v1/2/Zero)
+- `aarch64` - 64-bit ARM (e.g., Raspberry Pi v3+, Nvidia Jetson/Pegasus, Variscite DART-MX8M-MINI)
 
 For example:
 ```
