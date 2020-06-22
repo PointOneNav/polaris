@@ -16,6 +16,9 @@ DEFINE_string(polaris_api_key, "",
               "The service API key. Contact account administrator or "
               "sales@pointonenav.com if unknown.");
 
+DEFINE_string(unique_id, "this_is_an_id",
+              "Unique ID for debugging purposes.");
+
 // Septentrio/output options:
 DEFINE_string(device, "/dev/ttyACM0",
               "The serial device on which the Septentrio is connected.");
@@ -92,7 +95,7 @@ int main(int argc, char *argv[], char *envp[]) {
 
   // Create the Polaris client.
   point_one::polaris::PolarisAsioClient polaris_client(
-      io_loop, FLAGS_polaris_api_key, "septentrio12345");
+      io_loop, FLAGS_polaris_api_key, FLAGS_unique_id);
 
   // This callback will forward RTCM correction bytes received from Polaris to
   // the Septentrio, as well as to an output UDP port if enabled.
