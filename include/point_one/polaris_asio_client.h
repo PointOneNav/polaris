@@ -209,11 +209,24 @@ class PolarisAsioClient {
         VLOG(3) << header;
       }
 
+      // Get the entire reply from the socket.
+      std::stringstream reply_body;
+      if (response.size() > 0) {
+        reply_body << &response;
+      }
+      boost::system::error_code error;
+      while (boost::asio::read(socket, response,
+                               boost::asio::transfer_at_least(1), error))
+        reply_body << &response;
+      if (error != boost::asio::error::eof) {
+        LOG(ERROR) << "Error occured while receiving auth token: "
+                   << error.message();
+        return false;
+      }
+
       // Parse json.
       boost::property_tree::ptree pt;
-      if (response.size() > 0) {
-        boost::property_tree::read_json(response_stream, pt);
-      }
+      boost::property_tree::read_json(reply_body, pt);
 
       try {
         api_token_.access_token = pt.get<std::string>("access_token");
@@ -224,7 +237,7 @@ class PolarisAsioClient {
         VLOG(3) << "Issued at: " << std::fixed << api_token_.issued_at;
 
       } catch (std::exception &e) {
-        LOG(ERROR) << "Exception: " << e.what();
+        LOG(ERROR) << "Exception in parsing auth token response: " << e.what();
         return false;
       }
 
