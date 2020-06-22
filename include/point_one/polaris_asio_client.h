@@ -216,19 +216,19 @@ class PolarisAsioClient {
       }
       boost::system::error_code error;
       while (boost::asio::read(socket, response,
-                               boost::asio::transfer_at_least(1), error))
+                               boost::asio::transfer_at_least(1), error)) {
         reply_body << &response;
+      }
       if (error != boost::asio::error::eof) {
         LOG(ERROR) << "Error occured while receiving auth token: "
                    << error.message();
         return false;
       }
 
-      // Parse json.
-      boost::property_tree::ptree pt;
-      boost::property_tree::read_json(reply_body, pt);
-
       try {
+        // Parse json.
+        boost::property_tree::ptree pt;
+        boost::property_tree::read_json(reply_body, pt);
         api_token_.access_token = pt.get<std::string>("access_token");
         api_token_.expires_in = pt.get<double>("expires_in");
         api_token_.issued_at = pt.get<double>("issued_at");
