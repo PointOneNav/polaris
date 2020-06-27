@@ -28,6 +28,14 @@ git_repository(
     shallow_since = "1542766478 +0900",
 )
 
+#---------------ssl --------------
+git_repository(
+    name = "boringssl",
+    commit = "87f3087d6343b89142d1191388a5885d74459df2",
+    remote = "https://boringssl.googlesource.com/boringssl",
+    shallow_since = "1586306564 +0000",
+)
+
 bind(
     name = "glog",
     actual = "@com_google_glog//:glog",

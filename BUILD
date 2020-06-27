@@ -18,6 +18,7 @@ cc_library(
     name = "polaris_asio_client",
     hdrs = [
         "include/point_one/polaris_asio_client.h",
+        "include/point_one/polaris_asio_embedded_client.h",
     ],
     includes = [
         "include",
@@ -29,5 +30,6 @@ cc_library(
         "@boost//:bind",
         "@boost//:property_tree",
         "@boost//:system",
+        "@boringssl//:ssl",
     ],
 )

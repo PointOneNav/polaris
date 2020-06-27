@@ -1,5 +1,4 @@
 // Copyright (C) Point One Navigation - All Rights Reserved
-// Written by Jason Moran <jason@pointonenav.com>, March 2019
 
 #pragma once
 

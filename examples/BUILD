@@ -37,7 +37,19 @@ cc_binary(
     ],
 )
 
-# Simple asio Sepetentrio client uisng Septentrio's official library.
+# Simple example of connecting to the Polaris service using the embedded
+# keying method.
+cc_binary(
+    name = "simple_embedded_client",
+    srcs = ["simple_embedded_client.cc"],
+    deps = [
+        "//:polaris_asio_client",
+        "//external:gflags",
+        "//external:glog",
+    ],
+)
+
+# Simple asio Septentrio client uisng Septentrio's official library.
 cc_library(
     name = "septentrio_service",
     hdrs = [

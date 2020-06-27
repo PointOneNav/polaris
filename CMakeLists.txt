@@ -1,5 +1,5 @@
 # Copyright (C) Point One Navigation - All Rights Reserved
-# Written by Jason Moran <jason@pointonenav.com>, March 2019
+
 
 # Builds a sample client for connection to Point One Navigation's
 # correction service - Polaris.
