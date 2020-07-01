@@ -434,12 +434,17 @@ class PolarisAsioClient {
 
   // Encodes a position message and sends it via the Polaris Client.
   void SendPosition() {
-    VLOG(2) << "Sending position update.";
-
     std::unique_ptr<PolarisRequest> request;
     if (pos_is_ecef_) {
+      VLOG(2) << "Sending ECEF position update. [" << std::fixed
+              << std::setprecision(3) << ecef_pos_.pos[0] << ", "
+              << ecef_pos_.pos[1] << ", " << ecef_pos_.pos[2] << "]";
       request.reset(new PositionEcefRequest(ecef_pos_));
     } else {
+      VLOG(2) << "Sending LLA position update. [" << std::fixed
+              << std::setprecision(7) << lla_pos_.pos[0] << ", "
+              << lla_pos_.pos[1] << ", " << std::setprecision(3)
+              << lla_pos_.pos[2] << "]";
       request.reset(new PositionLlaRequest(lla_pos_));
     }
 
