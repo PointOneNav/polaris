@@ -21,7 +21,7 @@
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 
-#include "glog/logging.h"
+#include <glog/logging.h>
 
 #include "polaris.h"
 
@@ -38,12 +38,11 @@ class PolarisAsioEmbeddedClient {
   // Service expects receiving a message within 5 seconds.
   static constexpr int DEFAULT_POSITION_SEND_INTERVAL_MSECS = 3000;
 
-  PolarisAsioEmbeddedClient(boost::asio::io_service &io_service,
-                    const std::string &signing_secret,
-                    const std::string &unique_id,
-                    const std::string &company_id,
-                    const PolarisConnectionSettings &connection_settings =
-                        DEFAULT_CONNECTION_SETTINGS)
+  PolarisAsioEmbeddedClient(
+      boost::asio::io_service &io_service, const std::string &signing_secret,
+      const std::string &unique_id, const std::string &company_id,
+      const PolarisConnectionSettings &connection_settings =
+          DEFAULT_CONNECTION_SETTINGS)
       : connection_settings_(connection_settings),
         signing_secret_(signing_secret),
         io_service_(io_service),
@@ -94,9 +93,9 @@ class PolarisAsioEmbeddedClient {
       return;
     }
 
-    socket_.async_connect(endpoint_,
-                          boost::bind(&PolarisAsioEmbeddedClient::HandleConnect, this,
-                                      boost::asio::placeholders::error));
+    socket_.async_connect(
+        endpoint_, boost::bind(&PolarisAsioEmbeddedClient::HandleConnect, this,
+                               boost::asio::placeholders::error));
   }
 
   // The callback with me iniated when the read buffer is full. Not guaranteed
@@ -110,10 +109,9 @@ class PolarisAsioEmbeddedClient {
   // Store the position for resending until position is updated.  ECEF
   // variant.
   void SetPositionECEF(double x_meters, double y_meters, double z_meters) {
-    io_service_.post(boost::bind(&PolarisAsioEmbeddedClient::HandleSetPosition, this,
-                                 x_meters, y_meters, z_meters));
+    io_service_.post(boost::bind(&PolarisAsioEmbeddedClient::HandleSetPosition,
+                                 this, x_meters, y_meters, z_meters));
   }
-
 
  private:
   // The size of the read buffer.
@@ -136,8 +134,6 @@ class PolarisAsioEmbeddedClient {
       // server will close the socket after transmitting the response.
       boost::asio::streambuf request;
       std::ostream request_stream(&request);
-
-
 
       request_stream << "GET "
                      << "/api/v1/auth/challenge/request"
@@ -170,12 +166,12 @@ class PolarisAsioEmbeddedClient {
         return "";
       }
 
-      switch(status_code) {
+      switch (status_code) {
         case 200:
           VLOG(1) << "Received polaris challenge.";
           break;
         default:
-          LOG(ERROR) << "Challenge resquest returned with status code "
+          LOG(ERROR) << "Challenge request returned with status code "
                      << status_code << ".";
           return "";
       }
@@ -199,7 +195,7 @@ class PolarisAsioEmbeddedClient {
         reply_body << &response;
       }
       if (error != boost::asio::error::eof) {
-        LOG(ERROR) << "Error occured while receiving challenge: "
+        LOG(ERROR) << "Error occurred while receiving challenge: "
                    << error.message();
         return "";
       }
@@ -212,7 +208,8 @@ class PolarisAsioEmbeddedClient {
         challenge = pt.get<std::string>("challenge");
         VLOG(3) << "Challenge is : " << challenge;
       } catch (std::exception &e) {
-        LOG(ERROR) << "Exception in parsing challenge request response: " << e.what();
+        LOG(ERROR) << "Exception in parsing challenge request response: "
+                   << e.what();
         return "";
       }
 
@@ -225,37 +222,51 @@ class PolarisAsioEmbeddedClient {
 
   std::string BuildChallengeSignature(std::string challenge, uint64_t time) {
     // concatenate the string and calculate the message digest
-
-    // challenge| timestamp | company_id | serial_number
+    // challenge | timestamp | company_id | serial_number
     std::stringstream ss;
     ss << challenge << std::to_string(time) << company_id_ << unique_id_;
 
-    unsigned int HMAC_SHA512_HASH_LEN = 64;
+    // NB: the encoded values is maximally ~1.25 the length of the HMAC
+    static constexpr unsigned int HMAC_SHA512_HASH_LEN = 64;
+    static constexpr unsigned int ENC_HASH_LEN = 128;
+    unsigned int hmac_output_len = HMAC_SHA512_HASH_LEN;
+
     uint8_t buf[HMAC_SHA512_HASH_LEN];
     std::string message = ss.str();
+
     HMAC_CTX hmac_ctx;
     HMAC_CTX_init(&hmac_ctx);
-    HMAC_Init_ex(&hmac_ctx, (void *)signing_secret_.data(),
-                 signing_secret_.length(), EVP_sha512(), NULL);
-    HMAC_Update(&hmac_ctx, (uint8_t *)message.data(), message.length());
-    HMAC_Final(&hmac_ctx, buf, &HMAC_SHA512_HASH_LEN);
-    unsigned char encodedData[128] = {};  // this is beyond safe, the max length
-                                          // of this is 1.25 * the HASH LEN
+    if (HMAC_Init_ex(&hmac_ctx, signing_secret_.data(),
+                     signing_secret_.length(), EVP_sha512(), NULL) == 0) {
+      LOG(ERROR) << "HMAC Failure: Init.";
+      return "";
+    }
+    if (HMAC_Update(&hmac_ctx, (uint8_t *)message.data(), message.length()) ==
+        0) {
+      LOG(ERROR) << "HMAC Failure: Update.";
+      return "";
+    }
+    if (HMAC_Final(&hmac_ctx, buf, &hmac_output_len) == 0) {
+      LOG(ERROR) << "HMAC Failure: Final.";
+      return "";
+    }
 
-    EVP_EncodeBlock(encodedData, buf, HMAC_SHA512_HASH_LEN);
-    std::string output((char *)encodedData);
+    unsigned char encoded_data[ENC_HASH_LEN] = {};
+    EVP_EncodeBlock(encoded_data, buf, hmac_output_len);
+    std::string output((char *)encoded_data);
     VLOG(2) << "Challenge Response Signature :" << std::endl << output;
     return output;
   }
 
-  bool GetAuthToken(std::string challenge, uint64_t time, std::string signature) {
+  bool GetAuthToken(std::string challenge, uint64_t time,
+                    std::string signature) {
     try {
       // Get a list of endpoints corresponding to the server name.
       boost::asio::ip::tcp::resolver resolver(io_service_);
       boost::asio::ip::tcp::resolver::query query(connection_settings_.api_host,
                                                   "http");
       boost::asio::ip::tcp::resolver::iterator endpoint_iterator =
-              resolver.resolve(query);
+          resolver.resolve(query);
 
       // Try each endpoint until we successfully establish a connection.
       boost::asio::ip::tcp::socket socket(io_service_);
@@ -266,7 +277,6 @@ class PolarisAsioEmbeddedClient {
       boost::asio::streambuf request;
       std::ostream request_stream(&request);
 
-
       std::stringstream post_body;
       post_body << "{\"challenge\": \"" << challenge << "\", "
                 << "\"timestamp\":  \"" << std::to_string(time) << "\", "
@@ -275,21 +285,18 @@ class PolarisAsioEmbeddedClient {
                 << "\"signature\": \"" << signature << "\""
                 << "}\r\n";
       std::string post_body_str = post_body.str();
-      LOG(INFO) << " JSON " << std::endl << post_body_str;
 
       request_stream << "POST "
                      << "/api/v1/auth/challenge/response"
                      << " HTTP/1.1\r\n";
       request_stream << "Host: " << connection_settings_.api_host << ":80\r\n";
       request_stream << "Content-Type: application/json\r\n";
-      request_stream << "Content-Length: " << post_body_str.size()
-                     << "\r\n";
+      request_stream << "Content-Length: " << post_body_str.size() << "\r\n";
       request_stream << "Accept: */*\r\n";
       request_stream << "Connection: close\r\n";
       request_stream << "Cache-Control: no-cache\r\n";
       request_stream << "\r\n";
       request_stream << post_body_str;
-
 
       // Send the request.
       boost::asio::write(socket, request);
@@ -313,7 +320,7 @@ class PolarisAsioEmbeddedClient {
         return false;
       }
 
-      switch(status_code) {
+      switch (status_code) {
         case 200:
           VLOG(1) << "Received polaris authentication token.";
           break;
@@ -322,8 +329,9 @@ class PolarisAsioEmbeddedClient {
                         "from Polaris. Please check challenge.";
           return false;
         default:
-          LOG(ERROR) << "Authentication challenge response returned with status code "
-                     << status_code << ".";
+          LOG(ERROR)
+              << "Authentication challenge response returned with status code "
+              << status_code << ".";
           return false;
       }
 
@@ -346,7 +354,7 @@ class PolarisAsioEmbeddedClient {
         reply_body << &response;
       }
       if (error != boost::asio::error::eof) {
-        LOG(ERROR) << "Error occured while receiving auth token: "
+        LOG(ERROR) << "Error occurred while receiving auth token: "
                    << error.message();
         return false;
       }
@@ -361,13 +369,11 @@ class PolarisAsioEmbeddedClient {
         VLOG(3) << "Access token: " << api_token_.access_token;
         VLOG(3) << "Expires in: " << std::fixed << api_token_.expires_in;
         VLOG(3) << "Issued at: " << std::fixed << api_token_.issued_at;
-
+        return true;
       } catch (std::exception &e) {
         LOG(ERROR) << "Exception in parsing auth token response: " << e.what();
         return false;
       }
-
-      return true;
     } catch (std::exception &e) {
       LOG(ERROR) << "Exception: " << e.what();
     }
@@ -394,9 +400,9 @@ class PolarisAsioEmbeddedClient {
   void SendAuth() {
     VLOG(1) << "Authenticating with service using auth token.";
     if (api_token_.access_token.empty()) {
-      std::string challenge  = RequestChallenge();
-      LOG(INFO) << " GOT CHALLENGE " << challenge;
-      uint64_t time = std::time(0);
+      std::string challenge = RequestChallenge();
+      VLOG(1) << "Challenge received: " << challenge;
+      uint64_t time = std::time(nullptr);
       std::string signature = BuildChallengeSignature(challenge, time);
       if (!GetAuthToken(challenge, time, signature)) {
         LOG(WARNING) << "Failed to get the auth token exchange!";
@@ -440,8 +446,9 @@ class PolarisAsioEmbeddedClient {
 
     if (stream_selection_source_ == StreamSelectionSource::POSITION) {
       pos_timer_.expires_from_now(boost::posix_time::milliseconds(0));
-      pos_timer_.async_wait(boost::bind(&PolarisAsioEmbeddedClient::PositionTimer, this,
-                                        boost::asio::placeholders::error));
+      pos_timer_.async_wait(
+          boost::bind(&PolarisAsioEmbeddedClient::PositionTimer, this,
+                      boost::asio::placeholders::error));
     }
     VLOG(2) << "Scheduling initial socket read.";
     ScheduleAsyncReadWithTimeout();
@@ -530,9 +537,9 @@ class PolarisAsioEmbeddedClient {
       stream_selection_source_ = StreamSelectionSource::POSITION;
       if (connected_) {
         pos_timer_.expires_from_now(boost::posix_time::milliseconds(0));
-        pos_timer_.async_wait(boost::bind(&PolarisAsioEmbeddedClient::PositionTimer,
-                                          this,
-                                          boost::asio::placeholders::error));
+        pos_timer_.async_wait(
+            boost::bind(&PolarisAsioEmbeddedClient::PositionTimer, this,
+                        boost::asio::placeholders::error));
       }
     }
   }
@@ -550,8 +557,8 @@ class PolarisAsioEmbeddedClient {
     VLOG(4) << "Scheduling position timer.";
     pos_timer_.expires_from_now(
         boost::posix_time::milliseconds(connection_settings_.interval_ms));
-    pos_timer_.async_wait(boost::bind(&PolarisAsioEmbeddedClient::PositionTimer, this,
-                                      boost::asio::placeholders::error));
+    pos_timer_.async_wait(boost::bind(&PolarisAsioEmbeddedClient::PositionTimer,
+                                      this, boost::asio::placeholders::error));
   }
 
   // Encodes a position message and sends it via the Polaris Client.
@@ -561,8 +568,8 @@ class PolarisAsioEmbeddedClient {
     std::unique_ptr<PolarisRequest> request;
 
     request.reset(new PositionEcefRequest(ecef_pos_));
-    VLOG(2) << "Position is ECEF: X:" << ecef_pos_.pos[0] <<" Y:" << ecef_pos_.pos[1] << " Z:" << ecef_pos_.pos[2];
-
+    VLOG(2) << "Position is ECEF: X:" << ecef_pos_.pos[0]
+            << " Y:" << ecef_pos_.pos[1] << " Z:" << ecef_pos_.pos[2];
 
     auto buf = std::make_shared<std::vector<uint8_t>>(request->GetSize());
     request->Serialize(buf->data());
@@ -573,7 +580,6 @@ class PolarisAsioEmbeddedClient {
         boost::bind(&PolarisAsioEmbeddedClient::HandleResponse, this,
                     boost::asio::placeholders::error, "position update"));
   }
-
 
   // Schedule a service reconnect if a request fails to send.
   void HandleResponse(const boost::system::error_code &err,
@@ -621,8 +627,9 @@ class PolarisAsioEmbeddedClient {
   // framed.
   std::function<void(uint8_t *, uint16_t)> polaris_bytes_received_callback_;
 
-  // The unique_id and company_id are required to authenticate a device issued by a paritcular
-  // company. Often the unique_id is a units permanent serial number.
+  // The unique_id and company_id are required to authenticate a device issued
+  // by a paritcular company. Often the unique_id is a units permanent serial
+  // number.
   std::string unique_id_;
   std::string company_id_;
 
@@ -649,8 +656,6 @@ class PolarisAsioEmbeddedClient {
 
   // Last position in ECEF XYZ meters.
   PositionEcef ecef_pos_;
-
-
 };
 
 }  // namespace polaris

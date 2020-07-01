@@ -45,9 +45,6 @@ int main(int argc, char* argv[]) {
   }
 
   auto connection_settings = point_one::polaris::DEFAULT_CONNECTION_SETTINGS;
-  connection_settings.api_host = "api.p1beta.com";
-  connection_settings.host = "polaris.p1beta.com";
-
   point_one::polaris::PolarisAsioClient polaris_client(
       io_loop, FLAGS_polaris_api_key, "device12345", connection_settings);
   polaris_client.SetPolarisBytesReceived(
@@ -64,4 +61,3 @@ int main(int argc, char* argv[]) {
 
   return 0;
 }
-
