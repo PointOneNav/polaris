@@ -7,12 +7,18 @@
 
 #include <gflags/gflags.h>
 
-#include <point_one/polaris_asio_client.h>
+#include <point_one/polaris_asio_embedded_client.h>
 
 // Polaris options:
-DEFINE_string(polaris_api_key, "",
-              "The service API key. Contact account administrator or "
-              "sales@pointonenav.com if unknown.");
+DEFINE_string(polaris_signing_secret, "bRb1q3k4yiX4VbZxztx",
+              "The signing secret.");
+DEFINE_string(company_id, "co994711e0d78611e69dd502fd95286f33",
+              "Company ID issued by Point One.");
+DEFINE_string(unique_id, "123456789",
+              "Unique identifier of the device (serial number).");
+DEFINE_string(api_server, "api.pointonenav.com", "Address of the API server");
+DEFINE_string(polaris_server, "polaris.pointonenav.com",
+              "Address of the Polaris server");
 
 // Allows for prebuilt versions of gflags/google that don't have gflags/google
 // namespace.
@@ -38,15 +44,13 @@ int main(int argc, char* argv[]) {
   boost::asio::io_service io_loop;
   boost::asio::io_service::work work(io_loop);
 
-  // Construct a Polaris client.
-  if (FLAGS_polaris_api_key == "") {
-    LOG(FATAL) << "You must supply a Polaris API key to connect to the server.";
-    return 1;
-  }
-
   auto connection_settings = point_one::polaris::DEFAULT_CONNECTION_SETTINGS;
-  point_one::polaris::PolarisAsioClient polaris_client(
-      io_loop, FLAGS_polaris_api_key, "device12345", connection_settings);
+  connection_settings.api_host = FLAGS_api_server;
+  connection_settings.host = FLAGS_polaris_server;
+
+  point_one::polaris::PolarisAsioEmbeddedClient polaris_client(
+      io_loop, FLAGS_polaris_signing_secret, FLAGS_unique_id, FLAGS_company_id,
+      connection_settings);
   polaris_client.SetPolarisBytesReceived(
       std::bind(&ReceivedData, std::placeholders::_1, std::placeholders::_2));
   // Application can set position at any time to change associated beacon(s) and

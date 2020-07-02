@@ -1,6 +1,7 @@
 // Copyright (C) Point One Navigation - All Rights Reserved
 
-// Client for connecting to Polaris RTCM corrections service.
+// Client for connecting to Polaris RTCM corrections service using the
+// embedded signing authentication method
 #pragma once
 
 #include <algorithm>
@@ -17,7 +18,10 @@
 #include <string>
 #include <vector>
 
-#include "glog/logging.h"
+#include <openssl/evp.h>
+#include <openssl/hmac.h>
+
+#include <glog/logging.h>
 
 #include "polaris.h"
 
@@ -28,30 +32,31 @@ namespace {
 constexpr int SOCKET_TIMEOUT_MS = 7000;
 }  // namespace
 
-class PolarisAsioClient {
+class PolarisAsioEmbeddedClient {
  public:
   // How long to wait before sending a new position update.  Polaris
   // Service expects receiving a message within 5 seconds.
   static constexpr int DEFAULT_POSITION_SEND_INTERVAL_MSECS = 3000;
 
-  PolarisAsioClient(boost::asio::io_service &io_service,
-                    const std::string &api_key,
-                    const std::string &unique_id = "",
-                    const PolarisConnectionSettings &connection_settings =
-                        DEFAULT_CONNECTION_SETTINGS)
+  PolarisAsioEmbeddedClient(
+      boost::asio::io_service &io_service, const std::string &signing_secret,
+      const std::string &unique_id, const std::string &company_id,
+      const PolarisConnectionSettings &connection_settings =
+          DEFAULT_CONNECTION_SETTINGS)
       : connection_settings_(connection_settings),
-        api_key_(api_key),
+        signing_secret_(signing_secret),
         io_service_(io_service),
         resolver_(io_service),
         socket_(io_service),
         unique_id_(unique_id),
+        company_id_(company_id),
         pos_timer_(io_service),
         reconnect_timer_(io_service, boost::posix_time::milliseconds(
                                          connection_settings.interval_ms)),
         socket_timer_(io_service,
                       boost::posix_time::milliseconds(SOCKET_TIMEOUT_MS)) {}
 
-  ~PolarisAsioClient() {
+  ~PolarisAsioEmbeddedClient() {
     polaris_bytes_received_callback_ = nullptr;
     pos_timer_.cancel();
     socket_timer_.cancel();
@@ -88,9 +93,9 @@ class PolarisAsioClient {
       return;
     }
 
-    socket_.async_connect(endpoint_,
-                          boost::bind(&PolarisAsioClient::HandleConnect, this,
-                                      boost::asio::placeholders::error));
+    socket_.async_connect(
+        endpoint_, boost::bind(&PolarisAsioEmbeddedClient::HandleConnect, this,
+                               boost::asio::placeholders::error));
   }
 
   // The callback with me iniated when the read buffer is full. Not guaranteed
@@ -104,29 +109,157 @@ class PolarisAsioClient {
   // Store the position for resending until position is updated.  ECEF
   // variant.
   void SetPositionECEF(double x_meters, double y_meters, double z_meters) {
-    io_service_.post(boost::bind(&PolarisAsioClient::HandleSetPosition, this,
-                                 x_meters, y_meters, z_meters, true));
-  }
-
-  // Send a position to Polaris, potentially updating the resulting stream.
-  // Store the position for resending until position is updated.  Latitude,
-  // longitude, altitude variant.
-  void SetPositionLLA(double lat_deg, double lon_deg, double alt_m) {
-    io_service_.post(boost::bind(&PolarisAsioClient::HandleSetPosition, this,
-                                 lat_deg, lon_deg, alt_m, false));
-  }
-
-  // Request data from a specific beacon.
-  void SetBeaconID(const std::string& beacon_id) {
-    io_service_.post(
-        boost::bind(&PolarisAsioClient::HandleSetBeacon, this, beacon_id));
+    io_service_.post(boost::bind(&PolarisAsioEmbeddedClient::HandleSetPosition,
+                                 this, x_meters, y_meters, z_meters));
   }
 
  private:
   // The size of the read buffer.
   static constexpr int BUF_SIZE = 1024;
 
-  bool RequestToken() {
+  std::string RequestChallenge() {
+    try {
+      // Get a list of endpoints corresponding to the server name.
+      boost::asio::ip::tcp::resolver resolver(io_service_);
+      boost::asio::ip::tcp::resolver::query query(connection_settings_.api_host,
+                                                  "http");
+      boost::asio::ip::tcp::resolver::iterator endpoint_iterator =
+          resolver.resolve(query);
+
+      // Try each endpoint until we successfully establish a connection.
+      boost::asio::ip::tcp::socket socket(io_service_);
+      boost::asio::connect(socket, endpoint_iterator);
+
+      // Form the request. We specify the "Connection: close" header so that the
+      // server will close the socket after transmitting the response.
+      boost::asio::streambuf request;
+      std::ostream request_stream(&request);
+
+      request_stream << "GET "
+                     << "/api/v1/auth/challenge/request"
+                     << " HTTP/1.1\r\n";
+      request_stream << "Host: " << connection_settings_.api_host << ":80\r\n";
+      request_stream << "Connection: close\r\n";
+      request_stream << "Cache-Control: no-cache\r\n";
+      request_stream << "\r\n";
+      request_stream << "\r\n";
+
+      // Send the request.
+      boost::asio::write(socket, request);
+
+      // Read the response status line. The response streambuf will
+      // automatically grow to accommodate the entire line. The growth may be
+      // limited by passing a maximum size to the streambuf constructor.
+      boost::asio::streambuf response;
+      boost::asio::read_until(socket, response, "\r\n");
+
+      // Check that response is OK.
+      std::istream response_stream(&response);
+      std::string http_version;
+      response_stream >> http_version;
+      unsigned int status_code;
+      response_stream >> status_code;
+      std::string status_message;
+      std::getline(response_stream, status_message);
+      if (!response_stream || http_version.substr(0, 5) != "HTTP/") {
+        LOG(ERROR) << "Invalid HTTP response to challenge request.";
+        return "";
+      }
+
+      switch (status_code) {
+        case 200:
+          VLOG(1) << "Received polaris challenge.";
+          break;
+        default:
+          LOG(ERROR) << "Challenge request returned with status code "
+                     << status_code << ".";
+          return "";
+      }
+
+      // Process the response headers.
+      boost::asio::read_until(socket, response, "\r\n\r\n");
+      std::string header;
+      VLOG(3) << "Response:";
+      while (std::getline(response_stream, header) && header != "\r") {
+        VLOG(3) << header;
+      }
+
+      // Get the entire reply from the socket.
+      std::stringstream reply_body;
+      if (response.size() > 0) {
+        reply_body << &response;
+      }
+      boost::system::error_code error;
+      while (boost::asio::read(socket, response,
+                               boost::asio::transfer_at_least(1), error)) {
+        reply_body << &response;
+      }
+      if (error != boost::asio::error::eof) {
+        LOG(ERROR) << "Error occurred while receiving challenge: "
+                   << error.message();
+        return "";
+      }
+
+      std::string challenge = "";
+      try {
+        // Parse json.
+        boost::property_tree::ptree pt;
+        boost::property_tree::read_json(reply_body, pt);
+        challenge = pt.get<std::string>("challenge");
+        VLOG(3) << "Challenge is : " << challenge;
+      } catch (std::exception &e) {
+        LOG(ERROR) << "Exception in parsing challenge request response: "
+                   << e.what();
+        return "";
+      }
+
+      return challenge;
+    } catch (std::exception &e) {
+      LOG(ERROR) << "Exception: " << e.what();
+    }
+    return "";
+  }
+
+  std::string BuildChallengeSignature(std::string challenge, uint64_t time) {
+    // concatenate the string and calculate the message digest
+    // challenge | timestamp | company_id | serial_number
+    std::stringstream ss;
+    ss << challenge << std::to_string(time) << company_id_ << unique_id_;
+
+    // NB: the encoded values is maximally ~1.25 the length of the HMAC
+    static constexpr unsigned int HMAC_SHA512_HASH_LEN = 64;
+    static constexpr unsigned int ENC_HASH_LEN = 128;
+    unsigned int hmac_output_len = HMAC_SHA512_HASH_LEN;
+
+    uint8_t buf[HMAC_SHA512_HASH_LEN];
+    std::string message = ss.str();
+
+    HMAC_CTX hmac_ctx;
+    HMAC_CTX_init(&hmac_ctx);
+    if (HMAC_Init_ex(&hmac_ctx, signing_secret_.data(),
+                     signing_secret_.length(), EVP_sha512(), NULL) == 0) {
+      LOG(ERROR) << "HMAC Failure: Init.";
+      return "";
+    }
+    if (HMAC_Update(&hmac_ctx, (uint8_t *)message.data(), message.length()) ==
+        0) {
+      LOG(ERROR) << "HMAC Failure: Update.";
+      return "";
+    }
+    if (HMAC_Final(&hmac_ctx, buf, &hmac_output_len) == 0) {
+      LOG(ERROR) << "HMAC Failure: Final.";
+      return "";
+    }
+
+    unsigned char encoded_data[ENC_HASH_LEN] = {};
+    EVP_EncodeBlock(encoded_data, buf, hmac_output_len);
+    std::string output((char *)encoded_data);
+    VLOG(2) << "Challenge Response Signature :" << std::endl << output;
+    return output;
+  }
+
+  bool GetAuthToken(std::string challenge, uint64_t time,
+                    std::string signature) {
     try {
       // Get a list of endpoints corresponding to the server name.
       boost::asio::ip::tcp::resolver resolver(io_service_);
@@ -145,19 +278,20 @@ class PolarisAsioClient {
       std::ostream request_stream(&request);
 
       std::stringstream post_body;
-      post_body << "{\"grant_type\": \"authorization_code\", "
-                     << "\"token_type\":  \"Bearer\", "
-                     << "\"unique_id\": \"" << unique_id_ << "\", "
-                     << "\"authorization_code\": \"" << api_key_ << "\"}\r\n";
+      post_body << "{\"challenge\": \"" << challenge << "\", "
+                << "\"timestamp\":  \"" << std::to_string(time) << "\", "
+                << "\"company_id\": \"" << company_id_ << "\", "
+                << "\"unique_id\": \"" << unique_id_ << "\", "
+                << "\"signature\": \"" << signature << "\""
+                << "}\r\n";
       std::string post_body_str = post_body.str();
 
       request_stream << "POST "
-                     << "/api/v1/auth/token"
+                     << "/api/v1/auth/challenge/response"
                      << " HTTP/1.1\r\n";
       request_stream << "Host: " << connection_settings_.api_host << ":80\r\n";
       request_stream << "Content-Type: application/json\r\n";
-      request_stream << "Content-Length: " << post_body_str.size()
-                     << "\r\n";
+      request_stream << "Content-Length: " << post_body_str.size() << "\r\n";
       request_stream << "Accept: */*\r\n";
       request_stream << "Connection: close\r\n";
       request_stream << "Cache-Control: no-cache\r\n";
@@ -182,21 +316,22 @@ class PolarisAsioClient {
       std::string status_message;
       std::getline(response_stream, status_message);
       if (!response_stream || http_version.substr(0, 5) != "HTTP/") {
-        LOG(ERROR) << "Invalid HTTP response to authentication token request.";
+        LOG(ERROR) << "Invalid HTTP response to challenge response.";
         return false;
       }
 
-      switch(status_code) {
+      switch (status_code) {
         case 200:
           VLOG(1) << "Received polaris authentication token.";
           break;
         case 403:
           LOG(ERROR) << "Received an authentication forbidden (403) response "
-                        "from Polaris. Please check your API key.";
+                        "from Polaris. Please check challenge.";
           return false;
         default:
-          LOG(ERROR) << "Authentication response returned with status code "
-                     << status_code << ".";
+          LOG(ERROR)
+              << "Authentication challenge response returned with status code "
+              << status_code << ".";
           return false;
       }
 
@@ -219,7 +354,7 @@ class PolarisAsioClient {
         reply_body << &response;
       }
       if (error != boost::asio::error::eof) {
-        LOG(ERROR) << "Error occured while receiving auth token: "
+        LOG(ERROR) << "Error occurred while receiving auth token: "
                    << error.message();
         return false;
       }
@@ -234,13 +369,11 @@ class PolarisAsioClient {
         VLOG(3) << "Access token: " << api_token_.access_token;
         VLOG(3) << "Expires in: " << std::fixed << api_token_.expires_in;
         VLOG(3) << "Issued at: " << std::fixed << api_token_.issued_at;
-
+        return true;
       } catch (std::exception &e) {
         LOG(ERROR) << "Exception in parsing auth token response: " << e.what();
         return false;
       }
-
-      return true;
     } catch (std::exception &e) {
       LOG(ERROR) << "Exception: " << e.what();
     }
@@ -267,9 +400,12 @@ class PolarisAsioClient {
   void SendAuth() {
     VLOG(1) << "Authenticating with service using auth token.";
     if (api_token_.access_token.empty()) {
-      if (!RequestToken()) {
-        // Token request failures are fatal - probably an invalid API key. Don't
-        // schedule a reconnect.
+      std::string challenge = RequestChallenge();
+      VLOG(1) << "Challenge received: " << challenge;
+      uint64_t time = std::time(nullptr);
+      std::string signature = BuildChallengeSignature(challenge, time);
+      if (!GetAuthToken(challenge, time, signature)) {
+        LOG(WARNING) << "Failed to get the auth token exchange!";
         return;
       }
     }
@@ -281,7 +417,7 @@ class PolarisAsioClient {
     std::unique_lock<std::recursive_mutex> guard(lock_);
     boost::asio::async_write(
         socket_, boost::asio::buffer(*buf),
-        boost::bind(&PolarisAsioClient::HandleAuthTokenWrite, this, buf,
+        boost::bind(&PolarisAsioEmbeddedClient::HandleAuthTokenWrite, this, buf,
                     boost::asio::placeholders::error));
   }
 
@@ -310,12 +446,10 @@ class PolarisAsioClient {
 
     if (stream_selection_source_ == StreamSelectionSource::POSITION) {
       pos_timer_.expires_from_now(boost::posix_time::milliseconds(0));
-      pos_timer_.async_wait(boost::bind(&PolarisAsioClient::PositionTimer, this,
-                                        boost::asio::placeholders::error));
-    } else if (stream_selection_source_ == StreamSelectionSource::BEACON) {
-      HandleSetBeacon(beacon_id_);
+      pos_timer_.async_wait(
+          boost::bind(&PolarisAsioEmbeddedClient::PositionTimer, this,
+                      boost::asio::placeholders::error));
     }
-
     VLOG(2) << "Scheduling initial socket read.";
     ScheduleAsyncReadWithTimeout();
   }
@@ -344,14 +478,14 @@ class PolarisAsioClient {
     socket_timer_.expires_from_now(
         boost::posix_time::milliseconds(SOCKET_TIMEOUT_MS));
     socket_timer_.async_wait(
-        boost::bind(&PolarisAsioClient::HandleSocketTimeout, this,
+        boost::bind(&PolarisAsioEmbeddedClient::HandleSocketTimeout, this,
                     boost::asio::placeholders::error));
 
     // Read more bytes if they are available.
     std::unique_lock<std::recursive_mutex> guard(lock_);
     boost::asio::async_read(
         socket_, boost::asio::buffer(buf_), boost::asio::transfer_at_least(1),
-        boost::bind(&PolarisAsioClient::HandleSocketRead, this,
+        boost::bind(&PolarisAsioEmbeddedClient::HandleSocketRead, this,
                     boost::asio::placeholders::error,
                     boost::asio::placeholders::bytes_transferred));
   }
@@ -366,7 +500,7 @@ class PolarisAsioClient {
       reconnect_timer_.expires_from_now(
           boost::posix_time::milliseconds(wait_ms));
       reconnect_timer_.async_wait(
-          boost::bind(&PolarisAsioClient::HandleReconnectTimeout, this,
+          boost::bind(&PolarisAsioEmbeddedClient::HandleReconnectTimeout, this,
                       boost::asio::placeholders::error));
       reconnect_set_ = true;
     } else {
@@ -395,22 +529,17 @@ class PolarisAsioClient {
   }
 
   // Sets the position of the client for future broadcasting.
-  void HandleSetPosition(double a, double b, double c, bool is_ecef) {
-    pos_is_ecef_ = is_ecef;
-    if (is_ecef) {
-      ecef_pos_ = PositionEcef(a, b, c);
-    } else {
-      lla_pos_ = PositionLla(a, b, c);
-    }
+  void HandleSetPosition(double a, double b, double c) {
+    ecef_pos_ = PositionEcef(a, b, c);
 
     if (stream_selection_source_ != StreamSelectionSource::POSITION) {
       VLOG(1) << "Scheduling first position update.";
       stream_selection_source_ = StreamSelectionSource::POSITION;
       if (connected_) {
         pos_timer_.expires_from_now(boost::posix_time::milliseconds(0));
-        pos_timer_.async_wait(boost::bind(&PolarisAsioClient::PositionTimer,
-                                          this,
-                                          boost::asio::placeholders::error));
+        pos_timer_.async_wait(
+            boost::bind(&PolarisAsioEmbeddedClient::PositionTimer, this,
+                        boost::asio::placeholders::error));
       }
     }
   }
@@ -428,8 +557,8 @@ class PolarisAsioClient {
     VLOG(4) << "Scheduling position timer.";
     pos_timer_.expires_from_now(
         boost::posix_time::milliseconds(connection_settings_.interval_ms));
-    pos_timer_.async_wait(boost::bind(&PolarisAsioClient::PositionTimer, this,
-                                      boost::asio::placeholders::error));
+    pos_timer_.async_wait(boost::bind(&PolarisAsioEmbeddedClient::PositionTimer,
+                                      this, boost::asio::placeholders::error));
   }
 
   // Encodes a position message and sends it via the Polaris Client.
@@ -437,11 +566,10 @@ class PolarisAsioClient {
     VLOG(2) << "Sending position update.";
 
     std::unique_ptr<PolarisRequest> request;
-    if (pos_is_ecef_) {
-      request.reset(new PositionEcefRequest(ecef_pos_));
-    } else {
-      request.reset(new PositionLlaRequest(lla_pos_));
-    }
+
+    request.reset(new PositionEcefRequest(ecef_pos_));
+    VLOG(2) << "Position is ECEF: X:" << ecef_pos_.pos[0]
+            << " Y:" << ecef_pos_.pos[1] << " Z:" << ecef_pos_.pos[2];
 
     auto buf = std::make_shared<std::vector<uint8_t>>(request->GetSize());
     request->Serialize(buf->data());
@@ -449,31 +577,8 @@ class PolarisAsioClient {
     std::unique_lock<std::recursive_mutex> guard(lock_);
     boost::asio::async_write(
         socket_, boost::asio::buffer(*buf),
-        boost::bind(&PolarisAsioClient::HandleResponse, this,
+        boost::bind(&PolarisAsioEmbeddedClient::HandleResponse, this,
                     boost::asio::placeholders::error, "position update"));
-  }
-
-  // Issue a request for the specified beacon.
-  void HandleSetBeacon(const std::string& beacon_id) {
-    if (stream_selection_source_ == StreamSelectionSource::POSITION) {
-      pos_timer_.cancel();
-    }
-
-    stream_selection_source_ = StreamSelectionSource::BEACON;
-    beacon_id_ = beacon_id;
-
-    if (connected_) {
-      LOG(INFO) << "Sending request for beacon '" << beacon_id << "'.";
-      BeaconRequest request(beacon_id);
-      auto buf = std::make_shared<std::vector<uint8_t>>(request.GetSize());
-      request.Serialize(buf->data());
-
-      std::unique_lock<std::recursive_mutex> guard(lock_);
-      boost::asio::async_write(
-          socket_, boost::asio::buffer(*buf),
-          boost::bind(&PolarisAsioClient::HandleResponse, this,
-                      boost::asio::placeholders::error, "beacon request"));
-    }
   }
 
   // Schedule a service reconnect if a request fails to send.
@@ -489,7 +594,7 @@ class PolarisAsioClient {
     }
   }
 
-  enum class StreamSelectionSource { NONE, BEACON, POSITION };
+  enum class StreamSelectionSource { NONE, POSITION };
 
   // Synchronization for the socket.
   std::recursive_mutex lock_;
@@ -497,9 +602,10 @@ class PolarisAsioClient {
   // Settings for reaching polaris services.
   const PolarisConnectionSettings connection_settings_;
 
-  // The serial number of the device for connecting with Polaris.
-  std::string api_key_;
+  // The signing secret for signing challenge responses
+  std::string signing_secret_;
 
+  // The issued token after authenticated with Polaris
   PolarisAuthToken api_token_;
 
   // The asio event loop service.
@@ -521,9 +627,11 @@ class PolarisAsioClient {
   // framed.
   std::function<void(uint8_t *, uint16_t)> polaris_bytes_received_callback_;
 
-  // Optionally a unique id that can be used to aid in debugging when sharing an api key
-  // with multiple clients.
+  // The unique_id and company_id are required to authenticate a device issued
+  // by a paritcular company. Often the unique_id is a units permanent serial
+  // number.
   std::string unique_id_;
+  std::string company_id_;
 
   // A deadline time for resending postion.
   boost::asio::deadline_timer pos_timer_;
@@ -546,17 +654,8 @@ class PolarisAsioClient {
   // The typeof input used to select a data stream.
   StreamSelectionSource stream_selection_source_ = StreamSelectionSource::NONE;
 
-  // Whether to send last position as ecef or meters.
-  bool pos_is_ecef_ = true;
-
   // Last position in ECEF XYZ meters.
   PositionEcef ecef_pos_;
-
-  // Last position in Latitude(deg), Longitude(deg), alt(m).
-  PositionLla lla_pos_;
-
-  // The desired beacon ID.
-  std::string beacon_id_;
 };
 
 }  // namespace polaris
