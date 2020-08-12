@@ -23,6 +23,9 @@ DEFINE_string(polaris_api_key, "",
               "The service API key. Contact account administrator or "
               "sales@pointonenav.com if unknown.");
 
+DEFINE_string(polaris_unique_id, "ntrip-device12345",
+              "The unique ID to assign to this Polaris connection.");
+
 namespace gflags {}
 namespace google {}
 using namespace gflags;
@@ -100,7 +103,7 @@ int main(int argc, char* argv[]) {
     settings.host = FLAGS_polaris_host;
     settings.port = FLAGS_polaris_port;
     point_one::polaris::PolarisAsioClient polaris_client(
-        io_loop, FLAGS_polaris_api_key, "ntrip-device12345", settings);
+        io_loop, FLAGS_polaris_api_key, FLAGS_polaris_unique_id, settings);
 
     // Initialise the server.
     LOG(INFO) << "Starting NTRIP server on " << argv[1] << ":" << argv[2];

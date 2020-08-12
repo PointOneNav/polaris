@@ -14,6 +14,9 @@ DEFINE_string(polaris_api_key, "",
               "The service API key. Contact account administrator or "
               "sales@pointonenav.com if unknown.");
 
+DEFINE_string(polaris_unique_id, "device12345",
+              "The unique ID to assign to this Polaris connection.");
+
 // Allows for prebuilt versions of gflags/google that don't have gflags/google
 // namespace.
 namespace gflags {}
@@ -46,7 +49,8 @@ int main(int argc, char* argv[]) {
 
   auto connection_settings = point_one::polaris::DEFAULT_CONNECTION_SETTINGS;
   point_one::polaris::PolarisAsioClient polaris_client(
-      io_loop, FLAGS_polaris_api_key, "device12345", connection_settings);
+      io_loop, FLAGS_polaris_api_key, FLAGS_polaris_unique_id,
+      connection_settings);
   polaris_client.SetPolarisBytesReceived(
       std::bind(&ReceivedData, std::placeholders::_1, std::placeholders::_2));
   // Application can set position at any time to change associated beacon(s) and

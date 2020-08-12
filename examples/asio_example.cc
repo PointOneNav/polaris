@@ -16,6 +16,9 @@ DEFINE_string(polaris_api_key, "",
               "The service API key. Contact account administrator or "
               "sales@pointonenav.com if unknown.");
 
+DEFINE_string(polaris_unique_id, "device12345",
+              "The unique ID to assign to this Polaris connection.");
+
 // Serial port forwarding options.
 DEFINE_string(receiver_serial_port, "/dev/ttyACM0",
               "The path to the serial port for which to forward corrections.");
@@ -131,7 +134,7 @@ int main(int argc, char* argv[]) {
   }
 
   point_one::polaris::PolarisAsioClient polaris_client(
-      io_loop, FLAGS_polaris_api_key, "ntrip-device12345");
+      io_loop, FLAGS_polaris_api_key, FLAGS_polaris_unique_id);
   polaris_client.SetPolarisBytesReceived(
       std::bind(&point_one::utils::SimpleAsioSerialPort::Write,
                 &serial_port_correction_forwarder, std::placeholders::_1,
