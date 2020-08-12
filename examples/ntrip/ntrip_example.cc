@@ -23,6 +23,9 @@ DEFINE_string(polaris_api_key, "",
               "The service API key. Contact account administrator or "
               "sales@pointonenav.com if unknown.");
 
+DEFINE_string(polaris_unique_id, "ntrip-device12345",
+              "The unique ID to assign to this Polaris connection.");
+
 namespace gflags {}
 namespace google {}
 using namespace gflags;
@@ -48,17 +51,17 @@ void OnGpgga(const std::string &gpgga,
       result.push_back( substr );
   }
   std::string::size_type sz;     // alias of size_t
-  
+
   try {
     // TODO: This is not exactly correct but should not really matter because its just beacon association.
     double lat = ConvertGGADegrees(std::stod(result[2], &sz)) * (result[3] == "N" ? 1 : -1);
     double lon = ConvertGGADegrees(std::stod(result[4], &sz)) * (result[5] == "E" ? 1 : -1);
     double alt = std::stod(result[8], &sz);
-    
-    VLOG(2) << "Setting position: lat: " << lat << " lon: " << lon << " alt: " << alt; 
+
+    VLOG(2) << "Setting position: lat: " << lat << " lon: " << lon << " alt: " << alt;
     polaris_client->SetPositionLLA(lat, lon, alt);
   }
-  catch (const std::exception&){ 
+  catch (const std::exception&){
     LOG(WARNING) << "GPGGA Bad parse of string " << gpgga;
     return;
   }
@@ -67,7 +70,7 @@ void OnGpgga(const std::string &gpgga,
 
 int main(int argc, char* argv[]) {
   ParseCommandLineFlags(&argc, &argv, true);
-  
+
   //set output to std err on by default
   FLAGS_logtostderr = true;
   FLAGS_colorlogtostderr = true;
@@ -100,7 +103,7 @@ int main(int argc, char* argv[]) {
     settings.host = FLAGS_polaris_host;
     settings.port = FLAGS_polaris_port;
     point_one::polaris::PolarisAsioClient polaris_client(
-        io_loop, FLAGS_polaris_api_key, "ntrip-device12345", settings);
+        io_loop, FLAGS_polaris_api_key, FLAGS_polaris_unique_id, settings);
 
     // Initialise the server.
     LOG(INFO) << "Starting NTRIP server on " << argv[1] << ":" << argv[2];
