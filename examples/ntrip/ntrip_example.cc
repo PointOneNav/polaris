@@ -51,17 +51,17 @@ void OnGpgga(const std::string &gpgga,
       result.push_back( substr );
   }
   std::string::size_type sz;     // alias of size_t
-  
+
   try {
     // TODO: This is not exactly correct but should not really matter because its just beacon association.
     double lat = ConvertGGADegrees(std::stod(result[2], &sz)) * (result[3] == "N" ? 1 : -1);
     double lon = ConvertGGADegrees(std::stod(result[4], &sz)) * (result[5] == "E" ? 1 : -1);
     double alt = std::stod(result[8], &sz);
-    
-    VLOG(2) << "Setting position: lat: " << lat << " lon: " << lon << " alt: " << alt; 
+
+    VLOG(2) << "Setting position: lat: " << lat << " lon: " << lon << " alt: " << alt;
     polaris_client->SetPositionLLA(lat, lon, alt);
   }
-  catch (const std::exception&){ 
+  catch (const std::exception&){
     LOG(WARNING) << "GPGGA Bad parse of string " << gpgga;
     return;
   }
@@ -70,7 +70,7 @@ void OnGpgga(const std::string &gpgga,
 
 int main(int argc, char* argv[]) {
   ParseCommandLineFlags(&argc, &argv, true);
-  
+
   //set output to std err on by default
   FLAGS_logtostderr = true;
   FLAGS_colorlogtostderr = true;
