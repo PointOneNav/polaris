@@ -8,3 +8,7 @@ build
 .vscode
 # Clion
 .clwb/
+
+# Build Output
+*.o
+c/examples/simple_polaris_client
