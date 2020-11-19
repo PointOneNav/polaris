@@ -60,4 +60,12 @@ int Polaris_AuthenticateWith(PolarisContext_t* context, const char* api_key,
 void Polaris_SetRTCMCallback(PolarisContext_t* context,
                              PolarisCallback_t callback);
 
+int Polaris_SendECEFPosition(PolarisContext_t* context, double x_m, double y_m,
+                             double z_m);
+
+int Polaris_SendLLAPosition(PolarisContext_t* context, double latitude_deg,
+                            double longitude_deg, double altitude_m);
+
+int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id);
+
 void Polaris_Run(PolarisContext_t* context);

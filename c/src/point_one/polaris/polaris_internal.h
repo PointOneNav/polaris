@@ -1,6 +1,9 @@
 /**************************************************************************/ /**
  * @brief Point One Navigation Polaris message definitions and support.
  *
+ * @note
+ * Polaris messages are little endian, not network (big) endian.
+ *
  * Copyright (c) Point One Navigation - All Rights Reserved
  ******************************************************************************/
 
@@ -27,9 +30,20 @@ typedef struct {
   uint8_t start_byte1;
   uint8_t message_class;
   uint8_t message_id;
-  // Note: The payload length is little endian, not network endian.
   uint16_t payload_length;
 } PolarisHeader_t;
+
+typedef struct {
+  uint32_t x_cm;
+  uint32_t y_cm;
+  uint32_t z_cm;
+} PolarisECEFMessage_t;
+
+typedef struct {
+  uint32_t latitude_dege7;
+  uint32_t longitude_dege7;
+  uint32_t altitude_mm;
+} PolarisLLAMessage_t;
 #pragma pack(pop)
 
 typedef uint16_t PolarisChecksum_t;

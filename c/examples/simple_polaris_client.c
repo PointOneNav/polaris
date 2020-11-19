@@ -47,6 +47,14 @@ int main(int argc, const char* argv[]) {
 
   printf("Connected to Polaris...\n");
 
+  if (Polaris_SendLLAPosition(&context, -2707071.0, -4260565.0, 3885644.0) !=
+      POLARIS_SUCCESS) {
+    Polaris_Close(&context);
+    return 4;
+  }
+
+  printf("Sent position. Listening for data...\n");
+
   signal(SIGINT, HandleSignal);
   signal(SIGTERM, HandleSignal);
 

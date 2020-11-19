@@ -166,6 +166,78 @@ void Polaris_SetRTCMCallback(PolarisContext_t* context,
 }
 
 /******************************************************************************/
+int Polaris_SendECEFPosition(PolarisContext_t* context, double x_m, double y_m,
+                             double z_m) {
+  if (context->socket == P1_INVALID_SOCKET) {
+    fprintf(stderr, "Error: Polaris connection not currently open.\n");
+    return POLARIS_SOCKET_ERROR;
+  }
+
+  PolarisHeader_t* header = Polaris_PopulateHeader(
+      context->buffer, POLARIS_ID_ECEF, sizeof(PolarisECEFMessage_t));
+  PolarisECEFMessage_t* payload = (PolarisECEFMessage_t*)(header + 1);
+  payload->x_cm = htole32((uint32_t)(x_m * 1e2));
+  payload->y_cm = htole32((uint32_t)(y_m * 1e2));
+  payload->z_cm = htole32((uint32_t)(z_m * 1e2));
+  size_t message_size = Polaris_PopulateChecksum(context->buffer);
+
+  if (send(context->socket, context->buffer, message_size, 0) != message_size) {
+    perror("Error sending ECEF position");
+    return POLARIS_SEND_ERROR;
+  }
+  else {
+    return POLARIS_SUCCESS;
+  }
+}
+
+/******************************************************************************/
+int Polaris_SendLLAPosition(PolarisContext_t* context, double latitude_deg,
+                            double longitude_deg, double altitude_m) {
+  if (context->socket == P1_INVALID_SOCKET) {
+    fprintf(stderr, "Error: Polaris connection not currently open.\n");
+    return POLARIS_SOCKET_ERROR;
+  }
+
+  PolarisHeader_t* header = Polaris_PopulateHeader(
+      context->buffer, POLARIS_ID_LLA, sizeof(PolarisLLAMessage_t));
+  PolarisLLAMessage_t* payload = (PolarisLLAMessage_t*)(header + 1);
+  payload->latitude_dege7 = htole32((uint32_t)(latitude_deg * 1e7));
+  payload->longitude_dege7 = htole32((uint32_t)(longitude_deg * 1e7));
+  payload->altitude_mm = htole32((uint32_t)(altitude_m * 1e3));
+  size_t message_size = Polaris_PopulateChecksum(context->buffer);
+
+  if (send(context->socket, context->buffer, message_size, 0) != message_size) {
+    perror("Error sending LLA position");
+    return POLARIS_SEND_ERROR;
+  }
+  else {
+    return POLARIS_SUCCESS;
+  }
+}
+
+/******************************************************************************/
+int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id) {
+  if (context->socket == P1_INVALID_SOCKET) {
+    fprintf(stderr, "Error: Polaris connection not currently open.\n");
+    return POLARIS_SOCKET_ERROR;
+  }
+
+  size_t id_length = strlen(beacon_id);
+  PolarisHeader_t* header =
+      Polaris_PopulateHeader(context->buffer, POLARIS_ID_BEACON, id_length);
+  memmove(header + 1, beacon_id, id_length);
+  size_t message_size = Polaris_PopulateChecksum(context->buffer);
+
+  if (send(context->socket, context->buffer, message_size, 0) != message_size) {
+    perror("Error sending beacon request");
+    return POLARIS_SEND_ERROR;
+  }
+  else {
+    return POLARIS_SUCCESS;
+  }
+}
+
+/******************************************************************************/
 void Polaris_Run(PolarisContext_t* context) {
   while (1) {
     // Read some data.
