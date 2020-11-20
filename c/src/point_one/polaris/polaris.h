@@ -53,9 +53,12 @@ void Polaris_Close(PolarisContext_t* context);
 int Polaris_Authenticate(PolarisContext_t* context, const char* api_key,
                          const char* unique_id);
 
-int Polaris_AuthenticateWith(PolarisContext_t* context, const char* api_key,
-                             const char* unique_id, const char* endpoint_url,
-                             int endpoint_port);
+int Polaris_SetAuthToken(PolarisContext_t* context, const char* auth_token);
+
+int Polaris_Connect(PolarisContext_t* context);
+
+int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
+                      int endpoint_port);
 
 void Polaris_SetRTCMCallback(PolarisContext_t* context,
                              PolarisCallback_t callback);

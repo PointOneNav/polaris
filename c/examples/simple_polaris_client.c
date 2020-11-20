@@ -36,11 +36,18 @@ int main(int argc, const char* argv[]) {
     return 2;
   }
 
-  printf("Opened Polaris context...\n");
-
-  Polaris_SetCallback(&context, HandleData);
+  printf("Opened Polaris context. Authenticating...\n");
 
   if (Polaris_Authenticate(&context, api_key, unique_id) != POLARIS_SUCCESS) {
+    Polaris_Close(&context);
+    return 3;
+  }
+
+  printf("Authenticated. Connecting to Polaris...\n");
+
+  Polaris_SetRTCMCallback(&context, HandleData);
+
+  if (Polaris_Connect(&context) != POLARIS_SUCCESS) {
     Polaris_Close(&context);
     return 3;
   }

@@ -97,14 +97,6 @@ void Polaris_Close(PolarisContext_t* context) {
 /******************************************************************************/
 int Polaris_Authenticate(PolarisContext_t* context, const char* api_key,
                          const char* unique_id) {
-  return Polaris_AuthenticateWith(context, api_key, unique_id,
-                                  POLARIS_ENDPOINT_URL, POLARIS_ENDPOINT_PORT);
-}
-
-/******************************************************************************/
-int Polaris_AuthenticateWith(PolarisContext_t* context, const char* api_key,
-                             const char* unique_id, const char* endpoint_url,
-                             int endpoint_port) {
   // Send an auth request, then wait for the response containing the access
   // token.
   static const char* AUTH_REQUEST_TEMPLATE =
@@ -142,6 +134,8 @@ int Polaris_AuthenticateWith(PolarisContext_t* context, const char* api_key,
       if (sscanf(token_start, "%512[^\"]s", context->auth_token) != 1) {
         fprintf(stderr, "Authentication token not found in response.\n");
         return POLARIS_AUTH_ERROR;
+      } else {
+        return POLARIS_SUCCESS;
       }
     }
   } else if (status_code == 403) {
@@ -151,9 +145,37 @@ int Polaris_AuthenticateWith(PolarisContext_t* context, const char* api_key,
     fprintf(stderr, "Unexpected authentication response (%d).\n", status_code);
     return POLARIS_AUTH_ERROR;
   }
+}
 
-  // If we got this far, we now have an auth token. Connect to the corrections
-  // URL and send an auth message.
+/******************************************************************************/
+int Polaris_SetAuthToken(PolarisContext_t* context, const char* auth_token) {
+  if (context->auth_token == NULL) {
+    fprintf(stderr, "Auth token storage not allocated. Did you call open?\n");
+    return POLARIS_ERROR;
+  } else {
+    strncpy(context->auth_token, auth_token, POLARIS_AUTH_TOKEN_MAX_LENGTH);
+    return POLARIS_SUCCESS;
+  }
+}
+
+/******************************************************************************/
+int Polaris_Connect(PolarisContext_t* context) {
+  return Polaris_ConnectTo(context, POLARIS_ENDPOINT_URL,
+                           POLARIS_ENDPOINT_PORT);
+}
+
+/******************************************************************************/
+int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
+                      int endpoint_port) {
+  if (context->auth_token == NULL) {
+    fprintf(stderr, "Auth token storage not allocated. Did you call open?\n");
+    return POLARIS_ERROR;
+  } else if (context->auth_token[0] == '\0') {
+    fprintf(stderr, "Auth token not specified.\n");
+    return POLARIS_ERROR;
+  }
+
+  // Connect to the corrections endpoint.
   int ret = OpenSocket(context, endpoint_url, endpoint_port);
   if (ret != POLARIS_SUCCESS) {
     fprintf(stderr, "Error connecting to corrections endpoint: tcp://%s:%d.\n",
@@ -161,6 +183,7 @@ int Polaris_AuthenticateWith(PolarisContext_t* context, const char* api_key,
     return ret;
   }
 
+  // Send the auth token.
   size_t token_length = strlen(context->auth_token);
   PolarisHeader_t* header =
       Polaris_PopulateHeader(context->buffer, POLARIS_ID_AUTH, token_length);
