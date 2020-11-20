@@ -16,6 +16,31 @@
 #define MAKE_STR(x) #x
 #define STR(x) MAKE_STR(x)
 
+#if defined(POLARIS_DEBUG) || defined(POLARIS_TRACE)
+# define DebugPrintf(x, ...) P1_printf(x, ##__VA_ARGS__)
+#else
+# define DebugPrintf(x, ...) do {} while(0)
+#endif
+
+#if defined(POLARIS_TRACE)
+void PrintData(const uint8_t* buffer, size_t length) {
+  for (size_t i = 0; i < length; ++i) {
+    if (i % 16 != 0) {
+      P1_printf(" ");
+    }
+
+    P1_printf("%02x", buffer[i]);
+
+    if (i % 16 == 15) {
+      P1_printf("\n");
+    }
+  }
+  P1_printf("\n");
+}
+#else
+# define PrintData(buffer, length) do {} while(0)
+#endif
+
 static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
                       int endpoint_port);
 
@@ -69,6 +94,8 @@ int Polaris_Authenticate(PolarisContext_t* context, const char* api_key,
     return POLARIS_NOT_ENOUGH_SPACE;
   }
 
+  DebugPrintf("Sending auth request. [api_key=%s, unique_id=%s]\n", api_key,
+              unique_id);
   int status_code =
       SendPOSTRequest(context, POLARIS_API_URL, 80, "/api/v1/auth/token",
                       context->recv_buffer, (size_t)content_size);
@@ -91,6 +118,7 @@ int Polaris_Authenticate(PolarisContext_t* context, const char* api_key,
         P1_fprintf(stderr, "Authentication token not found in response.\n");
         return POLARIS_AUTH_ERROR;
       } else {
+        DebugPrintf("Received access token: %s\n", context->auth_token);
         return POLARIS_SUCCESS;
       }
     }
@@ -112,6 +140,7 @@ int Polaris_SetAuthToken(PolarisContext_t* context, const char* auth_token) {
     return POLARIS_NOT_ENOUGH_SPACE;
   } else {
     memcpy(context->auth_token, auth_token, length + 1);
+    DebugPrintf("Using user-specified access token: %s\n", context->auth_token);
     return POLARIS_SUCCESS;
   }
 }
@@ -150,6 +179,7 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
   memmove(header + 1, context->auth_token, token_length);
   size_t message_size = Polaris_PopulateChecksum(context->recv_buffer);
 
+  DebugPrintf("Sending access token message. [size=%zu B]\n", message_size);
   if (send(context->socket, context->recv_buffer, message_size, 0) !=
       message_size) {
     P1_perror("Error sending authentication token");
@@ -164,6 +194,7 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
 /******************************************************************************/
 void Polaris_Disconnect(PolarisContext_t* context) {
   if (context->socket != P1_INVALID_SOCKET) {
+    DebugPrintf("Closing Polaris connection\n");
     close(context->socket);
     context->socket = P1_INVALID_SOCKET;
   }
@@ -191,6 +222,11 @@ int Polaris_SendECEFPosition(PolarisContext_t* context, double x_m, double y_m,
   payload->z_cm = htole32((uint32_t)(z_m * 1e2));
   size_t message_size = Polaris_PopulateChecksum(context->send_buffer);
 
+  DebugPrintf(
+      "Sending ECEF position. [size=%zu B, position=[%.2f, %.2f, %.2f]]\n",
+      message_size, x_m, y_m, z_m);
+  PrintData(context->send_buffer, message_size);
+
   if (send(context->socket, context->send_buffer, message_size, 0) !=
       message_size) {
     P1_perror("Error sending ECEF position");
@@ -216,6 +252,11 @@ int Polaris_SendLLAPosition(PolarisContext_t* context, double latitude_deg,
   payload->altitude_mm = htole32((uint32_t)(altitude_m * 1e3));
   size_t message_size = Polaris_PopulateChecksum(context->send_buffer);
 
+  DebugPrintf(
+      "Sending LLA position. [size=%zu B, position=[%.6f, %.6f, %.2f]]\n",
+      message_size, latitude_deg, longitude_deg, altitude_m);
+  PrintData(context->send_buffer, message_size);
+
   if (send(context->socket, context->send_buffer, message_size, 0) !=
       message_size) {
     P1_perror("Error sending LLA position");
@@ -238,6 +279,10 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id) {
   memmove(header + 1, beacon_id, id_length);
   size_t message_size = Polaris_PopulateChecksum(context->send_buffer);
 
+  DebugPrintf("Sending beacon request. [size=%zu B, beacon='%s']\n",
+              message_size, beacon_id);
+  PrintData(context->send_buffer, message_size);
+
   if (send(context->socket, context->send_buffer, message_size, 0) !=
       message_size) {
     P1_perror("Error sending beacon request");
@@ -254,17 +299,19 @@ void Polaris_Run(PolarisContext_t* context) {
     return;
   }
 
-  int data_received = 0;
+  DebugPrintf("Listening for data.\n");
+  size_t total_bytes = 0;
   while (1) {
     // Read some data.
     P1_RecvSize_t bytes_read = recv(context->socket, context->recv_buffer,
                                     POLARIS_RECV_BUFFER_SIZE, 0);
     if (bytes_read < 0) {
+      DebugPrintf("Connection terminated. [ret=%d]\n", (int)bytes_read);
       break;
     } else if (bytes_read == 0) {
       // If recv() times out before we've gotten anything, the socket was
       // probably closed on the other end due to an auth failure.
-      if (!data_received) {
+      if (total_bytes == 0) {
         break;
       }
       // Otherwise, there may just not be new data available (e.g., user hasn't
@@ -274,7 +321,7 @@ void Polaris_Run(PolarisContext_t* context) {
       }
     }
 
-    data_received = 1;
+    total_bytes += bytes_read;
 
     // We don't interpret the incoming RTCM data, so there's no need to buffer
     // it up to a complete RTCM frame. We'll just forward what we got along.
@@ -286,11 +333,13 @@ void Polaris_Run(PolarisContext_t* context) {
   // If no data was received either A) the auth token was rejected and we did
   // not get a fail response, B) we lost the network connection, or C) the user
   // never sent a position or beacn request.
-  if (!data_received) {
+  if (total_bytes == 0) {
     P1_fprintf(
         stderr,
         "Warning: Polaris connection closed and no data received. Is your "
         "authentication token valid?\n");
+  } else {
+    DebugPrintf("Socket closed. [total_bytes_read=%zu]\n", total_bytes);
   }
 }
 
@@ -327,6 +376,7 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
   }
 
   // Connect to the API server.
+  DebugPrintf("Connecting to 'tcp://%s:%d'.\n", endpoint_url, endpoint_port);
   if (connect(context->socket, (P1_SocketAddr_t*)&address, sizeof(address)) <
       0) {
     P1_perror("Error connecting to endpoint");
@@ -411,6 +461,7 @@ static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
     return ret;
   }
 
+  DebugPrintf("Sending POST request. [size=%zu B]\n", message_size);
   if (send(context->socket, context->recv_buffer, message_size, 0) !=
       message_size) {
     P1_perror("Error sending POST request");
@@ -426,12 +477,12 @@ static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
 /******************************************************************************/
 static int GetHTTPResponse(PolarisContext_t* context) {
   // Read until the connection is closed.
-  int total_bytes = 0;
+  size_t total_bytes = 0;
   int bytes_read;
   while ((bytes_read = recv(context->socket, context->recv_buffer + total_bytes,
                             POLARIS_RECV_BUFFER_SIZE - total_bytes - 1, 0)) >
          0) {
-    total_bytes += bytes_read;
+    total_bytes += (size_t)bytes_read;
     if (total_bytes == POLARIS_RECV_BUFFER_SIZE - 1) {
       break;
     }
@@ -439,6 +490,8 @@ static int GetHTTPResponse(PolarisContext_t* context) {
 
   close(context->socket);
   context->socket = P1_INVALID_SOCKET;
+
+  DebugPrintf("Received HTTP request. [size=%zu B]\n", total_bytes);
 
   // Append a null terminator to the response.
   context->recv_buffer[total_bytes++] = '\0';
@@ -456,10 +509,12 @@ static int GetHTTPResponse(PolarisContext_t* context) {
   if (content_start != NULL) {
     content_start += 4;
     size_t content_length =
-        ((size_t)total_bytes) - (content_start - (char*)context->recv_buffer);
+        total_bytes - (content_start - (char*)context->recv_buffer);
     memmove(context->recv_buffer, content_start, content_length);
+    DebugPrintf("Response content:\n%s\n", context->recv_buffer);
   } else {
     // No content in response.
+    DebugPrintf("No content in response.\n");
     context->recv_buffer[0] = '\0';
   }
 

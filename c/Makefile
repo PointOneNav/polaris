@@ -7,6 +7,8 @@ OBJECTS=$(patsubst %.c,%.o,$(SOURCES))
 
 APPLICATIONS=examples/simple_polaris_client
 
+CFLAGS?=-Wall
+
 .PHONY: all
 all: $(APPLICATIONS)
 
@@ -16,7 +18,7 @@ clean:
 	rm -f $(APPLICATIONS)
 
 examples/%: examples/%.c $(OBJECTS)
-	gcc -o $@ -I$(SRC_DIR) -Wall $^
+	gcc -o $@ -I$(SRC_DIR) $(CFLAGS) $^
 
 %.o: %.c
-	gcc -o $@ -I$(SRC_DIR) -Wall -c $^
+	gcc -o $@ -I$(SRC_DIR) $(CFLAGS) -c $^
