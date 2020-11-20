@@ -5,27 +5,27 @@
  ******************************************************************************/
 
 #include <signal.h>
-#include <stdio.h>
 
 #include "point_one/polaris/polaris.h"
+#include "point_one/polaris/portability.h"
 
 static PolarisContext_t context;
 
 void HandleData(const uint8_t* buffer, size_t size_bytes) {
-  printf("Recevied %zu bytes.\n", size_bytes);
+  P1_printf("Recevied %zu bytes.\n", size_bytes);
 }
 
 void HandleSignal(int sig) {
   signal(sig, SIG_DFL);
 
-  printf("Caught signal %s (%d). Closing Polaris connection.\n",
-         sys_siglist[sig], sig);
+  P1_printf("Caught signal %s (%d). Closing Polaris connection.\n",
+            sys_siglist[sig], sig);
   Polaris_Disconnect(&context);
 }
 
 int main(int argc, const char* argv[]) {
   if (argc != 3) {
-    fprintf(stderr, "Usage: %s API_KEY UNIQUE_ID\n", argv[0]);
+    P1_fprintf(stderr, "Usage: %s API_KEY UNIQUE_ID\n", argv[0]);
     return 1;
   }
 
@@ -36,13 +36,13 @@ int main(int argc, const char* argv[]) {
     return 2;
   }
 
-  printf("Opened Polaris context. Authenticating...\n");
+  P1_printf("Opened Polaris context. Authenticating...\n");
 
   if (Polaris_Authenticate(&context, api_key, unique_id) != POLARIS_SUCCESS) {
     return 3;
   }
 
-  printf("Authenticated. Connecting to Polaris...\n");
+  P1_printf("Authenticated. Connecting to Polaris...\n");
 
   Polaris_SetRTCMCallback(&context, HandleData);
 
@@ -50,7 +50,7 @@ int main(int argc, const char* argv[]) {
     return 3;
   }
 
-  printf("Connected to Polaris...\n");
+  P1_printf("Connected to Polaris...\n");
 
   if (Polaris_SendECEFPosition(&context, -2707071.0, -4260565.0, 3885644.0) !=
       POLARIS_SUCCESS) {
@@ -58,14 +58,14 @@ int main(int argc, const char* argv[]) {
     return 4;
   }
 
-  printf("Sent position. Listening for data...\n");
+  P1_printf("Sent position. Listening for data...\n");
 
   signal(SIGINT, HandleSignal);
   signal(SIGTERM, HandleSignal);
 
   Polaris_Run(&context);
 
-  printf("Finished.\n");
+  P1_printf("Finished.\n");
 
   return 0;
 }
