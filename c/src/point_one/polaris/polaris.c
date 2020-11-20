@@ -181,9 +181,9 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
 
   DebugPrintf("Sending access token message. [size=%u B]\n",
               (unsigned)message_size);
-  if (send(context->socket, context->recv_buffer, message_size, 0) !=
-      message_size) {
-    P1_perror("Error sending authentication token");
+  ret = send(context->socket, context->recv_buffer, message_size, 0);
+  if (ret != message_size) {
+    P1_perror("Error sending authentication token", ret);
     close(context->socket);
     context->socket = P1_INVALID_SOCKET;
     return POLARIS_SEND_ERROR;
@@ -235,9 +235,9 @@ int Polaris_SendECEFPosition(PolarisContext_t* context, double x_m, double y_m,
 #endif
   PrintData(context->send_buffer, message_size);
 
-  if (send(context->socket, context->send_buffer, message_size, 0) !=
-      message_size) {
-    P1_perror("Error sending ECEF position");
+  int ret = send(context->socket, context->send_buffer, message_size, 0);
+  if (ret != message_size) {
+    P1_perror("Error sending ECEF position", ret);
     return POLARIS_SEND_ERROR;
   } else {
     return POLARIS_SUCCESS;
@@ -273,9 +273,9 @@ int Polaris_SendLLAPosition(PolarisContext_t* context, double latitude_deg,
 #endif
   PrintData(context->send_buffer, message_size);
 
-  if (send(context->socket, context->send_buffer, message_size, 0) !=
-      message_size) {
-    P1_perror("Error sending LLA position");
+  int ret = send(context->socket, context->send_buffer, message_size, 0);
+  if (ret != message_size) {
+    P1_perror("Error sending LLA position", ret);
     return POLARIS_SEND_ERROR;
   } else {
     return POLARIS_SUCCESS;
@@ -299,9 +299,9 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id) {
               (unsigned)message_size, beacon_id);
   PrintData(context->send_buffer, message_size);
 
-  if (send(context->socket, context->send_buffer, message_size, 0) !=
-      message_size) {
-    P1_perror("Error sending beacon request");
+  int ret = send(context->socket, context->send_buffer, message_size, 0);
+  if (ret != message_size) {
+    P1_perror("Error sending beacon request", ret);
     return POLARIS_SEND_ERROR;
   } else {
     return POLARIS_SUCCESS;
@@ -394,9 +394,10 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
 
   // Connect to the API server.
   DebugPrintf("Connecting to 'tcp://%s:%d'.\n", endpoint_url, endpoint_port);
-  if (connect(context->socket, (P1_SocketAddr_t*)&address, sizeof(address)) <
-      0) {
-    P1_perror("Error connecting to endpoint");
+  int ret =
+      connect(context->socket, (P1_SocketAddr_t*)&address, sizeof(address));
+  if (ret < 0) {
+    P1_perror("Error connecting to endpoint", ret);
     close(context->socket);
     context->socket = P1_INVALID_SOCKET;
     return POLARIS_SOCKET_ERROR;
@@ -479,9 +480,9 @@ static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
   }
 
   DebugPrintf("Sending POST request. [size=%u B]\n", (unsigned)message_size);
-  if (send(context->socket, context->recv_buffer, message_size, 0) !=
-      message_size) {
-    P1_perror("Error sending POST request");
+  ret = send(context->socket, context->recv_buffer, message_size, 0);
+  if (ret != message_size) {
+    P1_perror("Error sending POST request", ret);
     close(context->socket);
     context->socket = P1_INVALID_SOCKET;
     return POLARIS_SEND_ERROR;
