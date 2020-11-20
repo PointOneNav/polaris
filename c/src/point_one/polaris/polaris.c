@@ -262,7 +262,16 @@ void Polaris_Run(PolarisContext_t* context) {
     if (bytes_read < 0) {
       break;
     } else if (bytes_read == 0) {
-      continue;
+      // If recv() times out before we've gotten anything, the socket was
+      // probably closed on the other end due to an auth failure.
+      if (!data_received) {
+        break;
+      }
+      // Otherwise, there may just not be new data available (e.g., user hasn't
+      // sent a position yet).
+      else {
+        continue;
+      }
     }
 
     data_received = 1;
