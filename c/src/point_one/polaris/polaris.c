@@ -397,7 +397,7 @@ static int GetHTTPResponse(PolarisContext_t* context) {
   int total_bytes = 0;
   int bytes_read;
   while ((bytes_read = recv(context->socket, context->buffer + total_bytes,
-                            context->buffer_size - total_bytes - 1, 0)) >= 0) {
+                            context->buffer_size - total_bytes - 1, 0)) > 0) {
     total_bytes += bytes_read;
     if (total_bytes == context->buffer_size - 1) {
       break;
