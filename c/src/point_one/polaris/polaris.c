@@ -202,8 +202,7 @@ int Polaris_SendECEFPosition(PolarisContext_t* context, double x_m, double y_m,
   if (send(context->socket, context->buffer, message_size, 0) != message_size) {
     perror("Error sending ECEF position");
     return POLARIS_SEND_ERROR;
-  }
-  else {
+  } else {
     return POLARIS_SUCCESS;
   }
 }
@@ -227,8 +226,7 @@ int Polaris_SendLLAPosition(PolarisContext_t* context, double latitude_deg,
   if (send(context->socket, context->buffer, message_size, 0) != message_size) {
     perror("Error sending LLA position");
     return POLARIS_SEND_ERROR;
-  }
-  else {
+  } else {
     return POLARIS_SUCCESS;
   }
 }
@@ -249,8 +247,7 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id) {
   if (send(context->socket, context->buffer, message_size, 0) != message_size) {
     perror("Error sending beacon request");
     return POLARIS_SEND_ERROR;
-  }
-  else {
+  } else {
     return POLARIS_SUCCESS;
   }
 }
