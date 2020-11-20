@@ -32,14 +32,21 @@ int main(int argc, const char* argv[]) {
   const char* api_key = argv[1];
   const char* unique_id = argv[2];
 
-  if (Polaris_Open(&context) != POLARIS_SUCCESS) {
+  if (Polaris_Init(&context) != POLARIS_SUCCESS) {
     return 2;
   }
 
   printf("Opened Polaris context. Authenticating...\n");
 
   if (Polaris_Authenticate(&context, api_key, unique_id) != POLARIS_SUCCESS) {
-    Polaris_Close(&context);
+    Polaris_Destroy(&context);
+    return 3;
+  }
+
+  printf("Authenticated. Connecting to Polaris...\n");
+
+  if (Polaris_Connect(&context, api_key, unique_id) != POLARIS_SUCCESS) {
+    Polaris_Destroy(&context);
     return 3;
   }
 
@@ -56,7 +63,7 @@ int main(int argc, const char* argv[]) {
 
   if (Polaris_SendECEFPosition(&context, -2707071.0, -4260565.0, 3885644.0) !=
       POLARIS_SUCCESS) {
-    Polaris_Close(&context);
+    Polaris_Destroy(&context);
     return 4;
   }
 
@@ -66,6 +73,8 @@ int main(int argc, const char* argv[]) {
   signal(SIGTERM, HandleSignal);
 
   Polaris_Run(&context);
+
+  Polaris_Destroy(&context);
 
   printf("Finished.\n");
 

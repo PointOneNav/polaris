@@ -43,12 +43,12 @@ typedef struct {
   PolarisCallback_t rtcm_callback;
 } PolarisContext_t;
 
-int Polaris_Open(PolarisContext_t* context);
+int Polaris_Init(PolarisContext_t* context);
 
-int Polaris_OpenWithBuffer(PolarisContext_t* context, uint8_t* buffer,
+int Polaris_InitWithBuffer(PolarisContext_t* context, uint8_t* buffer,
                            size_t buffer_size);
 
-void Polaris_Close(PolarisContext_t* context);
+void Polaris_Destroy(PolarisContext_t* context);
 
 int Polaris_Authenticate(PolarisContext_t* context, const char* api_key,
                          const char* unique_id);
@@ -59,6 +59,8 @@ int Polaris_Connect(PolarisContext_t* context);
 
 int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
                       int endpoint_port);
+
+void Polaris_Disconnect(PolarisContext_t* context);
 
 void Polaris_SetRTCMCallback(PolarisContext_t* context,
                              PolarisCallback_t callback);

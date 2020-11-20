@@ -22,7 +22,7 @@ static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
 static int GetHTTPResponse(PolarisContext_t* context);
 
 /******************************************************************************/
-int Polaris_Open(PolarisContext_t* context) {
+int Polaris_Init(PolarisContext_t* context) {
   uint8_t* buffer = malloc(POLARIS_DEFAULT_BUFFER_SIZE);
   if (buffer == NULL) {
     fprintf(stderr, "Error: Failed to allocate data buffer.\n");
@@ -30,7 +30,7 @@ int Polaris_Open(PolarisContext_t* context) {
   }
 
   int ret =
-      Polaris_OpenWithBuffer(context, buffer, POLARIS_DEFAULT_BUFFER_SIZE);
+      Polaris_InitWithBuffer(context, buffer, POLARIS_DEFAULT_BUFFER_SIZE);
   context->buffer_managed = 1;
 
   if (ret != POLARIS_SUCCESS) {
@@ -47,7 +47,7 @@ int Polaris_Open(PolarisContext_t* context) {
 }
 
 /******************************************************************************/
-int Polaris_OpenWithBuffer(PolarisContext_t* context, uint8_t* buffer,
+int Polaris_InitWithBuffer(PolarisContext_t* context, uint8_t* buffer,
                            size_t buffer_size) {
   if (buffer_size < POLARIS_MIN_BUFFER_SIZE) {
     fprintf(stderr,
@@ -77,11 +77,8 @@ int Polaris_OpenWithBuffer(PolarisContext_t* context, uint8_t* buffer,
 }
 
 /******************************************************************************/
-void Polaris_Close(PolarisContext_t* context) {
-  if (context->socket != P1_INVALID_SOCKET) {
-    close(context->socket);
-    context->socket = P1_INVALID_SOCKET;
-  }
+void Polaris_Destroy(PolarisContext_t* context) {
+  Polaris_Disconnect(context);
 
   if (context->auth_token != NULL) {
     free(context->auth_token);
@@ -198,6 +195,15 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
   }
 
   return POLARIS_SUCCESS;
+}
+
+
+/******************************************************************************/
+void Polaris_Disconnect(PolarisContext_t* context) {
+  if (context->socket != P1_INVALID_SOCKET) {
+    close(context->socket);
+    context->socket = P1_INVALID_SOCKET;
+  }
 }
 
 /******************************************************************************/
