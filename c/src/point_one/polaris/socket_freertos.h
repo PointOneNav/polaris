@@ -59,3 +59,16 @@ static inline int P1_SetAddress(const char* hostname, int port,
 #define recv FreeRTOS_recv
 #define setsockopt FreeRTOS_setsockopt
 #define htons FreeRTOS_htons
+
+// Note: FreeRTOS does not define htole*() macros.
+#if ipconfigBYTE_ORDER == pdFREERTOS_LITTLE_ENDIAN
+# define htole16(x) (x)
+# define htole32(x) (x)
+#else
+// Taken from FreeRTOS_IP.h.
+#define htole16(x) ((uint16_t)(((x) << 8U) | ((x) >> 8U)))
+#define htole32(x)                                                          \
+  ((uint32_t)(                                                              \
+      ((((uint32_t)(x))) << 24) | ((((uint32_t)(x)) & 0x0000ff00UL) << 8) | \
+      ((((uint32_t)(x)) & 0x00ff0000UL) >> 8) | ((((uint32_t)(x))) >> 24)))
+#endif
