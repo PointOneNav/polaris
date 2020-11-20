@@ -60,10 +60,6 @@ int main(int argc, const char* argv[]) {
 
   Polaris_Run(&context);
 
-  printf("Cleaning up...\n");
-
-  Polaris_Close(&context);
-
   printf("Finished.\n");
 
   return 0;
