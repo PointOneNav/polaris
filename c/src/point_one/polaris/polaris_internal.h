@@ -52,8 +52,10 @@ typedef uint16_t PolarisChecksum_t;
 #define POLARIS_MAX_HTTP_MESSAGE_SIZE \
   (POLARIS_MAX_HTTP_HEADER_SIZE + POLARIS_MAX_TOKEN_SIZE)
 
-#define POLARIS_MAX_MESSAGE_SIZE \
-  (sizeof(PolarisHeader_t) + 32 + sizeof(PolarisChecksum_t))
+#define POLARIS_MAX_PAYLOAD_SIZE 42
+#define POLARIS_MAX_MESSAGE_SIZE                        \
+  (sizeof(PolarisHeader_t) + POLARIS_MAX_PAYLOAD_SIZE + \
+   sizeof(PolarisChecksum_t))
 
 #ifdef __cplusplus
 extern "C" {
