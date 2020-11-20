@@ -13,7 +13,7 @@
 #define POLARIS_ENDPOINT_URL "polaris.pointonenav.com"
 #define POLARIS_ENDPOINT_PORT 8088
 
-#define POLARIS_AUTH_TOKEN_MAX_LENGTH 32
+#define POLARIS_AUTH_TOKEN_MAX_LENGTH 512
 
 // Default buffer size can store up to one complete, maximum sized RTCM message
 // (6 bytes header/CRC + 1023 bytes payload). We don't align to RTCM framing,
@@ -34,7 +34,7 @@ typedef void (*PolarisCallback_t)(const uint8_t* buffer, size_t size_bytes);
 typedef struct {
   P1_Socket_t socket;
 
-  char auth_token[POLARIS_AUTH_TOKEN_MAX_LENGTH + 1];
+  char* auth_token;
 
   uint8_t* buffer;
   size_t buffer_size;

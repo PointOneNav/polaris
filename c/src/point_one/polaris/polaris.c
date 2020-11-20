@@ -57,9 +57,15 @@ int Polaris_OpenWithBuffer(PolarisContext_t* context, uint8_t* buffer,
   }
 
   context->socket = P1_INVALID_SOCKET;
+  context->rtcm_callback = NULL;
+
+  context->auth_token = malloc(POLARIS_AUTH_TOKEN_MAX_LENGTH);
+  if (context->auth_token == NULL) {
+    fprintf(stderr, "Error: Failed to allocate auth token.\n");
+    return POLARIS_NOT_ENOUGH_SPACE;
+  }
 
   context->auth_token[0] = '\0';
-  context->rtcm_callback = NULL;
 
   context->buffer = buffer;
   context->buffer_size = buffer_size;
@@ -75,6 +81,11 @@ void Polaris_Close(PolarisContext_t* context) {
   if (context->socket != P1_INVALID_SOCKET) {
     close(context->socket);
     context->socket = P1_INVALID_SOCKET;
+  }
+
+  if (context->auth_token != NULL) {
+    free(context->auth_token);
+    context->auth_token = NULL;
   }
 
   if (context->buffer_managed && context->buffer != NULL) {
