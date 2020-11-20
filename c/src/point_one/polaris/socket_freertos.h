@@ -25,7 +25,7 @@ typedef BaseType_t P1_RecvSize_t;
 
 #define SOCK_STREAM FREERTOS_SOCK_STREAM
 
-#define IPPROTO_TCP FREERTOS_IPPROTO_UDP
+#define IPPROTO_TCP FREERTOS_IPPROTO_TCP
 
 #define SO_RCVTIMEO FREERTOS_SO_RCVTIMEO
 #define SO_SNDTIMEO FREERTOS_SO_SNDTIMEO
@@ -39,13 +39,13 @@ static inline void P1_SetTime(int time_ms, P1_TimeValue_t* result) {
 static inline int P1_SetAddress(const char* hostname, int port,
                                 P1_SocketAddrV4_t* result) {
   uint32_t ip = FreeRTOS_gethostbyname(hostname);
-  if (ip == NULL) {
+  if (ip == 0) {
     return -1;
   }
   else {
     result->sin_family = AF_INET;
     result->sin_port = FreeRTOS_htons(port);
-    result->sin_addr.addr = ip;
+    result->sin_addr = ip;
     return 0;
   }
 }
