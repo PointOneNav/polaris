@@ -12,7 +12,7 @@
 static PolarisContext_t context;
 
 void HandleData(const uint8_t* buffer, size_t size_bytes) {
-  P1_printf("Recevied %zu bytes.\n", size_bytes);
+  P1_printf("Recevied %u bytes.\n", (unsigned)size_bytes);
 }
 
 void HandleSignal(int sig) {

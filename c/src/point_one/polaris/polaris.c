@@ -179,7 +179,8 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
   memmove(header + 1, context->auth_token, token_length);
   size_t message_size = Polaris_PopulateChecksum(context->recv_buffer);
 
-  DebugPrintf("Sending access token message. [size=%zu B]\n", message_size);
+  DebugPrintf("Sending access token message. [size=%u B]\n",
+              (unsigned)message_size);
   if (send(context->socket, context->recv_buffer, message_size, 0) !=
       message_size) {
     P1_perror("Error sending authentication token");
@@ -223,8 +224,8 @@ int Polaris_SendECEFPosition(PolarisContext_t* context, double x_m, double y_m,
   size_t message_size = Polaris_PopulateChecksum(context->send_buffer);
 
   DebugPrintf(
-      "Sending ECEF position. [size=%zu B, position=[%.2f, %.2f, %.2f]]\n",
-      message_size, x_m, y_m, z_m);
+      "Sending ECEF position. [size=%u B, position=[%.2f, %.2f, %.2f]]\n",
+      (unsigned)message_size, x_m, y_m, z_m);
   PrintData(context->send_buffer, message_size);
 
   if (send(context->socket, context->send_buffer, message_size, 0) !=
@@ -253,8 +254,8 @@ int Polaris_SendLLAPosition(PolarisContext_t* context, double latitude_deg,
   size_t message_size = Polaris_PopulateChecksum(context->send_buffer);
 
   DebugPrintf(
-      "Sending LLA position. [size=%zu B, position=[%.6f, %.6f, %.2f]]\n",
-      message_size, latitude_deg, longitude_deg, altitude_m);
+      "Sending LLA position. [size=%u B, position=[%.6f, %.6f, %.2f]]\n",
+      (unsigned)message_size, latitude_deg, longitude_deg, altitude_m);
   PrintData(context->send_buffer, message_size);
 
   if (send(context->socket, context->send_buffer, message_size, 0) !=
@@ -279,8 +280,8 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id) {
   memmove(header + 1, beacon_id, id_length);
   size_t message_size = Polaris_PopulateChecksum(context->send_buffer);
 
-  DebugPrintf("Sending beacon request. [size=%zu B, beacon='%s']\n",
-              message_size, beacon_id);
+  DebugPrintf("Sending beacon request. [size=%u B, beacon='%s']\n",
+              (unsigned)message_size, beacon_id);
   PrintData(context->send_buffer, message_size);
 
   if (send(context->socket, context->send_buffer, message_size, 0) !=
@@ -339,7 +340,8 @@ void Polaris_Run(PolarisContext_t* context) {
         "Warning: Polaris connection closed and no data received. Is your "
         "authentication token valid?\n");
   } else {
-    DebugPrintf("Socket closed. [total_bytes_read=%zu]\n", total_bytes);
+    DebugPrintf("Socket closed. [total_bytes_read=%u]\n",
+                (unsigned)total_bytes);
   }
 }
 
@@ -461,7 +463,7 @@ static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
     return ret;
   }
 
-  DebugPrintf("Sending POST request. [size=%zu B]\n", message_size);
+  DebugPrintf("Sending POST request. [size=%u B]\n", (unsigned)message_size);
   if (send(context->socket, context->recv_buffer, message_size, 0) !=
       message_size) {
     P1_perror("Error sending POST request");
@@ -491,7 +493,7 @@ static int GetHTTPResponse(PolarisContext_t* context) {
   close(context->socket);
   context->socket = P1_INVALID_SOCKET;
 
-  DebugPrintf("Received HTTP request. [size=%zu B]\n", total_bytes);
+  DebugPrintf("Received HTTP request. [size=%u B]\n", (unsigned)total_bytes);
 
   // Append a null terminator to the response.
   context->recv_buffer[total_bytes++] = '\0';
