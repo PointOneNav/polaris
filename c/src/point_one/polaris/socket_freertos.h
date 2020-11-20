@@ -10,7 +10,8 @@
 
 #pragma once
 
-#include <FreeRTOS_sockets.h>
+#include "FreeRTOS_IP.h"
+#include "FreeRTOS_sockets.h"
 
 typedef Socket_t P1_Socket_t;
 #define P1_INVALID_SOCKET FREERTOS_INVALID_SOCKET
