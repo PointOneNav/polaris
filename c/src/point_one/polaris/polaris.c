@@ -417,12 +417,15 @@ static int GetHTTPResponse(PolarisContext_t* context) {
     return POLARIS_SEND_ERROR;
   }
 
-  // Find the content length, then move the response content to the front of the
+  // Find the content, then move the response content to the front of the
   // buffer. We don't care about the HTTP headers.
   int content_length;
-  if (sscanf(context->buffer, "Content-Length: %d", &content_length) == 1) {
-    memmove(context->buffer, context->buffer - (content_length + 1),
-            content_length + 1);
+  char* content_start = strstr(context->buffer, "\r\n\r\n");
+  if (content_start != NULL) {
+    content_start += 4;
+    size_t content_length =
+        ((size_t)total_bytes) - (content_start - (char*)context->buffer);
+    memmove(context->buffer, content_start, content_length);
   } else {
     // No content in response.
     context->buffer[0] = '\0';
