@@ -34,15 +34,15 @@ typedef struct {
 } PolarisHeader_t;
 
 typedef struct {
-  uint32_t x_cm;
-  uint32_t y_cm;
-  uint32_t z_cm;
+  int32_t x_cm;
+  int32_t y_cm;
+  int32_t z_cm;
 } PolarisECEFMessage_t;
 
 typedef struct {
-  uint32_t latitude_dege7;
-  uint32_t longitude_dege7;
-  uint32_t altitude_mm;
+  int32_t latitude_dege7;
+  int32_t longitude_dege7;
+  int32_t altitude_mm;
 } PolarisLLAMessage_t;
 #pragma pack(pop)
 

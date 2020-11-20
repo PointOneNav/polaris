@@ -217,9 +217,9 @@ int Polaris_SendECEFPosition(PolarisContext_t* context, double x_m, double y_m,
   PolarisHeader_t* header = Polaris_PopulateHeader(
       context->send_buffer, POLARIS_ID_ECEF, sizeof(PolarisECEFMessage_t));
   PolarisECEFMessage_t* payload = (PolarisECEFMessage_t*)(header + 1);
-  payload->x_cm = htole32((uint32_t)(x_m * 1e2));
-  payload->y_cm = htole32((uint32_t)(y_m * 1e2));
-  payload->z_cm = htole32((uint32_t)(z_m * 1e2));
+  payload->x_cm = htole32((int32_t)(x_m * 1e2));
+  payload->y_cm = htole32((int32_t)(y_m * 1e2));
+  payload->z_cm = htole32((int32_t)(z_m * 1e2));
   size_t message_size = Polaris_PopulateChecksum(context->send_buffer);
 
   DebugPrintf(
@@ -247,9 +247,9 @@ int Polaris_SendLLAPosition(PolarisContext_t* context, double latitude_deg,
   PolarisHeader_t* header = Polaris_PopulateHeader(
       context->send_buffer, POLARIS_ID_LLA, sizeof(PolarisLLAMessage_t));
   PolarisLLAMessage_t* payload = (PolarisLLAMessage_t*)(header + 1);
-  payload->latitude_dege7 = htole32((uint32_t)(latitude_deg * 1e7));
-  payload->longitude_dege7 = htole32((uint32_t)(longitude_deg * 1e7));
-  payload->altitude_mm = htole32((uint32_t)(altitude_m * 1e3));
+  payload->latitude_dege7 = htole32((int32_t)(latitude_deg * 1e7));
+  payload->longitude_dege7 = htole32((int32_t)(longitude_deg * 1e7));
+  payload->altitude_mm = htole32((int32_t)(altitude_m * 1e3));
   size_t message_size = Polaris_PopulateChecksum(context->send_buffer);
 
   DebugPrintf(
