@@ -32,24 +32,6 @@ typedef BaseType_t P1_RecvSize_t;
 
 typedef TickType_t P1_TimeValue_t;
 
-static inline void P1_SetTime(int time_ms, P1_TimeValue_t* result) {
-  *result = pdMS_TO_TICKS(time_ms);
-}
-
-static inline int P1_SetAddress(const char* hostname, int port,
-                                P1_SocketAddrV4_t* result) {
-  uint32_t ip = FreeRTOS_gethostbyname(hostname);
-  if (ip == 0) {
-    return -1;
-  }
-  else {
-    result->sin_family = AF_INET;
-    result->sin_port = FreeRTOS_htons(port);
-    result->sin_addr = ip;
-    return 0;
-  }
-}
-
 // Aliases mapping FreeRTOS function names to Berkeley names. The APIs are the
 // same as the Berkeley definitions for all of these functions.
 #define socket FreeRTOS_socket
@@ -75,4 +57,30 @@ static inline int P1_SetAddress(const char* hostname, int port,
       ((((uint32_t)(x))) << 24) | ((((uint32_t)(x)) & 0x0000ff00UL) << 8) | \
       ((((uint32_t)(x)) & 0x00ff0000UL) >> 8) | ((((uint32_t)(x))) >> 24)))
 # define le32toh(x) htole32(x)
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+static inline void P1_SetTime(int time_ms, P1_TimeValue_t* result) {
+  *result = pdMS_TO_TICKS(time_ms);
+}
+
+static inline int P1_SetAddress(const char* hostname, int port,
+                                P1_SocketAddrV4_t* result) {
+  uint32_t ip = FreeRTOS_gethostbyname(hostname);
+  if (ip == 0) {
+    return -1;
+  }
+  else {
+    result->sin_family = AF_INET;
+    result->sin_port = FreeRTOS_htons(port);
+    result->sin_addr = ip;
+    return 0;
+  }
+}
+
+#ifdef __cplusplus
+} // extern "C"
 #endif

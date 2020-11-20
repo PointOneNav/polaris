@@ -70,6 +70,10 @@ typedef struct {
   PolarisCallback_t rtcm_callback;
 } PolarisContext_t;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * @brief Initialize a Polaris context.
  *
@@ -210,3 +214,7 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id);
  * @param context The Polaris context to be used.
  */
 void Polaris_Run(PolarisContext_t* context);
+
+#ifdef __cplusplus
+} // extern "C"
+#endif

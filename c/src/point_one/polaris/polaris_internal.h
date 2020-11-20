@@ -55,9 +55,17 @@ typedef uint16_t PolarisChecksum_t;
 #define POLARIS_MAX_MESSAGE_SIZE \
   (sizeof(PolarisHeader_t) + 32 + sizeof(PolarisChecksum_t))
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 PolarisHeader_t* Polaris_PopulateHeader(void* buffer, uint8_t message_id,
                                         uint16_t payload_length);
 
 size_t Polaris_PopulateChecksum(void* buffer);
 
 PolarisChecksum_t Polaris_CalculateChecksum(const void* buffer, size_t length);
+
+#ifdef __cplusplus
+} // extern "C"
+#endif

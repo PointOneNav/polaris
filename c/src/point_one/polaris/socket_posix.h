@@ -27,6 +27,10 @@ typedef ssize_t P1_RecvSize_t;
 
 typedef struct timeval P1_TimeValue_t;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 static inline void P1_SetTime(int time_ms, P1_TimeValue_t* result) {
   result->tv_sec = time_ms / 1000;
   result->tv_usec = (time_ms % 1000) * 1000;
@@ -45,3 +49,7 @@ static inline int P1_SetAddress(const char* hostname, int port,
     return 0;
   }
 }
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
