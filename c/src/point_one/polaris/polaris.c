@@ -252,6 +252,7 @@ void Polaris_Run(PolarisContext_t* context) {
     return;
   }
 
+  int data_received = 0;
   while (1) {
     // Read some data.
     P1_RecvSize_t bytes_read = recv(context->socket, context->recv_buffer,
@@ -262,11 +263,22 @@ void Polaris_Run(PolarisContext_t* context) {
       continue;
     }
 
+    data_received = 1;
+
     // We don't interpret the incoming RTCM data, so there's no need to buffer
     // it up to a complete RTCM frame. We'll just forward what we got along.
     if (context->rtcm_callback) {
       context->rtcm_callback(context->recv_buffer, bytes_read);
     }
+  }
+
+  // If no data was received either A) the auth token was rejected and we did
+  // not get a fail response, B) we lost the network connection, or C) the user
+  // never sent a position or beacn request.
+  if (!data_received) {
+    fprintf(stderr,
+            "Warning: Polaris connection closed and no data received. Is your "
+            "authentication token valid?\n");
   }
 }
 
