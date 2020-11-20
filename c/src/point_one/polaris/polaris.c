@@ -223,9 +223,16 @@ int Polaris_SendECEFPosition(PolarisContext_t* context, double x_m, double y_m,
   payload->z_cm = htole32((int32_t)(z_m * 1e2));
   size_t message_size = Polaris_PopulateChecksum(context->send_buffer);
 
+#ifdef P1_FREERTOS
+  // Floating point printf() not available in FreeRTOS.
+  DebugPrintf("Sending ECEF position. [size=%u B, position=[%d, %d, %d] cm]\n",
+              (unsigned)message_size, le32toh(payload->x_cm),
+              le32toh(payload->y_cm), le32toh(payload->z_cm));
+#else
   DebugPrintf(
       "Sending ECEF position. [size=%u B, position=[%.2f, %.2f, %.2f]]\n",
       (unsigned)message_size, x_m, y_m, z_m);
+#endif
   PrintData(context->send_buffer, message_size);
 
   if (send(context->socket, context->send_buffer, message_size, 0) !=
@@ -253,9 +260,17 @@ int Polaris_SendLLAPosition(PolarisContext_t* context, double latitude_deg,
   payload->altitude_mm = htole32((int32_t)(altitude_m * 1e3));
   size_t message_size = Polaris_PopulateChecksum(context->send_buffer);
 
+#ifdef P1_FREERTOS
+  // Floating point printf() not available in FreeRTOS.
+  DebugPrintf(
+      "Sending LLA position. [size=%u B, position=[%d.0e-7, %d.0e-7, %d]]\n",
+      (unsigned)message_size, le32toh(payload->latitude_dege7),
+      le32toh(payload->longitude_dege7), le32toh(payload->altitude_mm));
+#else
   DebugPrintf(
       "Sending LLA position. [size=%u B, position=[%.6f, %.6f, %.2f]]\n",
       (unsigned)message_size, latitude_deg, longitude_deg, altitude_m);
+#endif
   PrintData(context->send_buffer, message_size);
 
   if (send(context->socket, context->send_buffer, message_size, 0) !=
