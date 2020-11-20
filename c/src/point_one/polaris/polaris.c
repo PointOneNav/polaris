@@ -132,10 +132,16 @@ int Polaris_AuthenticateWith(PolarisContext_t* context, const char* api_key,
 
   // Extract the auth token from the JSON response.
   if (status_code == 200) {
-    if (sscanf(context->buffer, "\"access_token\": \"%32[0-9a-f]s\"",
-               context->auth_token) != 1) {
+    const char* token_start = strstr(context->buffer, "\"access_token\":\"");
+    if (token_start == NULL) {
       fprintf(stderr, "Authentication token not found in response.\n");
       return POLARIS_AUTH_ERROR;
+    } else {
+      token_start += 16;
+      if (sscanf(token_start, "%512[^\"]s", context->auth_token) != 1) {
+        fprintf(stderr, "Authentication token not found in response.\n");
+        return POLARIS_AUTH_ERROR;
+      }
     }
   } else if (status_code == 403) {
     fprintf(stderr, "Authentication failed. Please check your API key.\n");
