@@ -319,45 +319,58 @@ static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
   // Calculate the expected header length.
   static const char* HEADER_TEMPLATE =
       "POST %s HTTP/1.1\r\n"
-      "Connection: close\r\n"
-      "Content-Type: application/json\r\n"
+      "Host: %s:%s\r\n"
+      "Content-Type: application/json; charset=utf-8\r\n"
       "Content-Length: %s\r\n"
+      "Connection: Close\r\n"
       "\r\n";
   static size_t HEADER_TEMPLATE_SIZE = 0;
   if (HEADER_TEMPLATE_SIZE == 0) {
-    HEADER_TEMPLATE_SIZE = strlen(HEADER_TEMPLATE) - 4;
+    HEADER_TEMPLATE_SIZE = strlen(HEADER_TEMPLATE) - (4 * 2);
   }
 
   size_t address_size = strlen(address);
+
+  size_t url_size = strlen(endpoint_url);
+
+  char port_str[6] = {0};
+  size_t port_str_size =
+      (size_t)snprintf(port_str, sizeof(port_str), "%d", endpoint_port);
 
   char content_length_str[6] = {0};
   size_t content_length_str_size =
       (size_t)snprintf(content_length_str, sizeof(content_length_str), "%d",
                        (int)content_length);
 
-  size_t header_size =
-      HEADER_TEMPLATE_SIZE + address_size + content_length_str_size;
+  int header_size = (int)(HEADER_TEMPLATE_SIZE + address_size + url_size +
+                          port_str_size + content_length_str_size);
 
   // Copy the payload before building the header. That way we don't accidentally
   // overwrite the payload if it is stored inline in the output buffer.
-  if (context->buffer_size < header_size + content_length) {
+  if (context->buffer_size < header_size + content_length + 1) {
     fprintf(stderr, "Error populating POST request: buffer too small.\n");
     close(context->socket);
     context->socket = P1_INVALID_SOCKET;
     return POLARIS_NOT_ENOUGH_SPACE;
   }
 
+  uint8_t first_content_byte =
+      (content_length == 0 ? '\0' : ((const uint8_t*)content)[0]);
   memmove(context->buffer + header_size, content, content_length);
+  context->buffer[header_size + content_length] = '\0';
 
   // Now populate the header.
-  if (snprintf(context->buffer, header_size, HEADER_TEMPLATE, address,
-               content_length_str) < 0) {
+  header_size = snprintf(context->buffer, header_size + 1, HEADER_TEMPLATE,
+                         address, endpoint_url, port_str, content_length_str);
+  if (header_size < 0) {
     // This shouldn't happen.
     fprintf(stderr, "Error populating POST request.\n");
     close(context->socket);
     context->socket = P1_INVALID_SOCKET;
     return POLARIS_ERROR;
   }
+
+  context->buffer[header_size] = first_content_byte;
 
   size_t message_size = header_size + content_length;
 
