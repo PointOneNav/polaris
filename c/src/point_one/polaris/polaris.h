@@ -27,7 +27,7 @@
 #define POLARIS_SOCKET_ERROR -3
 #define POLARIS_SEND_ERROR -4
 #define POLARIS_AUTH_ERROR -5
-#define POLARIS_FORBIDDEN -5
+#define POLARIS_FORBIDDEN -6
 
 typedef void (*PolarisCallback_t)(const uint8_t* buffer, size_t size_bytes);
 
