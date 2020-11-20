@@ -229,6 +229,11 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id) {
 
 /******************************************************************************/
 void Polaris_Run(PolarisContext_t* context) {
+  if (context->socket == P1_INVALID_SOCKET) {
+    fprintf(stderr, "Error: Polaris connection not currently open.\n");
+    return;
+  }
+
   while (1) {
     // Read some data.
     P1_RecvSize_t bytes_read =
