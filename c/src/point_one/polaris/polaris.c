@@ -115,7 +115,7 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
                       int endpoint_port) {
   if (context->auth_token[0] == '\0') {
     fprintf(stderr, "Error: Auth token not specified.\n");
-    return POLARIS_ERROR;
+    return POLARIS_AUTH_ERROR;
   }
 
   // Connect to the corrections endpoint.
