@@ -115,7 +115,7 @@ int Polaris_AuthenticateWith(PolarisContext_t* context, const char* api_key,
       "\"unique_id\": \"%s\""
       "}";
 
-  int content_size = snprintf(context->buffer, context->buffer_size,
+  int content_size = snprintf((char*)context->buffer, context->buffer_size,
                               AUTH_REQUEST_TEMPLATE, api_key, unique_id);
   if (content_size < 0) {
     fprintf(stderr, "Error populating authentication request payload.\n");
@@ -132,7 +132,8 @@ int Polaris_AuthenticateWith(PolarisContext_t* context, const char* api_key,
 
   // Extract the auth token from the JSON response.
   if (status_code == 200) {
-    const char* token_start = strstr(context->buffer, "\"access_token\":\"");
+    const char* token_start =
+        strstr((char*)context->buffer, "\"access_token\":\"");
     if (token_start == NULL) {
       fprintf(stderr, "Authentication token not found in response.\n");
       return POLARIS_AUTH_ERROR;
@@ -366,8 +367,9 @@ static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
   context->buffer[header_size + content_length] = '\0';
 
   // Now populate the header.
-  header_size = snprintf(context->buffer, header_size + 1, HEADER_TEMPLATE,
-                         address, endpoint_url, port_str, content_length_str);
+  header_size =
+      snprintf((char*)context->buffer, header_size + 1, HEADER_TEMPLATE,
+               address, endpoint_url, port_str, content_length_str);
   if (header_size < 0) {
     // This shouldn't happen.
     fprintf(stderr, "Error populating POST request.\n");
@@ -418,15 +420,14 @@ static int GetHTTPResponse(PolarisContext_t* context) {
 
   // Extract the status code.
   int status_code;
-  if (sscanf(context->buffer, "HTTP/1.1 %d", &status_code) != 1) {
+  if (sscanf((char*)context->buffer, "HTTP/1.1 %d", &status_code) != 1) {
     fprintf(stderr, "Invalid HTTP response:\n\n%s", context->buffer);
     return POLARIS_SEND_ERROR;
   }
 
   // Find the content, then move the response content to the front of the
   // buffer. We don't care about the HTTP headers.
-  int content_length;
-  char* content_start = strstr(context->buffer, "\r\n\r\n");
+  char* content_start = strstr((char*)context->buffer, "\r\n\r\n");
   if (content_start != NULL) {
     content_start += 4;
     size_t content_length =

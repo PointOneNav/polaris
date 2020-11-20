@@ -32,8 +32,8 @@ static inline void P1_SetTime(int time_ms, P1_TimeValue_t* result) {
   result->tv_usec = (time_ms % 1000) * 1000;
 }
 
-static int P1_SetAddress(const char* hostname, int port,
-                         P1_SocketAddrV4_t* result) {
+static inline int P1_SetAddress(const char* hostname, int port,
+                                P1_SocketAddrV4_t* result) {
   struct hostent* host_info = gethostbyname(hostname);
   if (host_info == NULL) {
     return -1;

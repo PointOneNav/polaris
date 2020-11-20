@@ -35,8 +35,8 @@ static inline void P1_SetTime(int time_ms, P1_TimeValue_t* result) {
   *result = pdMS_TO_TICKS(time_ms);
 }
 
-static int P1_SetAddress(const char* hostname, int port,
-                         P1_SocketAddrV4_t* result) {
+static inline int P1_SetAddress(const char* hostname, int port,
+                                P1_SocketAddrV4_t* result) {
   uint32_t ip = FreeRTOS_gethostbyname(hostname);
   if (ip == NULL) {
     return -1;
