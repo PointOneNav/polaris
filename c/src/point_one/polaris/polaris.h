@@ -17,12 +17,37 @@
 # define POLARIS_MAX_TOKEN_SIZE 512
 #endif
 
-// Default buffer size can store up to one complete, maximum sized RTCM message
-// (6 bytes header/CRC + 1023 bytes payload). We don't align to RTCM framing,
-// however, so there's no guarantee that the buffer starts at the beginning of
-// an RTCM message or contains either a complete message or only one message.
-#ifndef POLARIS_BUFFER_SIZE
-# define POLARIS_BUFFER_SIZE 1029
+/**
+ * @brief The size of the data receive buffer (in bytes).
+ *
+ * @note
+ * The receive buffer must be large enough to store the entire HTTP
+ * authentication reponse.
+ *
+ * The default buffer size can store up to one complete, maximum sized RTCM
+ * message (6 bytes header/CRC + 1023 bytes payload). We don't align to RTCM
+ * framing, however, so there's no guarantee that the buffer starts at the
+ * beginning of an RTCM message or contains either a complete message or only
+ * one message.
+ */
+#ifndef POLARIS_RECV_BUFFER_SIZE
+# define POLARIS_RECV_BUFFER_SIZE 1029
+#endif
+
+/**
+ * @brief The size of the data send buffer (in bytes).
+ *
+ * This buffer is used to send position updates and other control messages to
+ * Polaris.
+ *
+ * @note
+ * The send buffer is _not_ used to send the authentication token on connect
+ * since it is typically too small. Instead, the receive buffer is used for the
+ * entire authentication process. This is considered safe since data will not
+ * be received until the client is authenticated.
+ */
+#ifndef POLARIS_SEND_BUFFER_SIZE
+# define POLARIS_SEND_BUFFER_SIZE 64
 #endif
 
 #define POLARIS_SUCCESS 0
@@ -39,7 +64,8 @@ typedef struct {
   P1_Socket_t socket;
 
   char auth_token[POLARIS_MAX_TOKEN_SIZE + 1];
-  uint8_t buffer[POLARIS_BUFFER_SIZE];
+  uint8_t recv_buffer[POLARIS_RECV_BUFFER_SIZE];
+  uint8_t send_buffer[POLARIS_SEND_BUFFER_SIZE];
 
   PolarisCallback_t rtcm_callback;
 } PolarisContext_t;

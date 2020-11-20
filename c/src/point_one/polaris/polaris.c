@@ -26,10 +26,16 @@ static int GetHTTPResponse(PolarisContext_t* context);
 
 /******************************************************************************/
 int Polaris_Init(PolarisContext_t* context) {
-  if (POLARIS_BUFFER_SIZE < POLARIS_MAX_HTTP_MESSAGE_SIZE ||
-      POLARIS_BUFFER_SIZE < POLARIS_MAX_MESSAGE_SIZE) {
+  if (POLARIS_RECV_BUFFER_SIZE < POLARIS_MAX_HTTP_MESSAGE_SIZE) {
     fprintf(stderr,
-            "Warning: Buffer size smaller than max expected Polaris packet.\n");
+            "Warning: Receive buffer smaller than expected authentication "
+            "response.\n");
+  }
+
+  if (POLARIS_SEND_BUFFER_SIZE < POLARIS_MAX_MESSAGE_SIZE) {
+    fprintf(
+        stderr,
+        "Warning: Send buffer smaller than max expected outbound packet.\n");
   }
 
   context->socket = P1_INVALID_SOCKET;
@@ -43,6 +49,9 @@ int Polaris_Authenticate(PolarisContext_t* context, const char* api_key,
                          const char* unique_id) {
   // Send an auth request, then wait for the response containing the access
   // token.
+  //
+  // Note: We use the receive buffer to send the HTTP auth request since it's
+  // much larger than typical packets that need to fit in the send buffer.
   static const char* AUTH_REQUEST_TEMPLATE =
       "{"
       "\"grant_type\": \"authorization_code\","
@@ -51,8 +60,9 @@ int Polaris_Authenticate(PolarisContext_t* context, const char* api_key,
       "\"unique_id\": \"%s\""
       "}";
 
-  int content_size = snprintf((char*)context->buffer, POLARIS_BUFFER_SIZE,
-                              AUTH_REQUEST_TEMPLATE, api_key, unique_id);
+  int content_size =
+      snprintf((char*)context->recv_buffer, POLARIS_RECV_BUFFER_SIZE,
+               AUTH_REQUEST_TEMPLATE, api_key, unique_id);
   if (content_size < 0) {
     fprintf(stderr, "Error populating authentication request payload.\n");
     return POLARIS_NOT_ENOUGH_SPACE;
@@ -60,7 +70,7 @@ int Polaris_Authenticate(PolarisContext_t* context, const char* api_key,
 
   int status_code =
       SendPOSTRequest(context, POLARIS_API_URL, 80, "/api/v1/auth/token",
-                      context->buffer, (size_t)content_size);
+                      context->recv_buffer, (size_t)content_size);
   if (status_code < 0) {
     fprintf(stderr, "Error sending authentication request.\n");
     return status_code;
@@ -69,7 +79,7 @@ int Polaris_Authenticate(PolarisContext_t* context, const char* api_key,
   // Extract the auth token from the JSON response.
   if (status_code == 200) {
     const char* token_start =
-        strstr((char*)context->buffer, "\"access_token\":\"");
+        strstr((char*)context->recv_buffer, "\"access_token\":\"");
     if (token_start == NULL) {
       fprintf(stderr, "Authentication token not found in response.\n");
       return POLARIS_AUTH_ERROR;
@@ -127,13 +137,18 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
   }
 
   // Send the auth token.
+  //
+  // Note: We use the receive buffer here to send the auth message since the
+  // auth token is very large. We haven't authenticated yet, so no data will be
+  // coming in and it should be fine to use the receive buffer.
   size_t token_length = strlen(context->auth_token);
-  PolarisHeader_t* header =
-      Polaris_PopulateHeader(context->buffer, POLARIS_ID_AUTH, token_length);
+  PolarisHeader_t* header = Polaris_PopulateHeader(
+      context->recv_buffer, POLARIS_ID_AUTH, token_length);
   memmove(header + 1, context->auth_token, token_length);
-  size_t message_size = Polaris_PopulateChecksum(context->buffer);
+  size_t message_size = Polaris_PopulateChecksum(context->recv_buffer);
 
-  if (send(context->socket, context->buffer, message_size, 0) != message_size) {
+  if (send(context->socket, context->recv_buffer, message_size, 0) !=
+      message_size) {
     perror("Error sending authentication token");
     close(context->socket);
     context->socket = P1_INVALID_SOCKET;
@@ -167,14 +182,15 @@ int Polaris_SendECEFPosition(PolarisContext_t* context, double x_m, double y_m,
   }
 
   PolarisHeader_t* header = Polaris_PopulateHeader(
-      context->buffer, POLARIS_ID_ECEF, sizeof(PolarisECEFMessage_t));
+      context->send_buffer, POLARIS_ID_ECEF, sizeof(PolarisECEFMessage_t));
   PolarisECEFMessage_t* payload = (PolarisECEFMessage_t*)(header + 1);
   payload->x_cm = htole32((uint32_t)(x_m * 1e2));
   payload->y_cm = htole32((uint32_t)(y_m * 1e2));
   payload->z_cm = htole32((uint32_t)(z_m * 1e2));
-  size_t message_size = Polaris_PopulateChecksum(context->buffer);
+  size_t message_size = Polaris_PopulateChecksum(context->send_buffer);
 
-  if (send(context->socket, context->buffer, message_size, 0) != message_size) {
+  if (send(context->socket, context->send_buffer, message_size, 0) !=
+      message_size) {
     perror("Error sending ECEF position");
     return POLARIS_SEND_ERROR;
   } else {
@@ -191,14 +207,15 @@ int Polaris_SendLLAPosition(PolarisContext_t* context, double latitude_deg,
   }
 
   PolarisHeader_t* header = Polaris_PopulateHeader(
-      context->buffer, POLARIS_ID_LLA, sizeof(PolarisLLAMessage_t));
+      context->send_buffer, POLARIS_ID_LLA, sizeof(PolarisLLAMessage_t));
   PolarisLLAMessage_t* payload = (PolarisLLAMessage_t*)(header + 1);
   payload->latitude_dege7 = htole32((uint32_t)(latitude_deg * 1e7));
   payload->longitude_dege7 = htole32((uint32_t)(longitude_deg * 1e7));
   payload->altitude_mm = htole32((uint32_t)(altitude_m * 1e3));
-  size_t message_size = Polaris_PopulateChecksum(context->buffer);
+  size_t message_size = Polaris_PopulateChecksum(context->send_buffer);
 
-  if (send(context->socket, context->buffer, message_size, 0) != message_size) {
+  if (send(context->socket, context->send_buffer, message_size, 0) !=
+      message_size) {
     perror("Error sending LLA position");
     return POLARIS_SEND_ERROR;
   } else {
@@ -214,12 +231,13 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id) {
   }
 
   size_t id_length = strlen(beacon_id);
-  PolarisHeader_t* header =
-      Polaris_PopulateHeader(context->buffer, POLARIS_ID_BEACON, id_length);
+  PolarisHeader_t* header = Polaris_PopulateHeader(
+      context->send_buffer, POLARIS_ID_BEACON, id_length);
   memmove(header + 1, beacon_id, id_length);
-  size_t message_size = Polaris_PopulateChecksum(context->buffer);
+  size_t message_size = Polaris_PopulateChecksum(context->send_buffer);
 
-  if (send(context->socket, context->buffer, message_size, 0) != message_size) {
+  if (send(context->socket, context->send_buffer, message_size, 0) !=
+      message_size) {
     perror("Error sending beacon request");
     return POLARIS_SEND_ERROR;
   } else {
@@ -236,8 +254,8 @@ void Polaris_Run(PolarisContext_t* context) {
 
   while (1) {
     // Read some data.
-    P1_RecvSize_t bytes_read =
-        recv(context->socket, context->buffer, POLARIS_BUFFER_SIZE, 0);
+    P1_RecvSize_t bytes_read = recv(context->socket, context->recv_buffer,
+                                    POLARIS_RECV_BUFFER_SIZE, 0);
     if (bytes_read < 0) {
       break;
     } else if (bytes_read == 0) {
@@ -247,7 +265,7 @@ void Polaris_Run(PolarisContext_t* context) {
     // We don't interpret the incoming RTCM data, so there's no need to buffer
     // it up to a complete RTCM frame. We'll just forward what we got along.
     if (context->rtcm_callback) {
-      context->rtcm_callback(context->buffer, bytes_read);
+      context->rtcm_callback(context->recv_buffer, bytes_read);
     }
   }
 }
@@ -331,7 +349,11 @@ static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
 
   // Copy the payload before building the header. That way we don't accidentally
   // overwrite the payload if it is stored inline in the output buffer.
-  if (POLARIS_BUFFER_SIZE < header_size + content_length + 1) {
+  //
+  // Note that we use the receive buffer to send HTTP requests since it is
+  // larger than the send buffer. We currently only send HTTP requests during
+  // authentication, before data is coming in.
+  if (POLARIS_RECV_BUFFER_SIZE < header_size + content_length + 1) {
     fprintf(stderr, "Error populating POST request: buffer too small.\n");
     close(context->socket);
     context->socket = P1_INVALID_SOCKET;
@@ -340,12 +362,12 @@ static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
 
   uint8_t first_content_byte =
       (content_length == 0 ? '\0' : ((const uint8_t*)content)[0]);
-  memmove(context->buffer + header_size, content, content_length);
-  context->buffer[header_size + content_length] = '\0';
+  memmove(context->recv_buffer + header_size, content, content_length);
+  context->recv_buffer[header_size + content_length] = '\0';
 
   // Now populate the header.
   header_size =
-      snprintf((char*)context->buffer, header_size + 1, HEADER_TEMPLATE,
+      snprintf((char*)context->recv_buffer, header_size + 1, HEADER_TEMPLATE,
                address, endpoint_url, port_str, content_length_str);
   if (header_size < 0) {
     // This shouldn't happen.
@@ -355,7 +377,7 @@ static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
     return POLARIS_ERROR;
   }
 
-  context->buffer[header_size] = first_content_byte;
+  context->recv_buffer[header_size] = first_content_byte;
 
   size_t message_size = header_size + content_length;
 
@@ -365,7 +387,8 @@ static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
     return ret;
   }
 
-  if (send(context->socket, context->buffer, message_size, 0) != message_size) {
+  if (send(context->socket, context->recv_buffer, message_size, 0) !=
+      message_size) {
     perror("Error sending POST request");
     close(context->socket);
     context->socket = P1_INVALID_SOCKET;
@@ -381,10 +404,11 @@ static int GetHTTPResponse(PolarisContext_t* context) {
   // Read until the connection is closed.
   int total_bytes = 0;
   int bytes_read;
-  while ((bytes_read = recv(context->socket, context->buffer + total_bytes,
-                            POLARIS_BUFFER_SIZE - total_bytes - 1, 0)) > 0) {
+  while ((bytes_read = recv(context->socket, context->recv_buffer + total_bytes,
+                            POLARIS_RECV_BUFFER_SIZE - total_bytes - 1, 0)) >
+         0) {
     total_bytes += bytes_read;
-    if (total_bytes == POLARIS_BUFFER_SIZE - 1) {
+    if (total_bytes == POLARIS_RECV_BUFFER_SIZE - 1) {
       break;
     }
   }
@@ -393,26 +417,26 @@ static int GetHTTPResponse(PolarisContext_t* context) {
   context->socket = P1_INVALID_SOCKET;
 
   // Append a null terminator to the response.
-  context->buffer[total_bytes++] = '\0';
+  context->recv_buffer[total_bytes++] = '\0';
 
   // Extract the status code.
   int status_code;
-  if (sscanf((char*)context->buffer, "HTTP/1.1 %d", &status_code) != 1) {
-    fprintf(stderr, "Invalid HTTP response:\n\n%s", context->buffer);
+  if (sscanf((char*)context->recv_buffer, "HTTP/1.1 %d", &status_code) != 1) {
+    fprintf(stderr, "Invalid HTTP response:\n\n%s", context->recv_buffer);
     return POLARIS_SEND_ERROR;
   }
 
   // Find the content, then move the response content to the front of the
-  // buffer. We don't care about the HTTP headers.
-  char* content_start = strstr((char*)context->buffer, "\r\n\r\n");
+  // recv_buffer. We don't care about the HTTP headers.
+  char* content_start = strstr((char*)context->recv_buffer, "\r\n\r\n");
   if (content_start != NULL) {
     content_start += 4;
     size_t content_length =
-        ((size_t)total_bytes) - (content_start - (char*)context->buffer);
-    memmove(context->buffer, content_start, content_length);
+        ((size_t)total_bytes) - (content_start - (char*)context->recv_buffer);
+    memmove(context->recv_buffer, content_start, content_length);
   } else {
     // No content in response.
-    context->buffer[0] = '\0';
+    context->recv_buffer[0] = '\0';
   }
 
   return status_code;
