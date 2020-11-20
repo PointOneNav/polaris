@@ -20,7 +20,7 @@ void HandleSignal(int sig) {
 
   printf("Caught signal %s (%d). Closing Polaris connection.\n",
          sys_siglist[sig], sig);
-  Polaris_Close(&context);
+  Polaris_Disconnect(&context);
 }
 
 int main(int argc, const char* argv[]) {
@@ -39,14 +39,6 @@ int main(int argc, const char* argv[]) {
   printf("Opened Polaris context. Authenticating...\n");
 
   if (Polaris_Authenticate(&context, api_key, unique_id) != POLARIS_SUCCESS) {
-    Polaris_Destroy(&context);
-    return 3;
-  }
-
-  printf("Authenticated. Connecting to Polaris...\n");
-
-  if (Polaris_Connect(&context, api_key, unique_id) != POLARIS_SUCCESS) {
-    Polaris_Destroy(&context);
     return 3;
   }
 
@@ -55,7 +47,6 @@ int main(int argc, const char* argv[]) {
   Polaris_SetRTCMCallback(&context, HandleData);
 
   if (Polaris_Connect(&context) != POLARIS_SUCCESS) {
-    Polaris_Close(&context);
     return 3;
   }
 
@@ -63,7 +54,7 @@ int main(int argc, const char* argv[]) {
 
   if (Polaris_SendECEFPosition(&context, -2707071.0, -4260565.0, 3885644.0) !=
       POLARIS_SUCCESS) {
-    Polaris_Destroy(&context);
+    Polaris_Disconnect(&context);
     return 4;
   }
 
@@ -73,8 +64,6 @@ int main(int argc, const char* argv[]) {
   signal(SIGTERM, HandleSignal);
 
   Polaris_Run(&context);
-
-  Polaris_Destroy(&context);
 
   printf("Finished.\n");
 

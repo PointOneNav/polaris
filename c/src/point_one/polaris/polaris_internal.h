@@ -50,13 +50,10 @@ typedef uint16_t PolarisChecksum_t;
 
 #define POLARIS_MAX_HTTP_HEADER_SIZE 256
 #define POLARIS_MAX_HTTP_MESSAGE_SIZE \
-  (POLARIS_MAX_HTTP_HEADER_SIZE + POLARIS_AUTH_TOKEN_MAX_LENGTH)
+  (POLARIS_MAX_HTTP_HEADER_SIZE + POLARIS_MAX_TOKEN_SIZE)
 
-#define POLARIS_MAX_MESSAGE_SIZE                              \
-  (sizeof(PolarisHeader_t) + POLARIS_AUTH_TOKEN_MAX_LENGTH + \
-   sizeof(PolarisChecksum_t))
-
-#define POLARIS_MIN_BUFFER_SIZE POLARIS_MAX_HTTP_HEADER_SIZE
+#define POLARIS_MAX_MESSAGE_SIZE \
+  (sizeof(PolarisHeader_t) + POLARIS_MAX_TOKEN_SIZE + sizeof(PolarisChecksum_t))
 
 PolarisHeader_t* Polaris_PopulateHeader(void* buffer, uint8_t message_id,
                                         uint16_t payload_length);

@@ -12,6 +12,9 @@
 
 #include "point_one/polaris/polaris_internal.h"
 
+#define MAKE_STR(x) #x
+#define STR(x) MAKE_STR(x)
+
 static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
                       int endpoint_port);
 
@@ -23,72 +26,16 @@ static int GetHTTPResponse(PolarisContext_t* context);
 
 /******************************************************************************/
 int Polaris_Init(PolarisContext_t* context) {
-  uint8_t* buffer = malloc(POLARIS_DEFAULT_BUFFER_SIZE);
-  if (buffer == NULL) {
-    fprintf(stderr, "Error: Failed to allocate data buffer.\n");
-    return POLARIS_NOT_ENOUGH_SPACE;
-  }
-
-  int ret =
-      Polaris_InitWithBuffer(context, buffer, POLARIS_DEFAULT_BUFFER_SIZE);
-  context->buffer_managed = 1;
-
-  if (ret != POLARIS_SUCCESS) {
-    // Note: We explicitly free the buffer here and clear context->buffer,
-    // rather than letting Polaris_Close() do it, just in case open failed
-    // before it set context->buffer (e.g., buffer too small).
-    free(buffer);
-    context->buffer = NULL;
-
-    Polaris_Close(context);
-  }
-
-  return ret;
-}
-
-/******************************************************************************/
-int Polaris_InitWithBuffer(PolarisContext_t* context, uint8_t* buffer,
-                           size_t buffer_size) {
-  if (buffer_size < POLARIS_MIN_BUFFER_SIZE) {
+  if (POLARIS_BUFFER_SIZE < POLARIS_MAX_HTTP_MESSAGE_SIZE ||
+      POLARIS_BUFFER_SIZE < POLARIS_MAX_MESSAGE_SIZE) {
     fprintf(stderr,
-            "Error: Provided buffer is too small. Must be at least %d bytes.\n",
-            (int)POLARIS_MIN_BUFFER_SIZE);
-    return POLARIS_ERROR;
+            "Warning: Buffer size smaller than max expected Polaris packet.\n");
   }
 
   context->socket = P1_INVALID_SOCKET;
-  context->rtcm_callback = NULL;
-
-  context->auth_token = malloc(POLARIS_AUTH_TOKEN_MAX_LENGTH);
-  if (context->auth_token == NULL) {
-    fprintf(stderr, "Error: Failed to allocate auth token.\n");
-    return POLARIS_NOT_ENOUGH_SPACE;
-  }
-
   context->auth_token[0] = '\0';
-
-  context->buffer = buffer;
-  context->buffer_size = buffer_size;
-  context->buffer_managed = 0;
-
-  // Note: We don't actually open the socket here - that's done after
-  // authentication.
+  context->rtcm_callback = NULL;
   return POLARIS_SUCCESS;
-}
-
-/******************************************************************************/
-void Polaris_Destroy(PolarisContext_t* context) {
-  Polaris_Disconnect(context);
-
-  if (context->auth_token != NULL) {
-    free(context->auth_token);
-    context->auth_token = NULL;
-  }
-
-  if (context->buffer_managed && context->buffer != NULL) {
-    free(context->buffer);
-  }
-  context->buffer = NULL;
 }
 
 /******************************************************************************/
@@ -104,7 +51,7 @@ int Polaris_Authenticate(PolarisContext_t* context, const char* api_key,
       "\"unique_id\": \"%s\""
       "}";
 
-  int content_size = snprintf((char*)context->buffer, context->buffer_size,
+  int content_size = snprintf((char*)context->buffer, POLARIS_BUFFER_SIZE,
                               AUTH_REQUEST_TEMPLATE, api_key, unique_id);
   if (content_size < 0) {
     fprintf(stderr, "Error populating authentication request payload.\n");
@@ -128,7 +75,8 @@ int Polaris_Authenticate(PolarisContext_t* context, const char* api_key,
       return POLARIS_AUTH_ERROR;
     } else {
       token_start += 16;
-      if (sscanf(token_start, "%512[^\"]s", context->auth_token) != 1) {
+      if (sscanf(token_start, "%" STR(POLARIS_MAX_TOKEN_SIZE) "[^\"]s",
+                 context->auth_token) != 1) {
         fprintf(stderr, "Authentication token not found in response.\n");
         return POLARIS_AUTH_ERROR;
       } else {
@@ -146,11 +94,12 @@ int Polaris_Authenticate(PolarisContext_t* context, const char* api_key,
 
 /******************************************************************************/
 int Polaris_SetAuthToken(PolarisContext_t* context, const char* auth_token) {
-  if (context->auth_token == NULL) {
-    fprintf(stderr, "Auth token storage not allocated. Did you call open?\n");
-    return POLARIS_ERROR;
+  size_t length = strlen(auth_token);
+  if (length > POLARIS_MAX_TOKEN_SIZE) {
+    fprintf(stderr, "User-provided auth token is too long.\n");
+    return POLARIS_NOT_ENOUGH_SPACE;
   } else {
-    strncpy(context->auth_token, auth_token, POLARIS_AUTH_TOKEN_MAX_LENGTH);
+    memcpy(context->auth_token, auth_token, length + 1);
     return POLARIS_SUCCESS;
   }
 }
@@ -164,11 +113,8 @@ int Polaris_Connect(PolarisContext_t* context) {
 /******************************************************************************/
 int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
                       int endpoint_port) {
-  if (context->auth_token == NULL) {
-    fprintf(stderr, "Auth token storage not allocated. Did you call open?\n");
-    return POLARIS_ERROR;
-  } else if (context->auth_token[0] == '\0') {
-    fprintf(stderr, "Auth token not specified.\n");
+  if (context->auth_token[0] == '\0') {
+    fprintf(stderr, "Error: Auth token not specified.\n");
     return POLARIS_ERROR;
   }
 
@@ -286,7 +232,7 @@ void Polaris_Run(PolarisContext_t* context) {
   while (1) {
     // Read some data.
     P1_RecvSize_t bytes_read =
-        recv(context->socket, context->buffer, context->buffer_size, 0);
+        recv(context->socket, context->buffer, POLARIS_BUFFER_SIZE, 0);
     if (bytes_read < 0) {
       break;
     } else if (bytes_read == 0) {
@@ -380,7 +326,7 @@ static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
 
   // Copy the payload before building the header. That way we don't accidentally
   // overwrite the payload if it is stored inline in the output buffer.
-  if (context->buffer_size < header_size + content_length + 1) {
+  if (POLARIS_BUFFER_SIZE < header_size + content_length + 1) {
     fprintf(stderr, "Error populating POST request: buffer too small.\n");
     close(context->socket);
     context->socket = P1_INVALID_SOCKET;
@@ -431,9 +377,9 @@ static int GetHTTPResponse(PolarisContext_t* context) {
   int total_bytes = 0;
   int bytes_read;
   while ((bytes_read = recv(context->socket, context->buffer + total_bytes,
-                            context->buffer_size - total_bytes - 1, 0)) > 0) {
+                            POLARIS_BUFFER_SIZE - total_bytes - 1, 0)) > 0) {
     total_bytes += bytes_read;
-    if (total_bytes == context->buffer_size - 1) {
+    if (total_bytes == POLARIS_BUFFER_SIZE - 1) {
       break;
     }
   }
