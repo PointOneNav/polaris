@@ -1,5 +1,5 @@
 /**************************************************************************/ /**
- * @brief Example Polaris client user.
+ * @brief Simple Polaris client example.
  *
  * Copyright (c) Point One Navigation - All Rights Reserved
  ******************************************************************************/
@@ -32,6 +32,7 @@ int main(int argc, const char* argv[]) {
   const char* api_key = argv[1];
   const char* unique_id = argv[2];
 
+  // Retrieve an access token using the specified API key.
   if (Polaris_Init(&context) != POLARIS_SUCCESS) {
     return 2;
   }
@@ -42,6 +43,7 @@ int main(int argc, const char* argv[]) {
     return 3;
   }
 
+  // We now have a valid access token. Connect to the corrections service.
   P1_printf("Authenticated. Connecting to Polaris...\n");
 
   Polaris_SetRTCMCallback(&context, HandleData);
@@ -52,12 +54,16 @@ int main(int argc, const char* argv[]) {
 
   P1_printf("Connected to Polaris...\n");
 
+  // Send a position update to Polaris. Position updates are used to select an
+  // appropriate corrections stream, and should be updated periodically as the
+  // receiver moves.
   if (Polaris_SendECEFPosition(&context, -2707071.0, -4260565.0, 3885644.0) !=
       POLARIS_SUCCESS) {
     Polaris_Disconnect(&context);
     return 4;
   }
 
+  // Receive incoming RTCM data until the application exits.
   P1_printf("Sent position. Listening for data...\n");
 
   signal(SIGINT, HandleSignal);
