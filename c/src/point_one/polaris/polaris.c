@@ -379,7 +379,7 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
 
   // Set send/receive timeouts.
   P1_TimeValue_t timeout;
-  P1_SetTime(2000, &timeout);
+  P1_SetTimeMS(2000, &timeout);
   setsockopt(context->socket, 0, SO_RCVTIMEO, &timeout, sizeof(timeout));
   setsockopt(context->socket, 0, SO_SNDTIMEO, &timeout, sizeof(timeout));
 

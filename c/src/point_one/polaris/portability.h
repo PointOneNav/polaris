@@ -12,7 +12,8 @@ extern "C" {
 
 #ifdef P1_FREERTOS // FreeRTOS
 
-#include <string.h> // For strerror()}
+#include <string.h> // For strerror()
+
 #include "FreeRTOS.h"
 
 # ifndef P1_printf
@@ -32,8 +33,17 @@ extern "C" {
 
 typedef TickType_t P1_TimeValue_t;
 
-static inline void P1_SetTime(int time_ms, P1_TimeValue_t* result) {
+static inline void P1_GetCurrentTime(P1_TimeValue_t* result) {
+  *result = xTaskGetTickCount();
+}
+
+static inline void P1_SetTimeMS(int time_ms, P1_TimeValue_t* result) {
   *result = pdMS_TO_TICKS(time_ms);
+}
+
+static inline int P1_GetElapsedMS(const P1_TimeValue_t* start,
+                                  const P1_TimeValue_t* end) {
+  return (int)((*end - *start) * portTICK_PERIOD_MS);
 }
 
 #else // POSIX
@@ -47,9 +57,20 @@ static inline void P1_SetTime(int time_ms, P1_TimeValue_t* result) {
 
 typedef struct timeval P1_TimeValue_t;
 
-static inline void P1_SetTime(int time_ms, P1_TimeValue_t* result) {
+static inline void P1_GetCurrentTime(P1_TimeValue_t* result) {
+  gettimeofday(result, NULL);
+}
+
+static inline void P1_SetTimeMS(int time_ms, P1_TimeValue_t* result) {
   result->tv_sec = time_ms / 1000;
   result->tv_usec = (time_ms % 1000) * 1000;
+}
+
+static inline int P1_GetElapsedMS(const P1_TimeValue_t* start,
+                                  const P1_TimeValue_t* end) {
+  P1_TimeValue_t delta;
+  timersub(end, start, &delta);
+  return (int)((delta.tv_sec * 1000) + (delta.tv_usec / 1000));
 }
 
 #endif // End OS selection
