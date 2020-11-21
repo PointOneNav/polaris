@@ -12,3 +12,4 @@ build
 # Build Output
 *.o
 c/examples/simple_polaris_client
+c/examples/connection_retry
