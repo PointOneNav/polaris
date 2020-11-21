@@ -66,6 +66,7 @@ int Polaris_Init(PolarisContext_t* context) {
 
   context->socket = P1_INVALID_SOCKET;
   context->auth_token[0] = '\0';
+  context->authenticated = 0;
   context->rtcm_callback = NULL;
   return POLARIS_SUCCESS;
 }
@@ -195,7 +196,7 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
 /******************************************************************************/
 void Polaris_Disconnect(PolarisContext_t* context) {
   if (context->socket != P1_INVALID_SOCKET) {
-    DebugPrintf("Closing Polaris connection\n");
+    DebugPrintf("Closing Polaris connection.\n");
     close(context->socket);
     context->socket = P1_INVALID_SOCKET;
   }
@@ -309,55 +310,94 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id) {
 }
 
 /******************************************************************************/
-void Polaris_Run(PolarisContext_t* context) {
+int Polaris_Work(PolarisContext_t* context) {
   if (context->socket == P1_INVALID_SOCKET) {
     P1_fprintf(stderr, "Error: Polaris connection not currently open.\n");
-    return;
+    return POLARIS_SOCKET_ERROR;
   }
 
-  DebugPrintf("Listening for data.\n");
-  size_t total_bytes = 0;
-  while (1) {
-    // Read some data.
-    P1_RecvSize_t bytes_read = recv(context->socket, context->recv_buffer,
-                                    POLARIS_RECV_BUFFER_SIZE, 0);
-    if (bytes_read < 0) {
-      DebugPrintf("Connection terminated. [ret=%d]\n", (int)bytes_read);
-      break;
-    } else if (bytes_read == 0) {
-      // If recv() times out before we've gotten anything, the socket was
-      // probably closed on the other end due to an auth failure.
-      if (total_bytes == 0) {
-        break;
-      }
-      // Otherwise, there may just not be new data available (e.g., user hasn't
-      // sent a position yet).
-      else {
-        continue;
-      }
+  DebugPrintf("Listening for data block.\n");
+  P1_RecvSize_t bytes_read =
+      recv(context->socket, context->recv_buffer, POLARIS_RECV_BUFFER_SIZE, 0);
+  if (bytes_read < 0) {
+    DebugPrintf("Connection terminated. [ret=%d]\n", (int)bytes_read);
+    close(context->socket);
+    context->socket = P1_INVALID_SOCKET;
+    return POLARIS_CONNECTION_CLOSED;
+  } else if (bytes_read == 0) {
+    // If recv() times out before we've gotten anything, the socket was probably
+    // closed on the other end due to an auth failure.
+    if (!context->authenticated) {
+      P1_fprintf(
+          stderr,
+          "Warning: Polaris connection closed and no data received. Is your "
+          "authentication token valid?\n");
+      close(context->socket);
+      context->socket = P1_INVALID_SOCKET;
+      return POLARIS_FORBIDDEN;
     }
-
-    total_bytes += bytes_read;
+    // Otherwise, there may just not be new data available (e.g., user hasn't
+    // sent a position yet, network connection temporarily broken, etc.).
+    else {
+      return 0;
+    }
+  } else {
+    DebugPrintf("Received %u bytes.\n", (unsigned)bytes_read);
+    context->authenticated = 1;
 
     // We don't interpret the incoming RTCM data, so there's no need to buffer
     // it up to a complete RTCM frame. We'll just forward what we got along.
     if (context->rtcm_callback) {
       context->rtcm_callback(context->recv_buffer, bytes_read);
     }
+
+    return (int)bytes_read;
+  }
+}
+
+/******************************************************************************/
+int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
+  if (context->socket == P1_INVALID_SOCKET) {
+    P1_fprintf(stderr, "Error: Polaris connection not currently open.\n");
+    return POLARIS_SOCKET_ERROR;
   }
 
-  // If no data was received either A) the auth token was rejected and we did
-  // not get a fail response, B) we lost the network connection, or C) the user
-  // never sent a position or beacn request.
-  if (total_bytes == 0) {
-    P1_fprintf(
-        stderr,
-        "Warning: Polaris connection closed and no data received. Is your "
-        "authentication token valid?\n");
-  } else {
-    DebugPrintf("Socket closed. [total_bytes_read=%u]\n",
-                (unsigned)total_bytes);
+  DebugPrintf("Listening for data.\n");
+
+  P1_TimeValue_t last_read_time;
+  P1_GetCurrentTime(&last_read_time);
+
+  size_t total_bytes = 0;
+  int ret;
+  while (1) {
+    // Read the next data block.
+    ret = Polaris_Work(context);
+
+    if (ret < 0) {
+      // Connection closed.
+      break;
+    } else if (ret == 0) {
+      // Read timed out - see if we've hit the connection timeout. Otherwise,
+      // try again.
+      P1_TimeValue_t current_time;
+      P1_GetCurrentTime(&current_time);
+      int elapsed_ms = P1_GetElapsedMS(&last_read_time, &current_time);
+      if (elapsed_ms >= connection_timeout_ms) {
+        P1_fprintf(stderr, "Warning: Connection timed out after %d ms.\n",
+                   elapsed_ms);
+        close(context->socket);
+        context->socket = P1_INVALID_SOCKET;
+        return POLARIS_TIMED_OUT;
+      }
+    } else {
+      // Data received and dispatched to the callback.
+      total_bytes += (size_t)ret;
+      P1_GetCurrentTime(&last_read_time);
+    }
   }
+
+  DebugPrintf("Received %u total bytes.\n", (unsigned)total_bytes);
+  return ret;
 }
 
 /******************************************************************************/
@@ -379,8 +419,9 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
 
   // Set send/receive timeouts.
   P1_TimeValue_t timeout;
-  P1_SetTimeMS(2000, &timeout);
+  P1_SetTimeMS(POLARIS_RECV_TIMEOUT_MS, &timeout);
   setsockopt(context->socket, 0, SO_RCVTIMEO, &timeout, sizeof(timeout));
+  P1_SetTimeMS(POLARIS_SEND_TIMEOUT_MS, &timeout);
   setsockopt(context->socket, 0, SO_SNDTIMEO, &timeout, sizeof(timeout));
 
   // Lookup the IP of the API endpoint used for auth requests.

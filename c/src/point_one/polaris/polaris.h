@@ -50,6 +50,22 @@
 # define POLARIS_SEND_BUFFER_SIZE 64
 #endif
 
+/**
+ * @brief The maximum amount of time (in ms) to wait for incoming data for a
+ *        single receive call (@ref Polaris_Work()).
+ */
+#ifndef POLARIS_RECV_TIMEOUT_MS
+# define POLARIS_RECV_TIMEOUT_MS 1000
+#endif
+
+/**
+ * @brief The maximum amount of time (in ms) to wait when sending a message to
+ *        Polaris.
+ */
+#ifndef POLARIS_SEND_TIMEOUT_MS
+# define POLARIS_SEND_TIMEOUT_MS 1000
+#endif
+
 #define POLARIS_SUCCESS 0
 #define POLARIS_ERROR -1
 #define POLARIS_NOT_ENOUGH_SPACE -2
@@ -57,6 +73,8 @@
 #define POLARIS_SEND_ERROR -4
 #define POLARIS_AUTH_ERROR -5
 #define POLARIS_FORBIDDEN -6
+#define POLARIS_CONNECTION_CLOSED -7
+#define POLARIS_TIMED_OUT -8
 
 typedef void (*PolarisCallback_t)(const uint8_t* buffer, size_t size_bytes);
 
@@ -64,6 +82,8 @@ typedef struct {
   P1_Socket_t socket;
 
   char auth_token[POLARIS_MAX_TOKEN_SIZE + 1];
+  uint8_t authenticated;
+
   uint8_t recv_buffer[POLARIS_RECV_BUFFER_SIZE];
   uint8_t send_buffer[POLARIS_SEND_BUFFER_SIZE];
 
@@ -121,6 +141,11 @@ int Polaris_SetAuthToken(PolarisContext_t* context, const char* auth_token);
 /**
  * @brief Connect to the corrections service using the stored authentication
  *        token.
+ *
+ * @note
+ * This function can not currently check for rejection of the authentication
+ * token by the corrections service. Instead, authentication failure is detected
+ * on the first call to @ref Polaris_Work().
  *
  * @param context The Polaris context to be used.
  *
@@ -205,15 +230,56 @@ int Polaris_SendLLAPosition(PolarisContext_t* context, double latitude_deg,
 int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id);
 
 /**
+ * @brief Receive and dispatch the next block of incoming data.
+ *
+ * This function blocks until some data is received, or until @ref
+ * POLARIS_RECV_TIMEOUT_MS elapses.
+ *
+ * @note
+ * There is no guarantee that a data block contains a complete RTCM message, or
+ * starts on an RTCM message boundary.
+ *
+ * @post
+ * The received data will be stored in `context->buffer` on return. If a
+ * callback function is registered (@ref Polaris_SetRTCMCallback()), it will be
+ * called the the received data before this function returns.
+ *
+ * @param context The Polaris context to be used.
+ *
+ * @return The number of received bytes, or 0 if the timeout elapsed without
+ *         receiving data.
+ * @return @ref POLARIS_CONNECTION_CLOSED if the connection was closed remotely
+ *         or by a call to @ref Polaris_Disconnect().
+ * @return @ref POLARIS_FORBIDDEN if the connection is closed before any data
+ *         is received, indicating an authentication falure (invalid or expired
+ *         access token).
+ * @return @ref POLARIS_SOCKET_ERROR if the socket is not currently open.
+ */
+int Polaris_Work(PolarisContext_t* context);
+
+/**
  * @brief Receive and dispatch incoming data.
  *
  * This function blocks indefinitely and sends all incoming corrections data to
  * the registered callback function. The function will return automatically when
  * @ref Polaris_Disconnect() is called.
  *
+ * If the specified timeout has elapsed since the last time data was received,
+ * the connection will be considered lost and the function will return.
+ *
  * @param context The Polaris context to be used.
+ * @param connection_timeout_ms The maximum elapsed time (in ms) between reads,
+ *        after which the connection is considered lost.
+ *
+ * @return @ref POLARIS_CONNECTION_CLOSED if the connection was closed remotely
+ *         or by a call to @ref Polaris_Disconnect().
+ * @return @ref POLARIS_TIMED_OUT if no data was received for the specified
+ *         timeout.
+ * @return @ref POLARIS_AUTH_ERROR if the connection is closed before any data
+ *         is received, indicating an authentication falure.
+ * @return @ref POLARIS_SOCKET_ERROR if the socket is not currently open.
  */
-void Polaris_Run(PolarisContext_t* context);
+int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms);
 
 #ifdef __cplusplus
 } // extern "C"
