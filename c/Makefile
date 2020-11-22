@@ -18,6 +18,10 @@ clean:
 	rm -f $(OBJECTS)
 	rm -f $(APPLICATIONS)
 
+.PHONY: print_applications
+print_applications:
+	@echo $(APPLICATIONS)
+
 examples/%: examples/%.c $(OBJECTS)
 	gcc -o $@ -I$(SRC_DIR) $(CFLAGS) $^
 
