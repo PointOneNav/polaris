@@ -39,6 +39,7 @@ int main(int argc, const char* argv[]) {
     // Retrieve an access token using the specified API key.
     if (!auth_valid) {
       if (Polaris_Init(&context) != POLARIS_SUCCESS) {
+        P1_printf("Error initializing context.\n");
         return 2;
       }
 
@@ -49,6 +50,7 @@ int main(int argc, const char* argv[]) {
         P1_printf("Authentication rejected. Is your API key valid?\n");
         return 3;
       } else if (ret != POLARIS_SUCCESS) {
+        P1_printf("Authentication failed. Retrying.\n");
         continue;
       }
 
@@ -65,6 +67,7 @@ int main(int argc, const char* argv[]) {
     Polaris_SetRTCMCallback(&context, HandleData);
 
     if (Polaris_Connect(&context) != POLARIS_SUCCESS) {
+      P1_printf("Error connecting to Polaris corrections stream. Retrying.\n");
       if (++reconnect_count >= MAX_RECONNECTS) {
         P1_printf(
             "Max reconnects exceeded. Clearing access token and retrying "
