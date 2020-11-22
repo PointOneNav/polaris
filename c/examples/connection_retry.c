@@ -83,7 +83,7 @@ int main(int argc, const char* argv[]) {
     // Send a position update to Polaris. Position updates are used to select an
     // appropriate corrections stream, and should be updated periodically as the
     // receiver moves.
-    if (Polaris_SendECEFPosition(&context, -2707071.0, -4260565.0, 3885644.0) !=
+    if (Polaris_SendLLAPosition(&context, 37.773971, -122.430996, -0.02) !=
         POLARIS_SUCCESS) {
       Polaris_Disconnect(&context);
       if (++reconnect_count >= MAX_RECONNECTS) {
