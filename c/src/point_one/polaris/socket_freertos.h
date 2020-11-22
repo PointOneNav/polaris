@@ -11,7 +11,7 @@
 #pragma once
 
 #include "FreeRTOS_IP.h"
-#include "FreeRTOS_sockets.h"
+#include "FreeRTOS_Sockets.h"
 
 typedef Socket_t P1_Socket_t;
 #define P1_INVALID_SOCKET FREERTOS_INVALID_SOCKET
@@ -29,8 +29,6 @@ typedef BaseType_t P1_RecvSize_t;
 
 #define SO_RCVTIMEO FREERTOS_SO_RCVTIMEO
 #define SO_SNDTIMEO FREERTOS_SO_SNDTIMEO
-
-typedef TickType_t P1_TimeValue_t;
 
 // Aliases mapping FreeRTOS function names to Berkeley names. The APIs are the
 // same as the Berkeley definitions for all of these functions.
@@ -62,10 +60,6 @@ typedef TickType_t P1_TimeValue_t;
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-static inline void P1_SetTime(int time_ms, P1_TimeValue_t* result) {
-  *result = pdMS_TO_TICKS(time_ms);
-}
 
 static inline int P1_SetAddress(const char* hostname, int port,
                                 P1_SocketAddrV4_t* result) {
