@@ -83,6 +83,7 @@ typedef struct {
 
   char auth_token[POLARIS_MAX_TOKEN_SIZE + 1];
   uint8_t authenticated;
+  uint8_t disconnected;
 
   uint8_t recv_buffer[POLARIS_RECV_BUFFER_SIZE];
   uint8_t send_buffer[POLARIS_SEND_BUFFER_SIZE];
@@ -233,7 +234,8 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id);
  * @brief Receive and dispatch the next block of incoming data.
  *
  * This function blocks until some data is received, or until @ref
- * POLARIS_RECV_TIMEOUT_MS elapses.
+ * POLARIS_RECV_TIMEOUT_MS elapses. If @ref Polaris_Disconnect() is called, this
+ * function will return immediately.
  *
  * @note
  * There is no guarantee that a data block contains a complete RTCM message, or
@@ -246,10 +248,9 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id);
  *
  * @param context The Polaris context to be used.
  *
- * @return The number of received bytes, or 0 if the timeout elapsed without
- *         receiving data.
- * @return @ref POLARIS_CONNECTION_CLOSED if the connection was closed remotely
- *         or by a call to @ref Polaris_Disconnect().
+ * @return The number of received bytes, or 0 if the timeout elapsed or @ref
+ *         Polaris_Disconnect() was called without receiving data.
+ * @return @ref POLARIS_CONNECTION_CLOSED if the connection was closed remotely.
  * @return @ref POLARIS_FORBIDDEN if the connection is closed before any data
  *         is received, indicating an authentication falure (invalid or expired
  *         access token).
@@ -271,8 +272,9 @@ int Polaris_Work(PolarisContext_t* context);
  * @param connection_timeout_ms The maximum elapsed time (in ms) between reads,
  *        after which the connection is considered lost.
  *
- * @return @ref POLARIS_CONNECTION_CLOSED if the connection was closed remotely
- *         or by a call to @ref Polaris_Disconnect().
+ * @return @ref POLARIS_SUCCESS if the connection was closed by a call to @ref
+ *         Polaris_Disconnect().
+ * @return @ref POLARIS_CONNECTION_CLOSED if the connection was closed remotely.
  * @return @ref POLARIS_TIMED_OUT if no data was received for the specified
  *         timeout.
  * @return @ref POLARIS_AUTH_ERROR if the connection is closed before any data

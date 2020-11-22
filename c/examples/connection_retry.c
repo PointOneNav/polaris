@@ -100,9 +100,17 @@ int main(int argc, const char* argv[]) {
     signal(SIGTERM, HandleSignal);
 
     int ret = Polaris_Run(&context, 30000);
-    if (ret == POLARIS_CONNECTION_CLOSED) {
-      P1_printf("Connection terminated.\n");
+    if (ret == POLARIS_SUCCESS) {
       break;
+    }
+    else if (ret == POLARIS_CONNECTION_CLOSED) {
+      P1_printf("Connection terminated remotely. Reconnecting.\n");
+    }
+    else if (ret == POLARIS_TIMED_OUT) {
+      P1_printf("Connection timed out. Reconnecting.\n");
+    }
+    else {
+      P1_printf("Unexpected error (%d). Reconnecting.\n", ret);
     }
 
     signal(SIGINT, SIG_DFL);

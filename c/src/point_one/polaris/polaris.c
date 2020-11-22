@@ -67,6 +67,7 @@ int Polaris_Init(PolarisContext_t* context) {
   context->socket = P1_INVALID_SOCKET;
   context->auth_token[0] = '\0';
   context->authenticated = 0;
+  context->disconnected = 0;
   context->rtcm_callback = NULL;
   return POLARIS_SUCCESS;
 }
@@ -161,6 +162,7 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
   }
 
   // Connect to the corrections endpoint.
+  context->disconnected = 0;
   int ret = OpenSocket(context, endpoint_url, endpoint_port);
   if (ret != POLARIS_SUCCESS) {
     P1_fprintf(stderr,
@@ -197,6 +199,7 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
 void Polaris_Disconnect(PolarisContext_t* context) {
   if (context->socket != P1_INVALID_SOCKET) {
     DebugPrintf("Closing Polaris connection.\n");
+    context->disconnected = 1;
     close(context->socket);
     context->socket = P1_INVALID_SOCKET;
   }
@@ -323,7 +326,11 @@ int Polaris_Work(PolarisContext_t* context) {
     DebugPrintf("Connection terminated. [ret=%d]\n", (int)bytes_read);
     close(context->socket);
     context->socket = P1_INVALID_SOCKET;
-    return POLARIS_CONNECTION_CLOSED;
+    if (context->disconnected) {
+      return 0;
+    } else {
+      return POLARIS_CONNECTION_CLOSED;
+    }
   } else if (bytes_read == 0) {
     // If recv() times out before we've gotten anything, the socket was probably
     // closed on the other end due to an auth failure.
@@ -374,20 +381,28 @@ int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
     ret = Polaris_Work(context);
 
     if (ret < 0) {
-      // Connection closed.
+      // Connection closed remotely or another error occurred.
       break;
     } else if (ret == 0) {
+      // Did the user call disconnect?
+      if (context->disconnected) {
+        ret = POLARIS_SUCCESS;
+        break;
+      }
       // Read timed out - see if we've hit the connection timeout. Otherwise,
       // try again.
-      P1_TimeValue_t current_time;
-      P1_GetCurrentTime(&current_time);
-      int elapsed_ms = P1_GetElapsedMS(&last_read_time, &current_time);
-      if (elapsed_ms >= connection_timeout_ms) {
-        P1_fprintf(stderr, "Warning: Connection timed out after %d ms.\n",
-                   elapsed_ms);
-        close(context->socket);
-        context->socket = P1_INVALID_SOCKET;
-        return POLARIS_TIMED_OUT;
+      else {
+        P1_TimeValue_t current_time;
+        P1_GetCurrentTime(&current_time);
+        int elapsed_ms = P1_GetElapsedMS(&last_read_time, &current_time);
+        if (elapsed_ms >= connection_timeout_ms) {
+          P1_fprintf(stderr, "Warning: Connection timed out after %d ms.\n",
+                     elapsed_ms);
+          close(context->socket);
+          context->socket = P1_INVALID_SOCKET;
+          ret = POLARIS_TIMED_OUT;
+          break;
+        }
       }
     } else {
       // Data received and dispatched to the callback.
