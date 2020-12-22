@@ -24,7 +24,10 @@
 
 #define POLARIS_API_URL "api.pointonenav.com"
 
-#pragma pack(push, 1)
+// Enforce 4-byte alignment and packing of all data structures and values so
+// that values larger than 1 B are aligned on platforms that require it.
+#pragma pack(push, 4)
+
 typedef struct {
   uint8_t start_byte0;
   uint8_t start_byte1;
@@ -44,6 +47,7 @@ typedef struct {
   int32_t longitude_dege7;
   int32_t altitude_mm;
 } PolarisLLAMessage_t;
+
 #pragma pack(pop)
 
 typedef uint16_t PolarisChecksum_t;

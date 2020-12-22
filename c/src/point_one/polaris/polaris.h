@@ -85,8 +85,10 @@ typedef struct {
   uint8_t authenticated;
   uint8_t disconnected;
 
-  uint8_t recv_buffer[POLARIS_RECV_BUFFER_SIZE];
-  uint8_t send_buffer[POLARIS_SEND_BUFFER_SIZE];
+  // Note: Enforcing 4-byte alignment of the buffers for platforms that require
+  // aligned 2- or 4-byte access.
+  uint8_t recv_buffer[POLARIS_RECV_BUFFER_SIZE] __attribute__((aligned (4)));
+  uint8_t send_buffer[POLARIS_SEND_BUFFER_SIZE] __attribute__((aligned (4)));
 
   PolarisCallback_t rtcm_callback;
 } PolarisContext_t;
