@@ -57,11 +57,12 @@ jobs:
         os: [ubuntu-latest]
         tool: [make, cmake, bazel]
         compiler: [g++]
-        include:
-          - arch: x64
-            os: windows-latest
-            tool: cmake
-            compiler: msvc
+        #include:
+        #   Windows not currently supported by C library.
+        #  - arch: x64
+        #    os: windows-latest
+        #    tool: cmake
+        #    compiler: msvc
     defaults:
       run:
         shell: bash
