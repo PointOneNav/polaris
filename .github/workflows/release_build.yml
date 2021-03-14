@@ -50,26 +50,102 @@ jobs:
   # Build the C example applications.
   build_c:
     name: Build C Applications
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         arch: [x64]
+        os: [ubuntu-latest]
+        tool: [make, cmake, bazel]
+        compiler: [g++]
+        include:
+          - arch: x64
+            os: windows-latest
+            tool: cmake
+            compiler: msvc
+    defaults:
+      run:
+        shell: bash
+        working-directory: c
     steps:
     - uses: actions/checkout@v2
 
-    - name: Build (native x64)
-      if: matrix.arch == 'x64'
+    # Environment setup.
+    - name: Setup Environment (Windows)
+      if: matrix.os == 'windows-latest'
       run: |
-        cd c/
+        echo "EXT=.exe" >> $GITHUB_ENV
+
+    - name: Setup Environment (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        echo "CXX=/usr/bin/${{ matrix.compiler }}" >> $GITHUB_ENV
+        echo "EXT=" >> $GITHUB_ENV
+
+    - name: Install msbuild (Windows)
+      if: matrix.os == 'windows-latest'
+      uses: microsoft/setup-msbuild@v1.0.2
+
+    # GNU Make build support.
+    - name: Build Library And Examples (GNU Make)
+      if: matrix.tool == 'make'
+      run: |
         make
 
-    - name: Create artifact
+    # CMake build support.
+    - name: Install CMake 3.16.x
+      if: matrix.tool == 'cmake'
+      uses: jwlawson/actions-setup-cmake@v1.4
+      with:
+        cmake-version: '3.16.x'
+
+    - name: Setup Build (CMake)
+      if: matrix.tool == 'cmake'
       run: |
-        cd c/
+        mkdir cmake_build
+        cd cmake_build
+        cmake -DCMAKE_INSTALL_PREFIX=install ..
+
+    - name: Build Library And Examples (CMake, Linux)
+      if: matrix.tool == 'cmake' && matrix.os == 'ubuntu-latest'
+      run: |
+        cd cmake_build
+        make
+        make install
+
+    - name: Build Library And Examples (CMake, Windows)
+      if: matrix.tool == 'cmake' && matrix.os == 'windows-latest'
+      run: |
+        cd cmake_build
+        MSBuild.exe p1_polaris_c_client.sln
+
+    # Bazel build support.
+    - name: Use Bazel 3.3.0
+      if: matrix.tool == 'bazel'
+      uses: abhinavsingh/setup-bazel@v3
+      with:
+        version: 3.3.0
+
+    - name: Build Library And Examples (Bazel, Native x64)
+      if: matrix.tool == 'bazel' && matrix.arch == 'x64'
+      run: |
+        bazel build -c opt //:polaris_client
+        bazel build -c opt //examples:*
+    - name: Build Library And Examples (Bazel, Cross-Compile)
+      if: matrix.tool == 'bazel' && matrix.arch != 'x64'
+      run: |
+        bazel build -c opt --config=${{ matrix.arch }} //:polaris_client
+        bazel build -c opt --config=${{ matrix.arch }} //examples:*
+
+    # Package artifacts (GNU Make only -- no need to do this for multiple build
+    # tools).
+    - name: Create artifact
+      if: matrix.tool == 'make'
+      run: |
         make print_applications |
         xargs tar czfv polaris_examples.tar.gz --transform 's|^|polaris/c/|'
 
     - name: Upload artifact
+      if: matrix.tool == 'make'
       uses: actions/upload-artifact@v1
       with:
         path: c/polaris_examples.tar.gz
