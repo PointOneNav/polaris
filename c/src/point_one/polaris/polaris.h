@@ -120,7 +120,14 @@ int Polaris_Init(PolarisContext_t* context);
  * @post
  * On success, `context.auth_token` will be populated with the generated token.
  *
+ * @warning
+ * `unique_id` must be unique across _all_ Polaris connections for the specified
+ * API key. If two instances connect at the same time using the same key and ID,
+ * they will conflict with each other and will not work correctly.
+ *
  * @param context The Polaris context to be used.
+ * @param api_key The Polaris API key to be used.
+ * @param unique_id A unique ID used to represent this individual instance.
  *
  * @return @ref POLARIS_SUCCESS on success.
  * @return @ref POLARIS_NOT_ENOUGH_SPACE if there is not enough storage to store
@@ -262,7 +269,7 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id);
  *         Polaris_Disconnect() was called without receiving data.
  * @return @ref POLARIS_CONNECTION_CLOSED if the connection was closed remotely.
  * @return @ref POLARIS_FORBIDDEN if the connection is closed before any data
- *         is received, indicating an authentication falure (invalid or expired
+ *         is received, indicating an authentication failure (invalid or expired
  *         access token).
  * @return @ref POLARIS_SOCKET_ERROR if the socket is not currently open.
  */
@@ -288,7 +295,7 @@ int Polaris_Work(PolarisContext_t* context);
  * @return @ref POLARIS_TIMED_OUT if no data was received for the specified
  *         timeout.
  * @return @ref POLARIS_AUTH_ERROR if the connection is closed before any data
- *         is received, indicating an authentication falure.
+ *         is received, indicating an authentication failure.
  * @return @ref POLARIS_SOCKET_ERROR if the socket is not currently open.
  */
 int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms);
