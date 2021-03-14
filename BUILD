@@ -16,5 +16,6 @@ cc_library(
     ],
     deps = [
         "//c:polaris_client",
+        "@com_github_google_glog//:glog",
     ],
 )

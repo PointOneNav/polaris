@@ -4,7 +4,44 @@
 
 #include "point_one/polaris/polarispp.h"
 
-#include <point_one/polaris/portability.h>
+#if defined(POLARIS_NO_GLOG)
+#include <iostream>
+
+// Reference:
+// https://stackoverflow.com/questions/49332013/adding-a-new-line-after-stdostream-output-without-explicitly-calling-it
+class StreamDelegate {
+ public:
+  ~StreamDelegate() { std::cerr << std::endl; }
+
+  template <typename T>
+  StreamDelegate& operator<<(T&& val) {
+    std::cerr << std::forward<T>(val);
+    return *this;
+  }
+};
+
+class Stream {
+ public:
+  template <typename T>
+  StreamDelegate operator<<(T&& val) {
+    std::cerr << std::forward<T>(val);
+    return StreamDelegate();
+  }
+};
+
+static Stream cerr_stream;
+
+#define LOG(severity) cerr_stream
+
+#if defined(POLARIS_DEBUG)
+#define VLOG(severity) cerr_stream
+#else
+static std::ostream null_stream(0);
+#define VLOG(severity) null_stream
+#endif // defined(POLARIS_DEBUG)
+#else
+#include <glog/logging.h>
+#endif // defined(POLARIS_NO_GLOG)
 
 using namespace point_one::polaris;
 
@@ -115,11 +152,11 @@ void PolarisClient::Run(double timeout_sec) {
     if (!auth_valid_) {
       int ret = polaris_.Authenticate(api_key_, unique_id_);
       if (ret == POLARIS_FORBIDDEN) {
-      P1_fprintf(stderr, "Authentication rejected. Is your API key valid?\n");
+        LOG(ERROR) << "Authentication rejected. Is your API key valid?";
         running_ = false;
         break;
       } else if (ret != POLARIS_SUCCESS) {
-        P1_fprintf(stderr, "Authentication failed. Retrying.\n");
+        LOG(WARNING) << "Authentication failed. Retrying.";
         continue;
       } else {
         auth_valid_ = true;
@@ -131,16 +168,15 @@ void PolarisClient::Run(double timeout_sec) {
     // In the calls below, if the connection times out or the access token is
     // rejected, try to connect again. If it fails too many times, the access
     // token may be expired - try reauthenticating.
-    P1_fprintf(stderr, "Authenticated. Connecting to Polaris...\n");
+    VLOG(1) << "Authenticated. Connecting to Polaris...";
 
     if (polaris_.ConnectTo(endpoint_url_, endpoint_port_) != POLARIS_SUCCESS) {
-      P1_fprintf(stderr,
-                 "Error connecting to Polaris corrections stream. Retrying.\n");
+      LOG(ERROR) << "Error connecting to Polaris corrections stream. Retrying.";
       IncrementRetryCount();
       continue;
     }
 
-    P1_fprintf(stderr, "Connected to Polaris...\n");
+    VLOG(1) << "Connected to Polaris...";
 
     // If there's an outstanding position update/beacon request resend it on
     // reconnect. Requests are cleared on a user-requested disconnect, so this
@@ -159,15 +195,12 @@ void PolarisClient::Run(double timeout_sec) {
     if (ret == POLARIS_SUCCESS) {
       // Connection closed by a call to PolarisInterface::Disconnect().
       continue;
-    }
-    else if (ret == POLARIS_CONNECTION_CLOSED) {
-      P1_fprintf(stderr, "Connection terminated remotely. Reconnecting.\n");
-    }
-    else if (ret == POLARIS_TIMED_OUT) {
-      P1_fprintf(stderr, "Connection timed out. Reconnecting.\n");
-    }
-    else {
-      P1_fprintf(stderr, "Unexpected error (%d). Reconnecting.\n", ret);
+    } else if (ret == POLARIS_CONNECTION_CLOSED) {
+      LOG(WARNING) << "Connection terminated remotely. Reconnecting.";
+    } else if (ret == POLARIS_TIMED_OUT) {
+      LOG(WARNING) << "Connection timed out. Reconnecting.";
+    } else {
+      LOG(ERROR) << "Unexpected error (" << ret << "). Reconnecting.";
     }
 
     // Connection closed due to an error. Reconnect.
@@ -206,9 +239,8 @@ void PolarisClient::IncrementRetryCount() {
   // we can't perform authentication so we'll just keep retrying.
   if (!api_key_.empty() && max_reconnect_attempts_ > 0 &&
       ++connect_count_ > max_reconnect_attempts_) {
-    P1_fprintf(stderr,
-               "Max reconnects exceeded. Clearing access token and retrying "
-               "authentication.\n");
+    LOG(WARNING) << "Max reconnects exceeded. Clearing access token and "
+                    "retrying authentication.";
     auth_valid_ = false;
     connect_count_ = 0;
   }
