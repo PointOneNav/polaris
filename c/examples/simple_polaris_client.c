@@ -11,7 +11,8 @@
 
 static PolarisContext_t context;
 
-void HandleData(const uint8_t* buffer, size_t size_bytes) {
+void HandleData(void* info, PolarisContext_t* context, const uint8_t* buffer,
+                size_t size_bytes) {
   P1_printf("Application received %u bytes.\n", (unsigned)size_bytes);
 }
 
@@ -46,7 +47,7 @@ int main(int argc, const char* argv[]) {
   // We now have a valid access token. Connect to the corrections service.
   P1_printf("Authenticated. Connecting to Polaris...\n");
 
-  Polaris_SetRTCMCallback(&context, HandleData);
+  Polaris_SetRTCMCallback(&context, HandleData, NULL);
 
   if (Polaris_Connect(&context) != POLARIS_SUCCESS) {
     return 3;

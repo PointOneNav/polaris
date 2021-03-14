@@ -69,6 +69,7 @@ int Polaris_Init(PolarisContext_t* context) {
   context->authenticated = 0;
   context->disconnected = 0;
   context->rtcm_callback = NULL;
+  context->rtcm_callback_info = NULL;
   return POLARIS_SUCCESS;
 }
 
@@ -207,8 +208,10 @@ void Polaris_Disconnect(PolarisContext_t* context) {
 
 /******************************************************************************/
 void Polaris_SetRTCMCallback(PolarisContext_t* context,
-                             PolarisCallback_t callback) {
+                             PolarisCallback_t callback,
+                             void* callback_info) {
   context->rtcm_callback = callback;
+  context->rtcm_callback_info = callback_info;
 }
 
 /******************************************************************************/
@@ -355,7 +358,8 @@ int Polaris_Work(PolarisContext_t* context) {
     // We don't interpret the incoming RTCM data, so there's no need to buffer
     // it up to a complete RTCM frame. We'll just forward what we got along.
     if (context->rtcm_callback) {
-      context->rtcm_callback(context->recv_buffer, bytes_read);
+      context->rtcm_callback(context->rtcm_callback_info, context,
+                             context->recv_buffer, bytes_read);
     }
 
     return (int)bytes_read;

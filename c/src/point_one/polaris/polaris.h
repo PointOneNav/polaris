@@ -76,9 +76,13 @@
 #define POLARIS_CONNECTION_CLOSED -7
 #define POLARIS_TIMED_OUT -8
 
-typedef void (*PolarisCallback_t)(const uint8_t* buffer, size_t size_bytes);
+struct PolarisContext_s;
+typedef struct PolarisContext_s PolarisContext_t;
 
-typedef struct {
+typedef void (*PolarisCallback_t)(void* info, PolarisContext_t* context,
+                                  const uint8_t* buffer, size_t size_bytes);
+
+struct PolarisContext_s {
   P1_Socket_t socket;
 
   char auth_token[POLARIS_MAX_TOKEN_SIZE + 1];
@@ -91,7 +95,8 @@ typedef struct {
   uint8_t send_buffer[POLARIS_SEND_BUFFER_SIZE] __attribute__((aligned (4)));
 
   PolarisCallback_t rtcm_callback;
-} PolarisContext_t;
+  void* rtcm_callback_info;
+};
 
 #ifdef __cplusplus
 extern "C" {
@@ -183,9 +188,12 @@ void Polaris_Disconnect(PolarisContext_t* context);
  *
  * @param context The Polaris context to be used.
  * @param callback The function to be called.
+ * @param callback_info An arbitrary pointer that will be passed to the callback
+ *        function when it is called.
  */
 void Polaris_SetRTCMCallback(PolarisContext_t* context,
-                             PolarisCallback_t callback);
+                             PolarisCallback_t callback,
+                             void* callback_info);
 
 /**
  * @brief Send a position update to the corrections service.
