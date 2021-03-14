@@ -1,35 +1,20 @@
 package(default_visibility = ["//visibility:public"])
 
-# Base Polaris protocol library. Header only.
+# Polaris client C++ library.
 cc_library(
-    name = "polaris",
+    name = "polaris_client",
+    srcs = [
+        "src/point_one/polaris/polarispp.cc",
+        "src/point_one/polaris/polarispp_interface.cc",
+    ],
     hdrs = [
-        "include/point_one/polaris.h",
-        "include/point_one/polaris_internal.h",
+        "src/point_one/polaris/polarispp.h",
+        "src/point_one/polaris/polarispp_interface.h",
     ],
     includes = [
-        "include",
-    ],
-)
-
-# Client written using Boost.Asio and Glog.
-# Could make clients using other networking libraries.
-cc_library(
-    name = "polaris_asio_client",
-    hdrs = [
-        "include/point_one/polaris_asio_client.h",
-        "include/point_one/polaris_asio_embedded_client.h",
-    ],
-    includes = [
-        "include",
+        "src",
     ],
     deps = [
-        "//:polaris",
-        "//external:glog",
-        "@boost//:asio",
-        "@boost//:bind",
-        "@boost//:property_tree",
-        "@boost//:system",
-        "@boringssl//:ssl",
+        "//c:polaris_client",
     ],
 )
