@@ -2,7 +2,7 @@
 bazel-*
 
 # CMake
-build
+build/
 
 # Visual Studio Code
 .vscode
