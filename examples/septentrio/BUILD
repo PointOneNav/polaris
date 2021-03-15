@@ -10,7 +10,7 @@ cc_library(
     ],
     deps = [
         "//examples:simple_serial_port",
-        "//third_party/septentrio",
+        "//third_party:septentrio",
         "@com_github_google_glog//:glog",
     ],
 )
