@@ -156,6 +156,7 @@ void PolarisClient::RequestBeacon(const std::string& beacon_id) {
 /******************************************************************************/
 void PolarisClient::Run(double timeout_sec) {
   const int timeout_ms = std::lround(timeout_sec * 1e3);
+  running_ = true;
   while (running_) {
     std::unique_lock<std::recursive_mutex> lock(mutex_);
 
