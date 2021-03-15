@@ -317,7 +317,9 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id) {
 
 /******************************************************************************/
 int Polaris_Work(PolarisContext_t* context) {
-  if (context->socket == P1_INVALID_SOCKET) {
+  if (context->disconnected) {
+    return 0;
+  } else if (context->socket == P1_INVALID_SOCKET) {
     P1_fprintf(stderr, "Error: Polaris connection not currently open.\n");
     return POLARIS_SOCKET_ERROR;
   }
@@ -326,7 +328,8 @@ int Polaris_Work(PolarisContext_t* context) {
   P1_RecvSize_t bytes_read =
       recv(context->socket, context->recv_buffer, POLARIS_RECV_BUFFER_SIZE, 0);
   if (bytes_read < 0) {
-    DebugPrintf("Connection terminated. [ret=%d]\n", (int)bytes_read);
+    DebugPrintf("Connection terminated. [ret=%d, disconnected=%d]\n",
+                (int)bytes_read, context->disconnected);
     close(context->socket);
     context->socket = P1_INVALID_SOCKET;
     if (context->disconnected) {
@@ -379,8 +382,8 @@ int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
   P1_GetCurrentTime(&last_read_time);
 
   size_t total_bytes = 0;
-  int ret;
-  while (1) {
+  int ret = POLARIS_ERROR;
+  while (!context->disconnected) {
     // Read the next data block.
     ret = Polaris_Work(context);
 
@@ -416,7 +419,7 @@ int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
   }
 
   DebugPrintf("Received %u total bytes.\n", (unsigned)total_bytes);
-  return ret;
+  return context->disconnected ? POLARIS_SUCCESS : ret;
 }
 
 /******************************************************************************/
