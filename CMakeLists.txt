@@ -1,53 +1,71 @@
 # Copyright (C) Point One Navigation - All Rights Reserved
+project(p1_polaris_client)
 
+cmake_minimum_required(VERSION 3.3.2)
 
-# Builds a sample client for connection to Point One Navigation's
-# correction service - Polaris.
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
 
-PROJECT(polaris)
+# Option definitions.
+option(BUILD_SHARED_LIBS "Build shared libraries instead of static libraries."
+       ON)
 
-CMAKE_MINIMUM_REQUIRED (VERSION 3.0.2)
-SET(CMAKE_CXX_FLAGS "-g -Wall -Werror -Wno-unused-local-typedef -std=c++11 -pthread -DNO_DECRYPTION=1" )
-SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
+option(BUILD_EXAMPLES "Build example applications." ON)
 
-INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/include)
-INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/examples)
-INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/examples/ntrip)
-ADD_EXECUTABLE(asio_example examples/serial_port_example.cc)
+# Set compilation flags.
+if (MSVC)
+    add_compile_options(/W4 /WX)
+else()
+    add_compile_options(-Wall -Werror)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -pthread")
+endif()
 
-ADD_SUBDIRECTORY(examples)
-ADD_EXECUTABLE(ntrip_example examples/ntrip/ntrip_example.cc)
-TARGET_LINK_LIBRARIES(ntrip_example ntrip)
+################################################################################
+# Check for dependencies.
+################################################################################
 
-ADD_SUBDIRECTORY(third_party)
-INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR})
-ADD_EXECUTABLE(septentrio_example examples/septentrio_example.cc)
-TARGET_LINK_LIBRARIES(septentrio_example septentrio)
+# Find glog.
+option(GLOG_PREFER_EXPORTED_GLOG_CMAKE_CONFIGURATION TRUE)
+find_package(Glog REQUIRED)
+include_directories(${GLOG_INCLUDE_DIRS})
 
+# Find gflags.
+option(GFLAGS_PREFER_EXPORTED_GFLAGS_CMAKE_CONFIGURATION TRUE)
+find_package(Gflags REQUIRED)
+include_directories(${GFLAGS_INCLUDE_DIRS})
 
-# FIND Glog
-FIND_PACKAGE(Glog)
-IF(FOUND_INSTALLED_GLOG_CMAKE_CONFIGURATION)
- TARGET_LINK_LIBRARIES(asio_example glog::glog ${GLOG_LIBRARY})
- TARGET_LINK_LIBRARIES(septentrio_example glog::glog ${GLOG_LIBRARY})
- TARGET_LINK_LIBRARIES(ntrip_example glog::glog ${GLOG_LIBRARY})
-ELSE(FOUND_INSTALLED_GLOG_CMAKE_CONFIGURATION)
- TARGET_LINK_LIBRARIES(asio_example glog ${GLOG_LIBRARY})
- TARGET_LINK_LIBRARIES(septentrio_example glog ${GLOG_LIBRARY})
- TARGET_LINK_LIBRARIES(ntrip_example glog ${GLOG_LIBRARY})
-ENDIF(FOUND_INSTALLED_GLOG_CMAKE_CONFIGURATION)
+################################################################################
+# Library Definitions
+################################################################################
 
-# FIND gflags
-FIND_PACKAGE(Gflags)
-TARGET_LINK_LIBRARIES(asio_example gflags ${GFLAG_LIBRARY})
-TARGET_LINK_LIBRARIES(septentrio_example gflags ${GFLAG_LIBRARY})
-TARGET_LINK_LIBRARIES(ntrip_example gflags ${GFLAG_LIBRARY})
+# Add the C library, used by the C++ library.
+add_subdirectory(c)
+include_directories(${PROJECT_SOURCE_DIR}/c/src)
 
+# Add the source directory to the include path.
+include_directories(${PROJECT_SOURCE_DIR}/src)
 
-# FIND Boost
-FIND_PACKAGE(Boost REQUIRED system date_time)
-INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS})
-TARGET_LINK_LIBRARIES(asio_example ${Boost_SYSTEM_LIBRARY})
-TARGET_LINK_LIBRARIES(septentrio_example ${Boost_SYSTEM_LIBRARY})
-TARGET_LINK_LIBRARIES(ntrip_example ${Boost_SYSTEM_LIBRARY})
-TARGET_LINK_LIBRARIES(ntrip_example ${Boost_DATE_TIME_LIBRARY})
+# Polaris client C++ library - all messages and supporting code.
+add_library(polarispp_client
+            src/point_one/polaris/polarispp.cc
+            src/point_one/polaris/polarispp_interface.cc)
+if (MSVC)
+    target_compile_definitions(polarispp_client PRIVATE BUILDING_DLL)
+endif()
+target_link_libraries(polarispp_client PUBLIC polaris_client)
+target_link_libraries(polarispp_client PUBLIC ${GLOG_LIBRARIES})
+target_link_libraries(polarispp_client PUBLIC ${GFLAGS_LIBRARIES})
+
+# Install targets.
+install(TARGETS polaris_client
+        LIBRARY DESTINATION lib)
+
+install(DIRECTORY src/point_one DESTINATION include
+        FILES_MATCHING PATTERN "*.h")
+
+################################################################################
+# Example Applications
+################################################################################
+
+if (BUILD_EXAMPLES)
+    add_subdirectory(examples)
+endif()

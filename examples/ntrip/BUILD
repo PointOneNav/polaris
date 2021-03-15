@@ -1,16 +1,5 @@
 package(default_visibility = ["//visibility:public"])
 
-# Simple NTRIP client meant for testing the NTRIP server example.
-cc_binary(
-    name = "ntrip_example_client",
-    srcs = ["ntrip_example_test_client.cc"],
-    deps = [
-        "@boost//:asio",
-        "@com_github_gflags_gflags//:gflags",
-        "@com_github_google_glog//:glog",
-    ],
-)
-
 # An example NTRIP server that forwards corrections from Polaris to connected
 # NTRIP clients.
 cc_binary(
@@ -26,7 +15,18 @@ cc_binary(
     ],
 )
 
-# Simple ntrip server library.
+# Simple NTRIP client meant for testing the NTRIP server example.
+cc_binary(
+    name = "ntrip_example_client",
+    srcs = ["ntrip_example_test_client.cc"],
+    deps = [
+        "@boost//:asio",
+        "@com_github_gflags_gflags//:gflags",
+        "@com_github_google_glog//:glog",
+    ],
+)
+
+# Simple NTRIP server library.
 cc_library(
     name = "ntrip_server_lib",
     srcs = [

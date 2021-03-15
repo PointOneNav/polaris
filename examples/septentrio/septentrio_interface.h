@@ -7,13 +7,12 @@
 #include <fstream>
 #include <string>
 
-#include "glog/logging.h"
+#include <glog/logging.h>
+#include <septentrio/measepoch.h>
+#include  <septentrio/sbfread.h>
 
 #include "sbf_framer.h"
 #include "../simple_asio_serial_port.h"
-
-#include "third_party/septentrio/measepoch.h"
-#include "third_party/septentrio/sbfread.h"
 
 #pragma once
 namespace point_one {

@@ -36,7 +36,7 @@ DEFINE_string(
     "If set, forward RTCM corrections over UDP to the specified hostname/IP in "
     "addition to the Septentrio receiver (over serial).");
 
-DEFINE_uint32(
+DEFINE_int32(
     udp_port, 0,
     "The UDP port to which RTCM corrections will be forwarded.");
 
