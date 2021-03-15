@@ -6,6 +6,8 @@
 
 #include "point_one/polaris/polarispp.h"
 
+#include <iomanip>
+
 #if defined(POLARIS_NO_GLOG)
 #include <iostream>
 
@@ -60,6 +62,7 @@ PolarisClient::PolarisClient(const std::string& api_key,
       unique_id_(unique_id) {
   polaris_.SetRTCMCallback([&](const uint8_t* buffer, size_t size_bytes) {
     std::unique_lock<std::recursive_mutex> lock(mutex_);
+    VLOG(2) << "Received " << size_bytes << " bytes.";
     if (callback_) {
       callback_(buffer, size_bytes);
     }
@@ -111,6 +114,8 @@ void PolarisClient::SetRTCMCallback(
 
 /******************************************************************************/
 void PolarisClient::SendECEFPosition(double x_m, double y_m, double z_m) {
+  VLOG(1) << "Setting current ECEF position: [" << std::fixed
+          << std::setprecision(2) << x_m << ", " << y_m << ", " << z_m << "]";
   std::unique_lock<std::recursive_mutex> lock(mutex_);
   current_request_type_ = RequestType::ECEF;
   ecef_position_m_[0] = x_m;
@@ -123,7 +128,10 @@ void PolarisClient::SendECEFPosition(double x_m, double y_m, double z_m) {
 
 /******************************************************************************/
 void PolarisClient::SendLLAPosition(double latitude_deg, double longitude_deg,
-                                 double altitude_m) {
+                                    double altitude_m) {
+  VLOG(1) << "Setting current LLA position: [" << std::fixed
+          << std::setprecision(6) << latitude_deg << ", " << longitude_deg
+          << ", " << std::setprecision(2) << altitude_m << "]";
   std::unique_lock<std::recursive_mutex> lock(mutex_);
   current_request_type_ = RequestType::LLA;
   lla_position_deg_[0] = latitude_deg;
@@ -136,6 +144,7 @@ void PolarisClient::SendLLAPosition(double latitude_deg, double longitude_deg,
 
 /******************************************************************************/
 void PolarisClient::RequestBeacon(const std::string& beacon_id) {
+  VLOG(1) << "Requesting beacon '" << beacon_id << "'.";
   std::unique_lock<std::recursive_mutex> lock(mutex_);
   current_request_type_ = RequestType::BEACON;
   beacon_id_ = beacon_id;
@@ -152,6 +161,8 @@ void PolarisClient::Run(double timeout_sec) {
 
     // Retrieve an access token using the specified API key.
     if (!auth_valid_) {
+      VLOG(1) << "Authenticating with Polaris service. [unique_id="
+              << unique_id_ << "]";
       int ret = polaris_.Authenticate(api_key_, unique_id_);
       if (ret == POLARIS_FORBIDDEN) {
         LOG(ERROR) << "Authentication rejected. Is your API key valid?";
@@ -170,7 +181,8 @@ void PolarisClient::Run(double timeout_sec) {
     // In the calls below, if the connection times out or the access token is
     // rejected, try to connect again. If it fails too many times, the access
     // token may be expired - try reauthenticating.
-    VLOG(1) << "Authenticated. Connecting to Polaris...";
+    VLOG(1) << "Authenticated. Connecting to Polaris... [" << endpoint_url_
+            << ":" << endpoint_port_ << "]";
 
     if (polaris_.ConnectTo(endpoint_url_, endpoint_port_) != POLARIS_SUCCESS) {
       LOG(ERROR) << "Error connecting to Polaris corrections stream. Retrying.";
@@ -184,6 +196,8 @@ void PolarisClient::Run(double timeout_sec) {
     // reconnect. Requests are cleared on a user-requested disconnect, so this
     // is a no-op on the first connection attempt.
     if (ResendRequest() != POLARIS_SUCCESS) {
+      VLOG(1)
+          << "Error resending position update/beacon request. Reconnecting.";
       polaris_.Disconnect();
       IncrementRetryCount();
       continue;
@@ -196,6 +210,7 @@ void PolarisClient::Run(double timeout_sec) {
 
     if (ret == POLARIS_SUCCESS) {
       // Connection closed by a call to PolarisInterface::Disconnect().
+      VLOG(1) << "Connection closed by disconnect request.";
       continue;
     } else if (ret == POLARIS_CONNECTION_CLOSED) {
       LOG(WARNING) << "Connection terminated remotely. Reconnecting.";
@@ -224,9 +239,11 @@ void PolarisClient::RunAsync(double timeout_sec) {
 /******************************************************************************/
 void PolarisClient::Disconnect() {
   std::unique_lock<std::recursive_mutex> lock(mutex_);
+  VLOG(1) << "Disconnecting from Polaris...";
   running_ = false;
   polaris_.Disconnect();
   if (run_thread_) {
+    VLOG(1) << "Joining run thread.";
     run_thread_->join();
     run_thread_.reset(nullptr);
   }
@@ -251,12 +268,19 @@ void PolarisClient::IncrementRetryCount() {
 /******************************************************************************/
 int PolarisClient::ResendRequest() {
   if (current_request_type_ == RequestType::ECEF) {
+    VLOG(1) << "Resending ECEF position update. [" << ecef_position_m_[0]
+            << ", " << ecef_position_m_[1] << ", " << ecef_position_m_[2]
+            << "]";
     return polaris_.SendECEFPosition(ecef_position_m_[0], ecef_position_m_[1],
                                      ecef_position_m_[2]);
   } else if (current_request_type_ == RequestType::LLA) {
+    VLOG(1) << "Resending LLA position update. [" << lla_position_deg_[0]
+            << ", " << lla_position_deg_[1] << ", " << lla_position_deg_[2]
+            << "]";
     return polaris_.SendLLAPosition(lla_position_deg_[0], lla_position_deg_[1],
                                     lla_position_deg_[2]);
   } else if (current_request_type_ == RequestType::BEACON) {
+    VLOG(1) << "Resending beacon request. [id=" << beacon_id_ << "]";
     return polaris_.RequestBeacon(beacon_id_.c_str());
   } else {
     return POLARIS_SUCCESS;
