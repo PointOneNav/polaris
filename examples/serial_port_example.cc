@@ -1,15 +1,29 @@
-// Copyright (C) Point One Navigation - All Rights Reserved
+/**************************************************************************/ /**
+ * @brief Example of receiving positions from a GNSS receiver and forwarding
+ *        Polaris corrections to the receiver over a serial port.
+ *
+ * Copyright (c) Point One Navigation - All Rights Reserved
+ ******************************************************************************/
 
 #include <iomanip>
 #include <iostream>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/asio.hpp>
-
 #include <gflags/gflags.h>
 
-#include <point_one/polaris_asio_client.h>
+#include <point_one/polaris/polarispp.h>
+
 #include "simple_asio_serial_port.h"
+
+// Allows for prebuilt versions of gflags/google that don't have gflags/google
+// namespace.
+namespace gflags {}
+namespace google {}
+using namespace gflags;
+using namespace google;
+
+using namespace point_one::polaris;
 
 // Polaris options:
 DEFINE_string(polaris_api_key, "",
@@ -25,20 +39,13 @@ DEFINE_string(receiver_serial_port, "/dev/ttyACM0",
 
 DEFINE_int32(receiver_serial_baud, 115200, "The baud rate of the serial port.");
 
-// Allows for prebuilt versions of gflags/google that don't have gflags/google
-// namespace.
-namespace gflags {}
-namespace google {}
-using namespace gflags;
-using namespace google;
-
 namespace {
-// Max size of string buffer to hold before clearing nmea data. Should be larger
+// Max size of string buffer to hold before clearing NMEA data. Should be larger
 // than max expected frame size.
 constexpr double MAX_NMEA_SENTENCE_LENGTH = 1024;
 
-// Variable to hold nmea data for this example.  If using in production
-// you should use a production grade nmea parser.
+// Variable to hold NMEA data for this example.  If using in production
+// you should use a production grade NMEA parser.
 std::string nmea_sentence_buffer;
 }  // namespace
 
@@ -51,8 +58,7 @@ double ConvertGGADegreesToDecimalDegrees(double gga_degrees) {
 
 // Handle an nmea string.  If message is a parseable gga message, send position
 // to server.
-void OnNmea(const std::string& nmea_str,
-            point_one::polaris::PolarisAsioClient* polaris_client) {
+void OnNmea(const std::string& nmea_str, PolarisClient* polaris_client) {
   // Some receivers put out INGGA messages as opposed to GPGGA.
   if (!(boost::istarts_with(nmea_str, "$GPGGA") ||
         boost::istarts_with(nmea_str, "$INGGA"))) {
@@ -79,7 +85,7 @@ void OnNmea(const std::string& nmea_str,
     double alt = std::stod(result[8], &sz);
     VLOG(3) << "Setting position: lat: " << lat << " lon: " << lon
               << " alt: " << alt;
-    polaris_client->SetPositionLLA(lat, lon, alt);
+    polaris_client->SendLLAPosition(lat, lon, alt);
   } catch (const std::exception&) {
     LOG(ERROR) << "Bad parse of received NMEA string: " << nmea_str;
     LOG(WARNING) << "Could not send position to server for bad NMEA string.";
@@ -88,9 +94,9 @@ void OnNmea(const std::string& nmea_str,
 }
 
 // Process receiver incomming messages.  This example code expects received data
-// to be ascii nmea messages.
+// to be ascii NMEA messages.
 void OnSerialData(const void* data, size_t length,
-                  point_one::polaris::PolarisAsioClient* polaris_client) {
+                  PolarisClient* polaris_client) {
   std::string nmea_data((const char*)data, length);
   for (const char& c : nmea_data) {
     if (c == '$') {
@@ -101,12 +107,14 @@ void OnSerialData(const void* data, size_t length,
   }
 
   if (nmea_sentence_buffer.size() > MAX_NMEA_SENTENCE_LENGTH) {
-    LOG(WARNING) << "Clearing nmea buffer.  Are you sending NMEA ascii data?";
+    LOG(WARNING) << "Clearing NMEA buffer.  Are you sending NMEA ascii data?";
   }
 }
 
 int main(int argc, char* argv[]) {
   // Parse commandline flags.
+  FLAGS_logtostderr = true;
+  FLAGS_colorlogtostderr = true;
   ParseCommandLineFlags(&argc, &argv, true);
 
   // Setup logging interface.
@@ -117,40 +125,38 @@ int main(int argc, char* argv[]) {
   boost::asio::io_service::work work(io_loop);
 
   // Create connection to receiver to forward correction data received from
-  // Polaris Server.
+  // Polaris.
   point_one::utils::SimpleAsioSerialPort serial_port_correction_forwarder(
       io_loop);
   if (!serial_port_correction_forwarder.Open(FLAGS_receiver_serial_port,
                                              FLAGS_receiver_serial_baud)) {
-    LOG(FATAL) << "Could not open serial port" << FLAGS_receiver_serial_port
+    LOG(ERROR) << "Could not open serial port " << FLAGS_receiver_serial_port
                << ", terminating.";
     return 1;
   }
 
   // Construct a Polaris client.
   if (FLAGS_polaris_api_key == "") {
-    LOG(FATAL) << "You must supply a Polaris API key to connect to the server.";
+    LOG(ERROR) << "You must supply a Polaris API key to connect to the server.";
     return 1;
   }
 
-  point_one::polaris::PolarisAsioClient polaris_client(
-      io_loop, FLAGS_polaris_api_key, FLAGS_polaris_unique_id);
-  polaris_client.SetPolarisBytesReceived(
-      std::bind(&point_one::utils::SimpleAsioSerialPort::Write,
-                &serial_port_correction_forwarder, std::placeholders::_1,
-                std::placeholders::_2));
-  // Application can set position at any time to change associated beacon(s) and
-  // corrections. Example setting postion to SF in ECEF meters.
-  // It is required to call SetPositionECEF at some cadence to assure the
-  // corrections received are the best and relevant.
-  polaris_client.SetPositionECEF(-2707071, -4260565, 3885644);
-  polaris_client.Connect();
+  PolarisClient polaris_client(FLAGS_polaris_api_key, FLAGS_polaris_unique_id);
+  polaris_client.SetRTCMCallback([&](const uint8_t* buffer, size_t size_bytes) {
+    serial_port_correction_forwarder.Write(buffer, size_bytes);
+  });
 
   serial_port_correction_forwarder.SetCallback(
       std::bind(OnSerialData, std::placeholders::_1, std::placeholders::_2,
                 &polaris_client));
 
-  // Run work loop.
+  // Run the Polaris connection connection asynchronously.
+  LOG(INFO) << "Connecting to Polaris...";
+  polaris_client.RunAsync();
+
+  // Now run the Boost IO loop to communicate with the serial port. This will
+  // block forever.
+  LOG(INFO) << "Listening for incoming serial data...";
   io_loop.run();
 
   return 0;

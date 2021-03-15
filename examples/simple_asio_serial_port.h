@@ -6,8 +6,7 @@
 
 #include <boost/asio.hpp>
 #include <boost/bind.hpp>
-
-#include "glog/logging.h"
+#include <glog/logging.h>
 
 namespace point_one {
 namespace utils {

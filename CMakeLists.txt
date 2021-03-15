@@ -13,7 +13,7 @@ SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
 INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/include)
 INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/examples)
 INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/examples/ntrip)
-ADD_EXECUTABLE(asio_example examples/asio_example.cc)
+ADD_EXECUTABLE(asio_example examples/serial_port_example.cc)
 
 ADD_SUBDIRECTORY(examples)
 ADD_EXECUTABLE(ntrip_example examples/ntrip/ntrip_example.cc)
