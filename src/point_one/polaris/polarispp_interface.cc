@@ -1,5 +1,7 @@
 /**************************************************************************/ /**
  * @brief Polaris client C++ wrapper class.
+ *
+ * Copyright (c) Point One Navigation - All Rights Reserved
  ******************************************************************************/
 
 #include "point_one/polaris/polarispp_interface.h"

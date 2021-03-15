@@ -1,5 +1,7 @@
 /**************************************************************************/ /**
  * @brief Polaris client C++ wrapper class.
+ *
+ * Copyright (c) Point One Navigation - All Rights Reserved
  ******************************************************************************/
 
 #pragma once
