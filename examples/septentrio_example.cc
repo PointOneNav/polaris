@@ -1,7 +1,5 @@
 // Copyright (C) Point One Navigation - All Rights Reserved
 
-#include <iostream>
-
 #include <boost/asio.hpp>
 #include <gflags/gflags.h>
 #include <glog/logging.h>

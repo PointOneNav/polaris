@@ -6,7 +6,6 @@
 
 #include <boost/asio.hpp>
 #include <boost/bind.hpp>
-
 #include <septentrio/measepoch.h>
 #include <septentrio/sbfdef.h>
 #include <septentrio/sbfread.h>

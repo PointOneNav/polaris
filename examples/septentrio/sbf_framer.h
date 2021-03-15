@@ -2,16 +2,13 @@
 
 #pragma once
 
-
-#include <stdint.h>
+#include <cstdint>
 #include <functional>
 
-#include "glog/logging.h"
-
+#include <glog/logging.h>
 
 namespace point_one {
 namespace gpsreceiver {
-
 
 #pragma pack(1)
 struct SbfHeader

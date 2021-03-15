@@ -2,11 +2,11 @@
 
 #include <chrono>
 
-#include <boost/asio.hpp>
 #include <ctime>
 #include <fstream>
 #include <string>
 
+#include <boost/asio.hpp>
 #include <glog/logging.h>
 #include <septentrio/measepoch.h>
 #include  <septentrio/sbfread.h>
