@@ -211,7 +211,7 @@ void PolarisClient::Run(double timeout_sec) {
 
     if (ret == POLARIS_SUCCESS) {
       // Connection closed by a call to PolarisInterface::Disconnect().
-      VLOG(1) << "Connection closed by disconnect request.";
+      VLOG(1) << "Connection closed by user.";
       continue;
     } else if (ret == POLARIS_CONNECTION_CLOSED) {
       LOG(WARNING) << "Connection terminated remotely. Reconnecting.";
@@ -243,6 +243,8 @@ void PolarisClient::Disconnect() {
   VLOG(1) << "Disconnecting from Polaris...";
   running_ = false;
   polaris_.Disconnect();
+  lock.unlock();
+
   if (run_thread_) {
     VLOG(1) << "Joining run thread.";
     run_thread_->join();
