@@ -10,7 +10,7 @@
 #include "glog/logging.h"
 
 #include "sbf_framer.h"
-#include "simple_asio_serial_port.h"
+#include "../simple_asio_serial_port.h"
 
 #include "third_party/septentrio/measepoch.h"
 #include "third_party/septentrio/sbfread.h"

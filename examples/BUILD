@@ -11,30 +11,6 @@ cc_binary(
     ],
 )
 
-## Simple example of connecting to the Polaris service using the embedded
-## keying method.
-#cc_binary(
-#    name = "simple_embedded_client",
-#    srcs = ["simple_embedded_client.cc"],
-#    deps = [
-#        "//:polaris_asio_client",
-#        "//external:gflags",
-#        "//external:glog",
-#    ],
-#)
-#
-## Example of forwarding RTCM corrections to a Septentrio receiver over serial.
-#cc_binary(
-#    name = "septentrio_example",
-#    srcs = ["septentrio_example.cc"],
-#    deps = [
-#        ":septentrio_service",
-#        "//:polaris_asio_client",
-#        "@com_github_gflags_gflags//:gflags",
-#        "@com_github_google_glog//:glog",
-#    ],
-#)
-
 # An example of obtaining receiver positions from a serial NMEA-0183 stream and
 # forwarding incoming Polaris corrections over the same serial connection.
 cc_binary(
@@ -60,3 +36,29 @@ cc_library(
         "@com_github_google_glog//:glog",
     ],
 )
+
+# Example of forwarding RTCM corrections to a Septentrio receiver over a serial
+# connection.
+cc_binary(
+    name = "septentrio_example",
+    srcs = ["septentrio_example.cc"],
+    deps = [
+        "//:polaris_client",
+        "//examples/septentrio:septentrio_service",
+        "@boost//:asio",
+        "@com_github_gflags_gflags//:gflags",
+        "@com_github_google_glog//:glog",
+    ],
+)
+
+## Simple example of connecting to the Polaris service using the embedded
+## keying method.
+#cc_binary(
+#    name = "simple_embedded_client",
+#    srcs = ["simple_embedded_client.cc"],
+#    deps = [
+#        "//:polaris_asio_client",
+#        "//external:gflags",
+#        "//external:glog",
+#    ],
+#)
