@@ -11,8 +11,8 @@
 
 static PolarisContext_t context;
 
-void HandleData(void* info, PolarisContext_t* context, const uint8_t* buffer,
-                size_t size_bytes) {
+void HandleData(void* info, PolarisContext_t* polaris_context,
+                const uint8_t* buffer, size_t size_bytes) {
   P1_printf("Application received %u bytes.\n", (unsigned)size_bytes);
 }
 
