@@ -192,6 +192,7 @@ void PolarisClient::Run(double timeout_sec) {
     }
 
     VLOG(1) << "Connected to Polaris...";
+    connected_ = true;
 
     // If there's an outstanding position update/beacon request resend it on
     // reconnect. Requests are cleared on a user-requested disconnect, so this
@@ -199,6 +200,7 @@ void PolarisClient::Run(double timeout_sec) {
     if (ResendRequest() != POLARIS_SUCCESS) {
       VLOG(1)
           << "Error resending position update/beacon request. Reconnecting.";
+      connected_ = false;
       polaris_.Disconnect();
       IncrementRetryCount();
       continue;
@@ -208,6 +210,8 @@ void PolarisClient::Run(double timeout_sec) {
     lock.unlock();
     int ret = polaris_.Run(timeout_ms);
     lock.lock();
+
+    connected_ = false;
 
     if (ret == POLARIS_SUCCESS) {
       // Connection closed by a call to PolarisInterface::Disconnect().
@@ -242,6 +246,7 @@ void PolarisClient::Disconnect() {
   std::unique_lock<std::recursive_mutex> lock(mutex_);
   VLOG(1) << "Disconnecting from Polaris...";
   running_ = false;
+  connected_ = false;
   polaris_.Disconnect();
   lock.unlock();
 
