@@ -12,7 +12,7 @@
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 
-#include <point_one/polaris/polarispp.h>
+#include <point_one/polaris/polaris_client.h>
 
 // Allows for prebuilt versions of gflags/google that don't have gflags/google
 // namespace.

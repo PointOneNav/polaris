@@ -4,7 +4,7 @@
  * Copyright (c) Point One Navigation - All Rights Reserved
  ******************************************************************************/
 
-#include "point_one/polaris/polarispp_interface.h"
+#include "point_one/polaris/polaris_interface.h"
 
 using namespace point_one::polaris;
 

@@ -12,7 +12,7 @@
 #include <boost/asio.hpp>
 #include <gflags/gflags.h>
 
-#include <point_one/polaris/polarispp.h>
+#include <point_one/polaris/polaris_client.h>
 
 #include "simple_asio_serial_port.h"
 

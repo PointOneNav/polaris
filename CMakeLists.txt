@@ -45,15 +45,15 @@ include_directories(${PROJECT_SOURCE_DIR}/c/src)
 include_directories(${PROJECT_SOURCE_DIR}/src)
 
 # Polaris client C++ library - all messages and supporting code.
-add_library(polarispp_client
-            src/point_one/polaris/polarispp.cc
-            src/point_one/polaris/polarispp_interface.cc)
+add_library(polaris_cpp_client
+            src/point_one/polaris/polaris_client.cc
+            src/point_one/polaris/polaris_interface.cc)
 if (MSVC)
-    target_compile_definitions(polarispp_client PRIVATE BUILDING_DLL)
+    target_compile_definitions(polaris_cpp_client PRIVATE BUILDING_DLL)
 endif()
-target_link_libraries(polarispp_client PUBLIC polaris_client)
-target_link_libraries(polarispp_client PUBLIC ${GLOG_LIBRARIES})
-target_link_libraries(polarispp_client PUBLIC ${GFLAGS_LIBRARIES})
+target_link_libraries(polaris_cpp_client PUBLIC polaris_client)
+target_link_libraries(polaris_cpp_client PUBLIC ${GLOG_LIBRARIES})
+target_link_libraries(polaris_cpp_client PUBLIC ${GFLAGS_LIBRARIES})
 
 # Install targets.
 install(TARGETS polaris_client

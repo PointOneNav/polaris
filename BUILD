@@ -4,12 +4,12 @@ package(default_visibility = ["//visibility:public"])
 cc_library(
     name = "polaris_client",
     srcs = [
-        "src/point_one/polaris/polarispp.cc",
-        "src/point_one/polaris/polarispp_interface.cc",
+        "src/point_one/polaris/polaris_client.cc",
+        "src/point_one/polaris/polaris_interface.cc",
     ],
     hdrs = [
-        "src/point_one/polaris/polarispp.h",
-        "src/point_one/polaris/polarispp_interface.h",
+        "src/point_one/polaris/polaris_client.h",
+        "src/point_one/polaris/polaris_interface.h",
     ],
     includes = [
         "src",

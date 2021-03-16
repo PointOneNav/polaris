@@ -1,10 +1,10 @@
 /**************************************************************************/ /**
- * @brief Polaris client C++ wrapper base class.
+ * @brief Polaris C++ client.
  *
  * Copyright (c) Point One Navigation - All Rights Reserved
  ******************************************************************************/
 
-#include "point_one/polaris/polarispp.h"
+#include "point_one/polaris/polaris_client.h"
 
 #include <iomanip>
 

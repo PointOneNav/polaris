@@ -230,7 +230,7 @@ polaris_dependencies()
 This will automatically download and import all requirements for the Polaris C++ Client.
 
 Then you can add `@p1_polaris//:polaris_client` to the `deps` section of a `cc_binary()` or `cc_library()` rule in your
-project, and add `#include <point_one/polaris/polarispp.h>` to your source code. For example:
+project, and add `#include <point_one/polaris/polaris_client.h>` to your source code. For example:
 
 ```bazel
 cc_binary(
@@ -307,9 +307,9 @@ brew install cmake boost gflags glog
 
 ### Using Polaris C++ Client ###
 
-1. Include `polarispp.h`:
+1. Include `polaris_client.h`:
    ```c++
-   #include <point_one/polaris/polarispp.h>
+   #include <point_one/polaris/polaris_client.h>
 
    using namespace point_one::polaris;
    ```

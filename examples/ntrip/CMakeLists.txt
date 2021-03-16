@@ -21,7 +21,7 @@ add_library(ntrip
 # NTRIP clients.
 add_executable(ntrip_example ntrip_example.cc)
 target_link_libraries(ntrip_example PUBLIC ntrip)
-target_link_libraries(ntrip_example PUBLIC polarispp_client)
+target_link_libraries(ntrip_example PUBLIC polaris_cpp_client)
 target_link_libraries(ntrip_example PUBLIC ${Boost_LIBRARIES})
 
 # Simple NTRIP client meant for testing the NTRIP server example.
