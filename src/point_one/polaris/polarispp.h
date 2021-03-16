@@ -34,7 +34,8 @@ class PolarisClient {
 
   void SetAuthToken(const std::string& auth_token);
 
-  void SetPolarisEndpoint(const std::string& endpoint_url, int endpoint_port);
+  void SetPolarisEndpoint(const std::string& endpoint_url,
+                          int endpoint_port = DEFAULT_ENDPOINT_PORT);
 
   void SetMaxReconnects(int max_reconnect_attempts);
 

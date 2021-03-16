@@ -8,6 +8,9 @@
 
 using namespace point_one::polaris;
 
+const std::string point_one::polaris::DEFAULT_ENDPOINT_URL =
+    POLARIS_ENDPOINT_URL;
+
 /******************************************************************************/
 PolarisInterface::PolarisInterface() {
   Polaris_Init(&context_);
@@ -21,7 +24,7 @@ PolarisInterface::~PolarisInterface() {
 
 /******************************************************************************/
 int PolarisInterface::Authenticate(const std::string& api_key,
-                                    const std::string& unique_id) {
+                                   const std::string& unique_id) {
   return Polaris_Authenticate(&context_, api_key.c_str(), unique_id.c_str());
 }
 
