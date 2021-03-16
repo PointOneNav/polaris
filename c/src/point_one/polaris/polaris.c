@@ -202,6 +202,7 @@ void Polaris_Disconnect(PolarisContext_t* context) {
   if (context->socket != P1_INVALID_SOCKET) {
     DebugPrint("Closing Polaris connection.\n");
     context->disconnected = 1;
+    shutdown(context->socket, SHUT_RDWR);
     close(context->socket);
     context->socket = P1_INVALID_SOCKET;
   }

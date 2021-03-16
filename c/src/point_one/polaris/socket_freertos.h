@@ -30,10 +30,13 @@ typedef BaseType_t P1_RecvSize_t;
 #define SO_RCVTIMEO FREERTOS_SO_RCVTIMEO
 #define SO_SNDTIMEO FREERTOS_SO_SNDTIMEO
 
+#define SHUT_RDWR FREERTOS_SHUT_RDWR
+
 // Aliases mapping FreeRTOS function names to Berkeley names. The APIs are the
 // same as the Berkeley definitions for all of these functions.
 #define socket FreeRTOS_socket
 #define close FreeRTOS_closesocket
+#define shutdown FreeRTOS_shutdown
 #define connect FreeRTOS_connect
 #define send FreeRTOS_send
 #define recv FreeRTOS_recv
