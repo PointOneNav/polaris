@@ -346,7 +346,7 @@ int Polaris_Work(PolarisContext_t* context) {
     if (!context->authenticated) {
       Print(
           "Warning: Polaris connection closed and no data received. Is your "
-          "authentication token valid?\n");
+          "authentication token valid? Did you send a position?\n");
       close(context->socket);
       context->socket = P1_INVALID_SOCKET;
       return POLARIS_FORBIDDEN;
