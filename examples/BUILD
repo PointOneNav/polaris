@@ -14,7 +14,7 @@ cc_binary(
 # An example of obtaining receiver positions from a serial NMEA-0183 stream and
 # forwarding incoming Polaris corrections over the same serial connection.
 cc_binary(
-    name = "serial_port_example",
+    name = "serial_port_client",
     srcs = ["serial_port_example.cc"],
     deps = [
         ":simple_serial_port",
@@ -40,7 +40,7 @@ cc_library(
 # Example of forwarding RTCM corrections to a Septentrio receiver over a serial
 # connection.
 cc_binary(
-    name = "septentrio_example",
+    name = "septentrio_client",
     srcs = ["septentrio_example.cc"],
     deps = [
         "//:polaris_client",

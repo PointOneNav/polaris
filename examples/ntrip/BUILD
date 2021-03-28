@@ -3,7 +3,7 @@ package(default_visibility = ["//visibility:public"])
 # An example NTRIP server that forwards corrections from Polaris to connected
 # NTRIP clients.
 cc_binary(
-    name = "ntrip_example",
+    name = "ntrip_example_server",
     srcs = ["ntrip_example.cc"],
     data = ["index.html"],
     deps = [
