@@ -12,8 +12,9 @@ corrections. Compatible GNSS receivers can achieve better than 10 cm accuracy wh
 
 Polaris corrections are distributed using the
 [RTCM 10403 standard](https://rtcm.myshopify.com/collections/differential-global-navigation-satellite-dgnss-standards/products/rtcm-10403-2-differential-gnss-global-navigation-satellite-systems-services-version-3-february-1-2013).
-The may be used with a [Point One Atlas](https://pointonenav.com/devkits) device, or with any RTCM-compatible GNSS
-receiver.
+They may be used with a [Point One Atlas](https://pointonenav.com/devkits) device, or with any RTCM-compatible GNSS
+receiver (currently tested with [Septentrio](https://www.septentrio.com/en), [Novatel](https://novatel.com/), and
+[u-Blox](https://www.u-blox.com/en) receivers).
 
 Documentation on the protocol used by the Polaris Service can be found at https://pointonenav.github.io/docs.
 
@@ -39,7 +40,7 @@ Documentation on the protocol used by the Polaris Service can be found at https:
   * [Example Applications](#example-applications)
     * [Simple Polaris Client](#simple-polaris-client)
     * [Generic Serial Receiver Example](#generic-serial-receiver-example)
-    * [NTRIP Proxy Example](#ntrip-proxy-example)
+    * [NTRIP Server Example](#ntrip-server-example)
     * [Septentrio Example](#septentrio-example)
       * [Hardware Setup](#hardware-setup)
       * [Configure AsteRx-m2](#configure-asterx-m2)
@@ -162,7 +163,7 @@ The generated example applications will be located in `examples/<APPLICATION NAM
    Polaris_Authenticate(&context, api_key, unique_id);
    ```
    - Note that the ID you specify must be unique across all Polaris sessions using your API key. If two connections use
-     the same API key, they will conflict and will not work correctly.
+     the same unique ID, they will conflict and will not work correctly.
    - If you already have a valid authentication token that you wish to use, you can skip the authentication step by
      calling `Polaris_SetAuthToken()`.
 4. Provide a callback function, which will be called when new data is received.
@@ -320,7 +321,7 @@ brew install cmake boost gflags glog
    PolarisClient client(api_key, unique_id);
    ```
    - Note that the ID you specify must be unique across all Polaris sessions using your API key. If two connections use
-     the same API key, they will conflict and will not work correctly.
+     the same unique ID, they will conflict and will not work correctly.
    - If you already have a valid authentication token that you wish to use, you can skip the authentication step by
      calling `SetAuthToken()`.
 3. Provide a callback function, which will be called when new data is received.
@@ -367,13 +368,13 @@ To run the application, run the following command:
 bazel run //examples:serial_port_example -- --polaris_api_key=<POLARIS_API_KEY> --device=/dev/ttyACM0
 ```
 
-#### NTRIP Proxy Example ####
+#### NTRIP Server Example ####
 
 Receive incoming Polaris corrections data and relay it as a simple NTRIP caster for use with devices that take NTRIP
 corrections. Receiver positions sent to the NTRIP server (via a NMEA `$GPGGA` message) will be forwarded to Polaris to
 associate the receiver with an appropriate corrections stream.
 
-For example, to run an NTRIP proxy on TCP port 2101 (the standard NTRIP port), run the following command:
+For example, to run an NTRIP server on TCP port 2101 (the standard NTRIP port), run the following command:
 ```
 bazel run -c opt examples/ntrip:ntrip_example -- --polaris_api_key=<POLARIS_API_KEY> 0.0.0.0 2101 examples/ntrip
 ```
@@ -381,6 +382,9 @@ bazel run -c opt examples/ntrip:ntrip_example -- --polaris_api_key=<POLARIS_API_
 Any GNSS receiver that supports an NTRIP connection can then connect to the computer running this application to receive
 corrections, connecting to the NTRIP endpoint `/Polaris`. The receiver should be configured to send NMEA `$GPGGA`
 messages at a regular cadence (typically 1hz).
+
+Note that the NTRIP server example application is not a full NTRIP server, and only supports a limited set of features.
+In particular, it does not support handling multiple connected receivers at a time.
 
 #### Septentrio Receiver Example ####
 
