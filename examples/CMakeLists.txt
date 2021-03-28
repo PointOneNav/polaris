@@ -11,6 +11,11 @@ include_directories(${Boost_INCLUDE_DIRS})
 ################################################################################
 
 # Simple example of connecting to the Polaris service.
+add_executable(simple_polaris_cpp_client simple_polaris_client.cc)
+target_link_libraries(simple_polaris_cpp_client PUBLIC polaris_cpp_client)
+
+# An example of obtaining receiver positions from a serial NMEA-0183 stream and
+# forwarding incoming Polaris corrections over the same serial connection.
 add_executable(serial_port_client serial_port_example.cc)
 target_link_libraries(serial_port_client PUBLIC polaris_cpp_client)
 target_link_libraries(serial_port_client PUBLIC ${Boost_LIBRARIES})
