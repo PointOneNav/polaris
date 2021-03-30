@@ -87,8 +87,11 @@ void PolarisClient::SetAuthToken(const std::string& auth_token) {
   std::unique_lock<std::recursive_mutex> lock(mutex_);
   api_key_ = "";
   unique_id_ = "";
-  auth_valid_ = true;
-  polaris_.SetAuthToken(auth_token);
+  if (polaris_.SetAuthToken(auth_token) == POLARIS_SUCCESS) {
+    auth_valid_ = true;
+  } else {
+    LOG(ERROR) << "Unable to set authentication token.";
+  }
 }
 
 /******************************************************************************/
@@ -167,6 +170,10 @@ void PolarisClient::Run(double timeout_sec) {
       int ret = polaris_.Authenticate(api_key_, unique_id_);
       if (ret == POLARIS_FORBIDDEN) {
         LOG(ERROR) << "Authentication rejected. Is your API key valid?";
+        running_ = false;
+        break;
+      } else if (ret == POLARIS_ERROR) {
+        LOG(ERROR) << "Invalid API key/unique ID specified.";
         running_ = false;
         break;
       } else if (ret != POLARIS_SUCCESS) {

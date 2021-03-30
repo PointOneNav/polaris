@@ -13,6 +13,8 @@
 #define POLARIS_ENDPOINT_URL "polaris.pointonenav.com"
 #define POLARIS_ENDPOINT_PORT 8088
 
+#define POLARIS_MAX_UNIQUE_ID_SIZE 36
+
 #ifndef POLARIS_MAX_TOKEN_SIZE
 # define POLARIS_MAX_TOKEN_SIZE 512
 #endif
@@ -130,6 +132,7 @@ int Polaris_Init(PolarisContext_t* context);
  * @param unique_id A unique ID used to represent this individual instance.
  *
  * @return @ref POLARIS_SUCCESS on success.
+ * @return @ref POLARIS_ERROR if the inputs are invalid.
  * @return @ref POLARIS_NOT_ENOUGH_SPACE if there is not enough storage to store
  *         the authentication request or response.
  * @return @ref POLARIS_FORBIDDEN if the API key was rejected.
@@ -148,6 +151,7 @@ int Polaris_Authenticate(PolarisContext_t* context, const char* api_key,
  * @param auth_token The desired authentication token.
  *
  * @return @ref POLARIS_SUCCESS on success.
+ * @return @ref POLARIS_ERROR if the auth token is not valid.
  * @return @ref POLARIS_NOT_ENOUGH_SPACE if the token does not fit in the
  *         allocated storage.
  */
