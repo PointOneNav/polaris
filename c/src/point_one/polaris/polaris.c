@@ -80,6 +80,27 @@ int Polaris_Init(PolarisContext_t* context) {
 /******************************************************************************/
 int Polaris_Authenticate(PolarisContext_t* context, const char* api_key,
                          const char* unique_id) {
+  // Sanity check the inputs.
+  if (strlen(api_key) > 0) {
+    P1_Print("API key must not be empty.\n");
+    return POLARIS_ERROR;
+  }
+
+  if (strlen(unique_id) > POLARIS_MAX_UNIQUE_ID_SIZE) {
+    P1_Print("Unique ID must be a maximum of %d characters.\n",
+             POLARIS_MAX_UNIQUE_ID_SIZE);
+    return POLARIS_ERROR;
+  } else {
+    for (const char* ptr = unique_id; *ptr != '\0'; ++ptr) {
+      char c = *ptr;
+      if (c != '-' && c != '_' && (c < 'A' || c > 'Z') &&
+          (c < 'a' || c > 'z') && (c < '0' || c > '9')) {
+        P1_Print("Invalid unique ID specified.\n");
+        return POLARIS_ERROR;
+      }
+    }
+  }
+
   // Send an auth request, then wait for the response containing the access
   // token.
   //
@@ -141,7 +162,10 @@ int Polaris_Authenticate(PolarisContext_t* context, const char* api_key,
 /******************************************************************************/
 int Polaris_SetAuthToken(PolarisContext_t* context, const char* auth_token) {
   size_t length = strlen(auth_token);
-  if (length > POLARIS_MAX_TOKEN_SIZE) {
+  if (length == 0) {
+    P1_Print("User-provided auth token must not be empty.\n");
+    return POLARIS_ERROR;
+  } else if (length > POLARIS_MAX_TOKEN_SIZE) {
     P1_Print("User-provided auth token is too long.\n");
     return POLARIS_NOT_ENOUGH_SPACE;
   } else {
