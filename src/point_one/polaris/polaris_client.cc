@@ -221,6 +221,10 @@ void PolarisClient::Run(double timeout_sec) {
       LOG(WARNING) << "Connection terminated remotely. Reconnecting.";
     } else if (ret == POLARIS_TIMED_OUT) {
       LOG(WARNING) << "Connection timed out. Reconnecting.";
+    } else if (ret == POLARIS_FORBIDDEN) {
+      LOG(WARNING) << "Connection timed out. Reconnecting.";
+    } else if (ret == POLARIS_SOCKET_ERROR) {
+      LOG(WARNING) << "Socket closed unexpectedly. Reconnecting.";
     } else {
       LOG(ERROR) << "Unexpected error (" << ret << "). Reconnecting.";
     }
