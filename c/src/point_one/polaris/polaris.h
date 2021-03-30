@@ -130,6 +130,8 @@ int Polaris_Init(PolarisContext_t* context);
  * @param context The Polaris context to be used.
  * @param api_key The Polaris API key to be used.
  * @param unique_id A unique ID used to represent this individual instance.
+ *        Unique IDs must be a maximum of 36 characters, and may include only
+ *        letters, numbers, hyphens, and underscores (`^[\w*\d*-]*$`).
  *
  * @return @ref POLARIS_SUCCESS on success.
  * @return @ref POLARIS_ERROR if the inputs are invalid.
