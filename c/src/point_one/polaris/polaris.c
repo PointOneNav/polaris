@@ -16,26 +16,31 @@
 #define MAKE_STR(x) #x
 #define STR(x) MAKE_STR(x)
 
+#define P1_Print(x, ...) \
+  P1_fprintf(stderr, "polaris.c:" STR(__LINE__) "] " x, ##__VA_ARGS__)
+#define P1_PrintError(x, ...) \
+  P1_perror("polaris.c:" STR(__LINE__) "] " x, ##__VA_ARGS__)
+
 #if defined(POLARIS_DEBUG) || defined(POLARIS_TRACE)
-# define DebugPrintf(x, ...) P1_printf(x, ##__VA_ARGS__)
+# define P1_DebugPrint(x, ...) P1_Print(x, ##__VA_ARGS__)
 #else
-# define DebugPrintf(x, ...) do {} while(0)
+# define P1_DebugPrint(x, ...) do {} while(0)
 #endif
 
 #if defined(POLARIS_TRACE)
 void PrintData(const uint8_t* buffer, size_t length) {
   for (size_t i = 0; i < length; ++i) {
     if (i % 16 != 0) {
-      P1_printf(" ");
+      P1_DebugPrint(" ");
     }
 
-    P1_printf("%02x", buffer[i]);
+    P1_DebugPrint("%02x", buffer[i]);
 
     if (i % 16 == 15) {
-      P1_printf("\n");
+      P1_DebugPrint("\n");
     }
   }
-  P1_printf("\n");
+  P1_DebugPrint("\n");
 }
 #else
 # define PrintData(buffer, length) do {} while(0)
@@ -53,14 +58,13 @@ static int GetHTTPResponse(PolarisContext_t* context);
 /******************************************************************************/
 int Polaris_Init(PolarisContext_t* context) {
   if (POLARIS_RECV_BUFFER_SIZE < POLARIS_MAX_HTTP_MESSAGE_SIZE) {
-    P1_fprintf(stderr,
-               "Warning: Receive buffer smaller than expected authentication "
-               "response.\n");
+    P1_Print(
+        "Warning: Receive buffer smaller than expected authentication "
+        "response.\n");
   }
 
   if (POLARIS_SEND_BUFFER_SIZE < POLARIS_MAX_MESSAGE_SIZE) {
-    P1_fprintf(
-        stderr,
+    P1_Print(
         "Warning: Send buffer smaller than max expected outbound packet.\n");
   }
 
@@ -69,6 +73,7 @@ int Polaris_Init(PolarisContext_t* context) {
   context->authenticated = 0;
   context->disconnected = 0;
   context->rtcm_callback = NULL;
+  context->rtcm_callback_info = NULL;
   return POLARIS_SUCCESS;
 }
 
@@ -92,17 +97,17 @@ int Polaris_Authenticate(PolarisContext_t* context, const char* api_key,
       snprintf((char*)context->recv_buffer, POLARIS_RECV_BUFFER_SIZE,
                AUTH_REQUEST_TEMPLATE, api_key, unique_id);
   if (content_size < 0) {
-    P1_fprintf(stderr, "Error populating authentication request payload.\n");
+    P1_Print("Error populating authentication request payload.\n");
     return POLARIS_NOT_ENOUGH_SPACE;
   }
 
-  DebugPrintf("Sending auth request. [api_key=%s, unique_id=%s]\n", api_key,
-              unique_id);
+  P1_DebugPrint("Sending auth request. [api_key=%s, unique_id=%s]\n", api_key,
+             unique_id);
   int status_code =
       SendPOSTRequest(context, POLARIS_API_URL, 80, "/api/v1/auth/token",
                       context->recv_buffer, (size_t)content_size);
   if (status_code < 0) {
-    P1_fprintf(stderr, "Error sending authentication request.\n");
+    P1_Print("Error sending authentication request.\n");
     return status_code;
   }
 
@@ -111,25 +116,24 @@ int Polaris_Authenticate(PolarisContext_t* context, const char* api_key,
     const char* token_start =
         strstr((char*)context->recv_buffer, "\"access_token\":\"");
     if (token_start == NULL) {
-      P1_fprintf(stderr, "Authentication token not found in response.\n");
+      P1_Print("Authentication token not found in response.\n");
       return POLARIS_AUTH_ERROR;
     } else {
       token_start += 16;
       if (sscanf(token_start, "%" STR(POLARIS_MAX_TOKEN_SIZE) "[^\"]s",
                  context->auth_token) != 1) {
-        P1_fprintf(stderr, "Authentication token not found in response.\n");
+        P1_Print("Authentication token not found in response.\n");
         return POLARIS_AUTH_ERROR;
       } else {
-        DebugPrintf("Received access token: %s\n", context->auth_token);
+        P1_DebugPrint("Received access token: %s\n", context->auth_token);
         return POLARIS_SUCCESS;
       }
     }
   } else if (status_code == 403) {
-    P1_fprintf(stderr, "Authentication failed. Please check your API key.\n");
+    P1_Print("Authentication failed. Please check your API key.\n");
     return POLARIS_FORBIDDEN;
   } else {
-    P1_fprintf(stderr, "Unexpected authentication response (%d).\n",
-               status_code);
+    P1_Print("Unexpected authentication response (%d).\n", status_code);
     return POLARIS_AUTH_ERROR;
   }
 }
@@ -138,11 +142,12 @@ int Polaris_Authenticate(PolarisContext_t* context, const char* api_key,
 int Polaris_SetAuthToken(PolarisContext_t* context, const char* auth_token) {
   size_t length = strlen(auth_token);
   if (length > POLARIS_MAX_TOKEN_SIZE) {
-    P1_fprintf(stderr, "User-provided auth token is too long.\n");
+    P1_Print("User-provided auth token is too long.\n");
     return POLARIS_NOT_ENOUGH_SPACE;
   } else {
     memcpy(context->auth_token, auth_token, length + 1);
-    DebugPrintf("Using user-specified access token: %s\n", context->auth_token);
+    P1_DebugPrint("Using user-specified access token: %s\n",
+                  context->auth_token);
     return POLARIS_SUCCESS;
   }
 }
@@ -157,7 +162,7 @@ int Polaris_Connect(PolarisContext_t* context) {
 int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
                       int endpoint_port) {
   if (context->auth_token[0] == '\0') {
-    P1_fprintf(stderr, "Error: Auth token not specified.\n");
+    P1_Print("Error: Auth token not specified.\n");
     return POLARIS_AUTH_ERROR;
   }
 
@@ -165,9 +170,8 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
   context->disconnected = 0;
   int ret = OpenSocket(context, endpoint_url, endpoint_port);
   if (ret != POLARIS_SUCCESS) {
-    P1_fprintf(stderr,
-               "Error connecting to corrections endpoint: tcp://%s:%d.\n",
-               endpoint_url, endpoint_port);
+    P1_Print("Error connecting to corrections endpoint: tcp://%s:%d.\n",
+          endpoint_url, endpoint_port);
     return ret;
   }
 
@@ -182,11 +186,11 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
   memmove(header + 1, context->auth_token, token_length);
   size_t message_size = Polaris_PopulateChecksum(context->recv_buffer);
 
-  DebugPrintf("Sending access token message. [size=%u B]\n",
+  P1_DebugPrint("Sending access token message. [size=%u B]\n",
               (unsigned)message_size);
   ret = send(context->socket, context->recv_buffer, message_size, 0);
   if (ret != message_size) {
-    P1_perror("Error sending authentication token", ret);
+    P1_PrintError("Error sending authentication token", ret);
     close(context->socket);
     context->socket = P1_INVALID_SOCKET;
     return POLARIS_SEND_ERROR;
@@ -198,8 +202,9 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
 /******************************************************************************/
 void Polaris_Disconnect(PolarisContext_t* context) {
   if (context->socket != P1_INVALID_SOCKET) {
-    DebugPrintf("Closing Polaris connection.\n");
+    P1_DebugPrint("Closing Polaris connection.\n");
     context->disconnected = 1;
+    shutdown(context->socket, SHUT_RDWR);
     close(context->socket);
     context->socket = P1_INVALID_SOCKET;
   }
@@ -207,15 +212,17 @@ void Polaris_Disconnect(PolarisContext_t* context) {
 
 /******************************************************************************/
 void Polaris_SetRTCMCallback(PolarisContext_t* context,
-                             PolarisCallback_t callback) {
+                             PolarisCallback_t callback,
+                             void* callback_info) {
   context->rtcm_callback = callback;
+  context->rtcm_callback_info = callback_info;
 }
 
 /******************************************************************************/
 int Polaris_SendECEFPosition(PolarisContext_t* context, double x_m, double y_m,
                              double z_m) {
   if (context->socket == P1_INVALID_SOCKET) {
-    P1_fprintf(stderr, "Error: Polaris connection not currently open.\n");
+    P1_Print("Error: Polaris connection not currently open.\n");
     return POLARIS_SOCKET_ERROR;
   }
 
@@ -229,11 +236,12 @@ int Polaris_SendECEFPosition(PolarisContext_t* context, double x_m, double y_m,
 
 #ifdef P1_FREERTOS
   // Floating point printf() not available in FreeRTOS.
-  DebugPrintf("Sending ECEF position. [size=%u B, position=[%d, %d, %d] cm]\n",
-              (unsigned)message_size, le32toh(payload->x_cm),
-              le32toh(payload->y_cm), le32toh(payload->z_cm));
+  P1_DebugPrint(
+      "Sending ECEF position. [size=%u B, position=[%d, %d, %d] cm]\n",
+      (unsigned)message_size, le32toh(payload->x_cm), le32toh(payload->y_cm),
+      le32toh(payload->z_cm));
 #else
-  DebugPrintf(
+  P1_DebugPrint(
       "Sending ECEF position. [size=%u B, position=[%.2f, %.2f, %.2f]]\n",
       (unsigned)message_size, x_m, y_m, z_m);
 #endif
@@ -241,7 +249,7 @@ int Polaris_SendECEFPosition(PolarisContext_t* context, double x_m, double y_m,
 
   int ret = send(context->socket, context->send_buffer, message_size, 0);
   if (ret != message_size) {
-    P1_perror("Error sending ECEF position", ret);
+    P1_PrintError("Error sending ECEF position", ret);
     return POLARIS_SEND_ERROR;
   } else {
     return POLARIS_SUCCESS;
@@ -252,7 +260,7 @@ int Polaris_SendECEFPosition(PolarisContext_t* context, double x_m, double y_m,
 int Polaris_SendLLAPosition(PolarisContext_t* context, double latitude_deg,
                             double longitude_deg, double altitude_m) {
   if (context->socket == P1_INVALID_SOCKET) {
-    P1_fprintf(stderr, "Error: Polaris connection not currently open.\n");
+    P1_Print("Error: Polaris connection not currently open.\n");
     return POLARIS_SOCKET_ERROR;
   }
 
@@ -266,12 +274,12 @@ int Polaris_SendLLAPosition(PolarisContext_t* context, double latitude_deg,
 
 #ifdef P1_FREERTOS
   // Floating point printf() not available in FreeRTOS.
-  DebugPrintf(
+  P1_DebugPrint(
       "Sending LLA position. [size=%u B, position=[%d.0e-7, %d.0e-7, %d]]\n",
       (unsigned)message_size, le32toh(payload->latitude_dege7),
       le32toh(payload->longitude_dege7), le32toh(payload->altitude_mm));
 #else
-  DebugPrintf(
+  P1_DebugPrint(
       "Sending LLA position. [size=%u B, position=[%.6f, %.6f, %.2f]]\n",
       (unsigned)message_size, latitude_deg, longitude_deg, altitude_m);
 #endif
@@ -279,7 +287,7 @@ int Polaris_SendLLAPosition(PolarisContext_t* context, double latitude_deg,
 
   int ret = send(context->socket, context->send_buffer, message_size, 0);
   if (ret != message_size) {
-    P1_perror("Error sending LLA position", ret);
+    P1_PrintError("Error sending LLA position", ret);
     return POLARIS_SEND_ERROR;
   } else {
     return POLARIS_SUCCESS;
@@ -289,7 +297,7 @@ int Polaris_SendLLAPosition(PolarisContext_t* context, double latitude_deg,
 /******************************************************************************/
 int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id) {
   if (context->socket == P1_INVALID_SOCKET) {
-    P1_fprintf(stderr, "Error: Polaris connection not currently open.\n");
+    P1_Print("Error: Polaris connection not currently open.\n");
     return POLARIS_SOCKET_ERROR;
   }
 
@@ -299,13 +307,13 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id) {
   memmove(header + 1, beacon_id, id_length);
   size_t message_size = Polaris_PopulateChecksum(context->send_buffer);
 
-  DebugPrintf("Sending beacon request. [size=%u B, beacon='%s']\n",
+  P1_DebugPrint("Sending beacon request. [size=%u B, beacon='%s']\n",
               (unsigned)message_size, beacon_id);
   PrintData(context->send_buffer, message_size);
 
   int ret = send(context->socket, context->send_buffer, message_size, 0);
   if (ret != message_size) {
-    P1_perror("Error sending beacon request", ret);
+    P1_PrintError("Error sending beacon request", ret);
     return POLARIS_SEND_ERROR;
   } else {
     return POLARIS_SUCCESS;
@@ -314,16 +322,20 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id) {
 
 /******************************************************************************/
 int Polaris_Work(PolarisContext_t* context) {
-  if (context->socket == P1_INVALID_SOCKET) {
-    P1_fprintf(stderr, "Error: Polaris connection not currently open.\n");
+  if (context->disconnected) {
+    return 0;
+  } else if (context->socket == P1_INVALID_SOCKET) {
+    P1_Print("Error: Polaris connection not currently open.\n");
     return POLARIS_SOCKET_ERROR;
   }
 
-  DebugPrintf("Listening for data block.\n");
+  P1_DebugPrint("Listening for data block.\n");
   P1_RecvSize_t bytes_read =
       recv(context->socket, context->recv_buffer, POLARIS_RECV_BUFFER_SIZE, 0);
+  P1_DebugPrint("recv returned with %d\n", bytes_read);
   if (bytes_read < 0) {
-    DebugPrintf("Connection terminated. [ret=%d]\n", (int)bytes_read);
+    P1_DebugPrint("Connection terminated. [ret=%d, disconnected=%d]\n",
+                (int)bytes_read, context->disconnected);
     close(context->socket);
     context->socket = P1_INVALID_SOCKET;
     if (context->disconnected) {
@@ -335,10 +347,9 @@ int Polaris_Work(PolarisContext_t* context) {
     // If recv() times out before we've gotten anything, the socket was probably
     // closed on the other end due to an auth failure.
     if (!context->authenticated) {
-      P1_fprintf(
-          stderr,
+      P1_Print(
           "Warning: Polaris connection closed and no data received. Is your "
-          "authentication token valid?\n");
+          "authentication token valid? Did you send a position?\n");
       close(context->socket);
       context->socket = P1_INVALID_SOCKET;
       return POLARIS_FORBIDDEN;
@@ -346,16 +357,18 @@ int Polaris_Work(PolarisContext_t* context) {
     // Otherwise, there may just not be new data available (e.g., user hasn't
     // sent a position yet, network connection temporarily broken, etc.).
     else {
+      P1_DebugPrint("Received 0 bytes/socket timed out.\n");
       return 0;
     }
   } else {
-    DebugPrintf("Received %u bytes.\n", (unsigned)bytes_read);
+    P1_DebugPrint("Received %u bytes.\n", (unsigned)bytes_read);
     context->authenticated = 1;
 
     // We don't interpret the incoming RTCM data, so there's no need to buffer
     // it up to a complete RTCM frame. We'll just forward what we got along.
     if (context->rtcm_callback) {
-      context->rtcm_callback(context->recv_buffer, bytes_read);
+      context->rtcm_callback(context->rtcm_callback_info, context,
+                             context->recv_buffer, bytes_read);
     }
 
     return (int)bytes_read;
@@ -365,18 +378,18 @@ int Polaris_Work(PolarisContext_t* context) {
 /******************************************************************************/
 int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
   if (context->socket == P1_INVALID_SOCKET) {
-    P1_fprintf(stderr, "Error: Polaris connection not currently open.\n");
+    P1_Print("Error: Polaris connection not currently open.\n");
     return POLARIS_SOCKET_ERROR;
   }
 
-  DebugPrintf("Listening for data.\n");
+  P1_DebugPrint("Listening for data.\n");
 
   P1_TimeValue_t last_read_time;
   P1_GetCurrentTime(&last_read_time);
 
   size_t total_bytes = 0;
-  int ret;
-  while (1) {
+  int ret = POLARIS_ERROR;
+  while (!context->disconnected) {
     // Read the next data block.
     ret = Polaris_Work(context);
 
@@ -396,8 +409,7 @@ int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
         P1_GetCurrentTime(&current_time);
         int elapsed_ms = P1_GetElapsedMS(&last_read_time, &current_time);
         if (elapsed_ms >= connection_timeout_ms) {
-          P1_fprintf(stderr, "Warning: Connection timed out after %d ms.\n",
-                     elapsed_ms);
+          P1_Print("Warning: Connection timed out after %d ms.\n", elapsed_ms);
           close(context->socket);
           context->socket = P1_INVALID_SOCKET;
           ret = POLARIS_TIMED_OUT;
@@ -411,8 +423,8 @@ int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
     }
   }
 
-  DebugPrintf("Received %u total bytes.\n", (unsigned)total_bytes);
-  return ret;
+  P1_DebugPrint("Received %u total bytes.\n", (unsigned)total_bytes);
+  return context->disconnected ? POLARIS_SUCCESS : ret;
 }
 
 /******************************************************************************/
@@ -420,14 +432,14 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
                       int endpoint_port) {
   // Is the connection already open?
   if (context->socket != P1_INVALID_SOCKET) {
-    P1_fprintf(stderr, "Error socket already open.\n");
+    P1_Print("Error socket already open.\n");
     return POLARIS_ERROR;
   }
 
   // Open a socket.
   context->socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   if (context->socket < 0) {
-    P1_fprintf(stderr, "Error opening socket.\n");
+    P1_Print("Error opening socket.\n");
     context->socket = P1_INVALID_SOCKET;
     return POLARIS_SOCKET_ERROR;
   }
@@ -442,18 +454,18 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
   // Lookup the IP of the API endpoint used for auth requests.
   P1_SocketAddrV4_t address;
   if (P1_SetAddress(endpoint_url, endpoint_port, &address) < 0) {
-    P1_fprintf(stderr, "Error locating address '%s'.\n", endpoint_url);
+    P1_Print("Error locating address '%s'.\n", endpoint_url);
     close(context->socket);
     context->socket = P1_INVALID_SOCKET;
     return POLARIS_SOCKET_ERROR;
   }
 
   // Connect to the API server.
-  DebugPrintf("Connecting to 'tcp://%s:%d'.\n", endpoint_url, endpoint_port);
+  P1_DebugPrint("Connecting to 'tcp://%s:%d'.\n", endpoint_url, endpoint_port);
   int ret =
       connect(context->socket, (P1_SocketAddr_t*)&address, sizeof(address));
   if (ret < 0) {
-    P1_perror("Error connecting to endpoint", ret);
+    P1_PrintError("Error connecting to endpoint", ret);
     close(context->socket);
     context->socket = P1_INVALID_SOCKET;
     return POLARIS_SOCKET_ERROR;
@@ -502,7 +514,7 @@ static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
   // larger than the send buffer. We currently only send HTTP requests during
   // authentication, before data is coming in.
   if (POLARIS_RECV_BUFFER_SIZE < header_size + content_length + 1) {
-    P1_fprintf(stderr, "Error populating POST request: buffer too small.\n");
+    P1_Print("Error populating POST request: buffer too small.\n");
     close(context->socket);
     context->socket = P1_INVALID_SOCKET;
     return POLARIS_NOT_ENOUGH_SPACE;
@@ -519,7 +531,7 @@ static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
                address, endpoint_url, port_str, content_length_str);
   if (header_size < 0) {
     // This shouldn't happen.
-    P1_fprintf(stderr, "Error populating POST request.\n");
+    P1_Print("Error populating POST request.\n");
     close(context->socket);
     context->socket = P1_INVALID_SOCKET;
     return POLARIS_ERROR;
@@ -535,10 +547,10 @@ static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
     return ret;
   }
 
-  DebugPrintf("Sending POST request. [size=%u B]\n", (unsigned)message_size);
+  P1_DebugPrint("Sending POST request. [size=%u B]\n", (unsigned)message_size);
   ret = send(context->socket, context->recv_buffer, message_size, 0);
   if (ret != message_size) {
-    P1_perror("Error sending POST request", ret);
+    P1_PrintError("Error sending POST request", ret);
     close(context->socket);
     context->socket = P1_INVALID_SOCKET;
     return POLARIS_SEND_ERROR;
@@ -565,7 +577,7 @@ static int GetHTTPResponse(PolarisContext_t* context) {
   close(context->socket);
   context->socket = P1_INVALID_SOCKET;
 
-  DebugPrintf("Received HTTP request. [size=%u B]\n", (unsigned)total_bytes);
+  P1_DebugPrint("Received HTTP request. [size=%u B]\n", (unsigned)total_bytes);
 
   // Append a null terminator to the response.
   context->recv_buffer[total_bytes++] = '\0';
@@ -573,7 +585,7 @@ static int GetHTTPResponse(PolarisContext_t* context) {
   // Extract the status code.
   int status_code;
   if (sscanf((char*)context->recv_buffer, "HTTP/1.1 %d", &status_code) != 1) {
-    P1_fprintf(stderr, "Invalid HTTP response:\n\n%s", context->recv_buffer);
+    P1_Print("Invalid HTTP response:\n\n%s", context->recv_buffer);
     return POLARIS_SEND_ERROR;
   }
 
@@ -585,10 +597,10 @@ static int GetHTTPResponse(PolarisContext_t* context) {
     size_t content_length =
         total_bytes - (content_start - (char*)context->recv_buffer);
     memmove(context->recv_buffer, content_start, content_length);
-    DebugPrintf("Response content:\n%s\n", context->recv_buffer);
+    P1_DebugPrint("Response content:\n%s\n", context->recv_buffer);
   } else {
     // No content in response.
-    DebugPrintf("No content in response.\n");
+    P1_DebugPrint("No content in response.\n");
     context->recv_buffer[0] = '\0';
   }
 

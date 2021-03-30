@@ -76,9 +76,13 @@
 #define POLARIS_CONNECTION_CLOSED -7
 #define POLARIS_TIMED_OUT -8
 
-typedef void (*PolarisCallback_t)(const uint8_t* buffer, size_t size_bytes);
+struct PolarisContext_s;
+typedef struct PolarisContext_s PolarisContext_t;
 
-typedef struct {
+typedef void (*PolarisCallback_t)(void* info, PolarisContext_t* context,
+                                  const uint8_t* buffer, size_t size_bytes);
+
+struct PolarisContext_s {
   P1_Socket_t socket;
 
   char auth_token[POLARIS_MAX_TOKEN_SIZE + 1];
@@ -91,7 +95,8 @@ typedef struct {
   uint8_t send_buffer[POLARIS_SEND_BUFFER_SIZE] __attribute__((aligned (4)));
 
   PolarisCallback_t rtcm_callback;
-} PolarisContext_t;
+  void* rtcm_callback_info;
+};
 
 #ifdef __cplusplus
 extern "C" {
@@ -115,7 +120,14 @@ int Polaris_Init(PolarisContext_t* context);
  * @post
  * On success, `context.auth_token` will be populated with the generated token.
  *
+ * @warning
+ * `unique_id` must be unique across _all_ Polaris connections for the specified
+ * API key. If two instances connect at the same time using the same key and ID,
+ * they will conflict with each other and will not work correctly.
+ *
  * @param context The Polaris context to be used.
+ * @param api_key The Polaris API key to be used.
+ * @param unique_id A unique ID used to represent this individual instance.
  *
  * @return @ref POLARIS_SUCCESS on success.
  * @return @ref POLARIS_NOT_ENOUGH_SPACE if there is not enough storage to store
@@ -183,9 +195,12 @@ void Polaris_Disconnect(PolarisContext_t* context);
  *
  * @param context The Polaris context to be used.
  * @param callback The function to be called.
+ * @param callback_info An arbitrary pointer that will be passed to the callback
+ *        function when it is called.
  */
 void Polaris_SetRTCMCallback(PolarisContext_t* context,
-                             PolarisCallback_t callback);
+                             PolarisCallback_t callback,
+                             void* callback_info);
 
 /**
  * @brief Send a position update to the corrections service.
@@ -254,7 +269,7 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id);
  *         Polaris_Disconnect() was called without receiving data.
  * @return @ref POLARIS_CONNECTION_CLOSED if the connection was closed remotely.
  * @return @ref POLARIS_FORBIDDEN if the connection is closed before any data
- *         is received, indicating an authentication falure (invalid or expired
+ *         is received, indicating an authentication failure (invalid or expired
  *         access token).
  * @return @ref POLARIS_SOCKET_ERROR if the socket is not currently open.
  */
@@ -280,7 +295,7 @@ int Polaris_Work(PolarisContext_t* context);
  * @return @ref POLARIS_TIMED_OUT if no data was received for the specified
  *         timeout.
  * @return @ref POLARIS_AUTH_ERROR if the connection is closed before any data
- *         is received, indicating an authentication falure.
+ *         is received, indicating an authentication failure.
  * @return @ref POLARIS_SOCKET_ERROR if the socket is not currently open.
  */
 int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms);

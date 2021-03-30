@@ -11,7 +11,8 @@
 
 static PolarisContext_t context;
 
-void HandleData(const uint8_t* buffer, size_t size_bytes) {
+void HandleData(void* info, PolarisContext_t* polaris_context,
+                const uint8_t* buffer, size_t size_bytes) {
   P1_printf("Application received %u bytes.\n", (unsigned)size_bytes);
 }
 
@@ -64,7 +65,7 @@ int main(int argc, const char* argv[]) {
     // token may be expired - try reauthenticating.
     P1_printf("Authenticated. Connecting to Polaris...\n");
 
-    Polaris_SetRTCMCallback(&context, HandleData);
+    Polaris_SetRTCMCallback(&context, HandleData, NULL);
 
     if (Polaris_Connect(&context) != POLARIS_SUCCESS) {
       P1_printf("Error connecting to Polaris corrections stream. Retrying.\n");

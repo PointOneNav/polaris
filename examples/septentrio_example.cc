@@ -1,23 +1,29 @@
 // Copyright (C) Point One Navigation - All Rights Reserved
 
-#include <iostream>
-
 #include <boost/asio.hpp>
-
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 
-#include <point_one/polaris_asio_client.h>
+#include <point_one/polaris/polaris_client.h>
 
-#include "septentrio_service.h"
+#include "septentrio/septentrio_service.h"
+
+// Allows for prebuilt versions of gflags/google that don't have gflags/google
+// namespace.
+namespace gflags {}
+namespace google {}
+using namespace gflags;
+using namespace google;
+
+using namespace point_one::polaris;
 
 // Polaris options:
 DEFINE_string(polaris_api_key, "",
               "The service API key. Contact account administrator or "
               "sales@pointonenav.com if unknown.");
 
-DEFINE_string(unique_id, "this_is_an_id",
-              "Unique ID for debugging purposes.");
+DEFINE_string(polaris_unique_id, "device12345",
+              "The unique ID to assign to this Polaris connection.");
 
 // Septentrio/output options:
 DEFINE_string(device, "/dev/ttyACM0",
@@ -28,7 +34,7 @@ DEFINE_string(
     "If set, forward RTCM corrections over UDP to the specified hostname/IP in "
     "addition to the Septentrio receiver (over serial).");
 
-DEFINE_uint32(
+DEFINE_int32(
     udp_port, 0,
     "The UDP port to which RTCM corrections will be forwarded.");
 
@@ -37,25 +43,18 @@ DEFINE_uint32(
 #endif
 
 // Simple callback to print position when received and update Polaris Client.
-void PvtCallback(const PVTGeodetic_2_2_t &pvt,
-                 point_one::polaris::PolarisAsioClient *polaris_client) {
+void PvtCallback(const PVTGeodetic_2_2_t& pvt, PolarisClient* polaris_client) {
   LOG_EVERY_N(INFO, 10) << "Week: " << pvt.WNc << " Tow: " << pvt.TOW / 1000.0
                         << " Solution Type: " << (int)pvt.Mode
                         << " Hacc: " << pvt.HAccuracy
                         << " Vacc: " << pvt.VAccuracy
                         << " Lat: " << pvt.Lat * RAD2DEG
                         << " Lon: " << pvt.Lon * RAD2DEG << " Alt: " << pvt.Alt;
-  polaris_client->SetPositionLLA(pvt.Lat * RAD2DEG, pvt.Lon * RAD2DEG, pvt.Alt);
+  polaris_client->SendLLAPosition(pvt.Lat * RAD2DEG, pvt.Lon * RAD2DEG,
+                                  pvt.Alt);
 }
 
-// Allows for prebuilt versions of gflags/google that don't have gflags/google
-// namespace.
-namespace gflags {}
-namespace google {}
-using namespace gflags;
-using namespace google;
-
-int main(int argc, char *argv[], char *envp[]) {
+int main(int argc, char *argv[]) {
   ParseCommandLineFlags(&argc, &argv, true);
   InitGoogleLogging(argv[0]);
 
@@ -94,18 +93,16 @@ int main(int argc, char *argv[], char *envp[]) {
   }
 
   // Create the Polaris client.
-  point_one::polaris::PolarisAsioClient polaris_client(
-      io_loop, FLAGS_polaris_api_key, FLAGS_unique_id);
+  PolarisClient polaris_client(FLAGS_polaris_api_key, FLAGS_polaris_unique_id);
 
   // This callback will forward RTCM correction bytes received from Polaris to
   // the Septentrio, as well as to an output UDP port if enabled.
-  polaris_client.SetPolarisBytesReceived(
-      [&](const uint8_t *data, size_t length) {
-        septentrio.SendRtcm(data, length);
-        if (udp_enabled) {
-          udp_socket.send_to(boost::asio::buffer(data, length), udp_endpoint);
-        }
-      });
+  polaris_client.SetRTCMCallback([&](const uint8_t* buffer, size_t size_bytes) {
+    septentrio.SendRtcm(buffer, size_bytes);
+    if (udp_enabled) {
+      udp_socket.send_to(boost::asio::buffer(buffer, size_bytes), udp_endpoint);
+    }
+  });
 
   // This callback will send position updates from the Septentrio to Polaris.
   // Polaris uses the positions to associate the connection with a corrections
@@ -119,11 +116,13 @@ int main(int argc, char *argv[], char *envp[]) {
   septentrio.SetPvtCallback(
       std::bind(PvtCallback, std::placeholders::_1, &polaris_client));
 
-  // Connect to Polaris.
-  polaris_client.Connect();
+  // Run the Polaris connection connection asynchronously.
+  LOG(INFO) << "Connecting to Polaris...";
+  polaris_client.RunAsync();
 
-  // Run indefinitely.
-  LOG(INFO) << "Starting services...";
+  // Now run the Boost IO loop to communicate with the serial port. This will
+  // block forever.
+  LOG(INFO) << "Listening for incoming serial data...";
   io_loop.run();
 
   return 0;

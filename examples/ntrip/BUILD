@@ -1,32 +1,32 @@
 package(default_visibility = ["//visibility:public"])
 
-# Test ntrip client.
+# An example NTRIP server that forwards corrections from Polaris to connected
+# NTRIP clients.
 cc_binary(
-    name = "ntrip_example_client",
-    srcs = ["ntrip_example_test_client.cc"],
-    deps = [
-        "//external:gflags",
-        "//external:glog",
-        "@boost//:asio",        
-    ],
-)
-
-# An example of using boost asio to connect to Polaris and forward corrections
-# to an ntrip server.
-cc_binary(
-    name = "ntrip_example",
+    name = "ntrip_example_server",
     srcs = ["ntrip_example.cc"],
     data = ["index.html"],
     deps = [
         ":ntrip_server_lib",
-        "//:polaris_asio_client",
-        "//external:gflags",
-        "//external:glog",
-        "@boost//:asio",        
+        "//:polaris_client",
+        "@boost//:asio",
+        "@com_github_gflags_gflags//:gflags",
+        "@com_github_google_glog//:glog",
     ],
 )
 
-# Simple ntrip server library.
+# Simple NTRIP client meant for testing the NTRIP server example.
+cc_binary(
+    name = "ntrip_example_client",
+    srcs = ["ntrip_example_test_client.cc"],
+    deps = [
+        "@boost//:asio",
+        "@com_github_gflags_gflags//:gflags",
+        "@com_github_google_glog//:glog",
+    ],
+)
+
+# Simple NTRIP server library.
 cc_library(
     name = "ntrip_server_lib",
     srcs = [
@@ -51,11 +51,11 @@ cc_library(
     ],
     data = ["index.html"],
     deps = [
-        "//external:gflags",
-        "//external:glog",
         "@boost//:asio",
         "@boost//:date_time",
         "@boost//:system",
         "@boost//:tribool",
+        "@com_github_gflags_gflags//:gflags",
+        "@com_github_google_glog//:glog",
     ],
 )

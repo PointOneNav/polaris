@@ -2,18 +2,17 @@
 
 #include <chrono>
 
-#include <boost/asio.hpp>
 #include <ctime>
 #include <fstream>
 #include <string>
 
-#include "glog/logging.h"
+#include <boost/asio.hpp>
+#include <glog/logging.h>
+#include <septentrio/measepoch.h>
+#include  <septentrio/sbfread.h>
 
 #include "sbf_framer.h"
-#include "simple_asio_serial_port.h"
-
-#include "third_party/septentrio/measepoch.h"
-#include "third_party/septentrio/sbfread.h"
+#include "../simple_asio_serial_port.h"
 
 #pragma once
 namespace point_one {

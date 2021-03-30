@@ -1,23 +1,37 @@
-// Example ntrip client using boost asio, based off of boost http server example
-// See http://www.boost.org/LICENSE_1_0.txt
+/**************************************************************************/ /**
+ * @brief Example of relaying Polaris corrections as an NTRIP server.
+ *
+ * Copyright (c) Point One Navigation - All Rights Reserved
+ ******************************************************************************/
+
+#include <iostream>
+#include <string>
 
 #include <boost/asio.hpp>
 #include <boost/bind.hpp>
-#include <iostream>
-#include <string>
-#include "ntrip_server.h"
-#include <point_one/polaris_asio_client.h>
+#include <gflags/gflags.h>
+#include <glog/logging.h>
 
-#include "gflags/gflags.h"
-#include "glog/logging.h"
+#include <point_one/polaris/polaris_client.h>
+
+#include "ntrip_server.h"
+
+// Allows for prebuilt versions of gflags/google that don't have gflags/google
+// namespace.
+namespace gflags {}
+namespace google {}
+using namespace gflags;
+using namespace google;
+
+using namespace point_one::polaris;
 
 // Options for connecting to Polaris Server:
 DEFINE_string(
-    polaris_host, point_one::polaris::DEFAULT_POLARIS_URL,
-    "The Point One Navigation Polaris server tcp URI to which to connect");
+    polaris_host, POLARIS_ENDPOINT_URL,
+    "The Polaris corrections endpoint URL to be used.");
 
-DEFINE_int32(polaris_port, point_one::polaris::DEFAULT_POLARIS_PORT,
-             "The tcp port to which to connect");
+DEFINE_int32(polaris_port, POLARIS_ENDPOINT_PORT,
+             "The TCP port of the Polaris corrections endpoint.");
 
 DEFINE_string(polaris_api_key, "",
               "The service API key. Contact account administrator or "
@@ -26,19 +40,13 @@ DEFINE_string(polaris_api_key, "",
 DEFINE_string(polaris_unique_id, "ntrip-device12345",
               "The unique ID to assign to this Polaris connection.");
 
-namespace gflags {}
-namespace google {}
-using namespace gflags;
-using namespace google;
-
 double ConvertGGADegrees(double gga_degrees) {
   double degrees = std::floor(gga_degrees/100.0);
   degrees += (gga_degrees - degrees * 100) / 60.0;
   return degrees;
 }
 
-void OnGpgga(const std::string &gpgga,
-                 point_one::polaris::PolarisAsioClient *polaris_client) {
+void OnGpgga(const std::string& gpgga, PolarisClient* polaris_client) {
   LOG_FIRST_N(INFO, 1) << "Got first receiver GPGGA: " << gpgga;
   VLOG(1) << "Got receiver GPGGA: " << gpgga;
   std::stringstream ss(gpgga);
@@ -59,7 +67,7 @@ void OnGpgga(const std::string &gpgga,
     double alt = std::stod(result[8], &sz);
 
     VLOG(2) << "Setting position: lat: " << lat << " lon: " << lon << " alt: " << alt;
-    polaris_client->SetPositionLLA(lat, lon, alt);
+    polaris_client->SendLLAPosition(lat, lon, alt);
   }
   catch (const std::exception&){
     LOG(WARNING) << "GPGGA Bad parse of string " << gpgga;
@@ -69,12 +77,12 @@ void OnGpgga(const std::string &gpgga,
 
 
 int main(int argc, char* argv[]) {
-  ParseCommandLineFlags(&argc, &argv, true);
-
-  //set output to std err on by default
+  // Parse commandline flags.
   FLAGS_logtostderr = true;
   FLAGS_colorlogtostderr = true;
+  ParseCommandLineFlags(&argc, &argv, true);
 
+  // Setup logging interface.
   InitGoogleLogging(argv[0]);
 
   try {
@@ -85,53 +93,47 @@ int main(int argc, char* argv[]) {
       return 1;
     }
 
-    boost::asio::io_service io_loop;
-    boost::asio::io_service::work work(io_loop);
-
     // Create connection to receiver to forward correction data received from
     // Polaris Server.
 
     // Construct a Polaris client.
     if (FLAGS_polaris_api_key == "") {
-      LOG(FATAL)
+      LOG(ERROR)
           << "You must supply a Polaris API key to connect to the server.";
       return 1;
     }
 
-    // Create the Polaris client.
-    point_one::polaris::PolarisConnectionSettings settings;
-    settings.host = FLAGS_polaris_host;
-    settings.port = FLAGS_polaris_port;
-    point_one::polaris::PolarisAsioClient polaris_client(
-        io_loop, FLAGS_polaris_api_key, FLAGS_polaris_unique_id, settings);
+    PolarisClient polaris_client(FLAGS_polaris_api_key,
+                                 FLAGS_polaris_unique_id);
+    polaris_client.SetPolarisEndpoint(FLAGS_polaris_host, FLAGS_polaris_port);
 
-    // Initialise the server.
-    LOG(INFO) << "Starting NTRIP server on " << argv[1] << ":" << argv[2];
-    ntrip::server ntrip_server(io_loop, argv[1], argv[2], argv[3]);
+    // Setup the NTRIP server.
+    std::string ntrip_host = argv[1];
+    std::string ntrip_port = argv[2];
+    std::string ntrip_root = argv[3];
+    LOG(INFO) << "Starting NTRIP server on " << ntrip_host << ":" << ntrip_port
+              << ".";
+    boost::asio::io_service io_loop;
+    boost::asio::io_service::work work(io_loop);
+    ntrip::server ntrip_server(io_loop, ntrip_host, ntrip_port, ntrip_root);
 
-    // This callback will forward RTCM correction bytes received from the server
-    // to the septentrio.
-    polaris_client.SetPolarisBytesReceived(
-        std::bind(&ntrip::server::broadcast,
-                  &ntrip_server, "/Polaris", std::placeholders::_1, std::placeholders::_2));
+    polaris_client.SetRTCMCallback(
+        std::bind(&ntrip::server::broadcast, &ntrip_server, "/Polaris",
+                  std::placeholders::_1, std::placeholders::_2));
 
-    // TODO: Add callback for when we get a position updated.
     ntrip_server.SetGpggaCallback(
-      std::bind(OnGpgga, std::placeholders::_1, &polaris_client));
+        std::bind(OnGpgga, std::placeholders::_1, &polaris_client));
 
-    // Application can set position at any time to change associated beacon(s)
-    // and corrections. Example setting postion to SF in ECEF meters. It is
-    // required to call SetPositionECEF at some cadence to assure the
-    // corrections received are the best and relevant.
-    // In this example the position will be overwritten upon a successful
-    // connection to the receiver.
-    polaris_client.SetPositionECEF(-2707071, -4260565, 3885644);
-    polaris_client.Connect();
+    // Run the Polaris connection connection asynchronously.
+    LOG(INFO) << "Connecting to Polaris...";
+    polaris_client.RunAsync();
 
-    // Run the server until stopped.
+    // Now run the Boost IO loop to communicate with the serial port. This will
+    // block forever.
+    LOG(INFO) << "Running NTRIP server...";
     io_loop.run();
   } catch (std::exception& e) {
-    std::cerr << "exception: " << e.what() << "\n";
+    LOG(ERROR) << "Caught exception: " << e.what();
   }
 
   return 0;

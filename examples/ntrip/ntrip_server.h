@@ -21,7 +21,8 @@ class server {
                   const std::string& address, const std::string& port,
                   const std::string& doc_root);
 
-  void broadcast(const std::string& mount_point, uint8_t* data, size_t len);
+  void broadcast(const std::string& mount_point, const uint8_t* data,
+                 size_t len);
 
   void SetGpggaCallback(std::function<void(const std::string &)> callback);
 

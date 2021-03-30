@@ -1,1 +1,1 @@
-ADD_SUBDIRECTORY(septentrio)
+add_subdirectory(septentrio)

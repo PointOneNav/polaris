@@ -50,8 +50,10 @@ void server::SetGpggaCallback(std::function<void(const std::string &)> callback)
     connection_manager_.SetGpggaCallback(callback);
 }
 
-void server::broadcast(const std::string& mount_point, uint8_t *data, size_t len) {
-    connection_manager_.broadcast(mount_point, std::string((char*)data, len));
+void server::broadcast(const std::string& mount_point, const uint8_t* data,
+                       size_t len) {
+  connection_manager_.broadcast(mount_point,
+                                std::string((const char*)data, len));
 }
 
 void server::handle_accept(const boost::system::error_code& e) {

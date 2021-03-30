@@ -20,7 +20,9 @@ extern "C" {
 #  define P1_printf(format, ...) do {} while(0)
 # endif
 
-# define P1_fprintf(stream, format, ...) P1_printf(format, ##__VA_ARGS__)
+# ifndef P1_fprintf
+#  define P1_fprintf(stream, format, ...) P1_printf(format, ##__VA_ARGS__)
+# endif
 
 // FreeRTOS does not use errno and does not support perror(). Instead, they
 // include the error condition in the return code itself. To get around this,
@@ -28,8 +30,10 @@ extern "C" {
 //
 // For POSIX systems, the return code argument is ignored. While it may be
 // omitted, it is required for FreeRTOS compilation.
-# define P1_perror(format, ret) \
+# ifndef P1_perror
+#  define P1_perror(format, ret) \
   P1_printf(format ". [error=%s (%d)]\n", strerror(-ret), ret)
+# endif
 
 typedef TickType_t P1_TimeValue_t;
 
@@ -51,9 +55,15 @@ static inline int P1_GetElapsedMS(const P1_TimeValue_t* start,
 # include <stdio.h>
 # include <sys/time.h>
 
-# define P1_printf printf
-# define P1_fprintf fprintf
-# define P1_perror(format, ...) perror(format)
+# ifndef P1_printf
+#  define P1_printf printf
+# endif
+# ifndef P1_fprintf
+#  define P1_fprintf fprintf
+# endif
+# ifndef P1_perror
+#  define P1_perror(format, ...) perror(format)
+# endif
 
 typedef struct timeval P1_TimeValue_t;
 
