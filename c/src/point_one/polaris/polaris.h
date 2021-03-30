@@ -294,7 +294,7 @@ int Polaris_Work(PolarisContext_t* context);
  * @return @ref POLARIS_CONNECTION_CLOSED if the connection was closed remotely.
  * @return @ref POLARIS_TIMED_OUT if no data was received for the specified
  *         timeout.
- * @return @ref POLARIS_AUTH_ERROR if the connection is closed before any data
+ * @return @ref POLARIS_FORBIDDEN if the connection is closed before any data
  *         is received, indicating an authentication failure.
  * @return @ref POLARIS_SOCKET_ERROR if the socket is not currently open.
  */
