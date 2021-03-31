@@ -81,7 +81,7 @@ int Polaris_Init(PolarisContext_t* context) {
 int Polaris_Authenticate(PolarisContext_t* context, const char* api_key,
                          const char* unique_id) {
   // Sanity check the inputs.
-  if (strlen(api_key) > 0) {
+  if (strlen(api_key) == 0) {
     P1_Print("API key must not be empty.\n");
     return POLARIS_ERROR;
   }
