@@ -28,6 +28,19 @@ def dependencies():
         urls = ["https://github.com/gflags/gflags/archive/v2.2.2.tar.gz"],
     )
 
+    #-------------------------------------------------------------------------------
+    # Google BoringSSL
+    #
+    # Used by:
+    # - uWebSockets
+    git_repository(
+        name = "boringssl",
+        commit = "87f3087d6343b89142d1191388a5885d74459df2",
+        # 2020/4/7
+        remote = "https://boringssl.googlesource.com/boringssl",
+        shallow_since = "1586306564 +0000",
+    )
+
     #---------------------------------------------------------------------------
     # Google Logging Library (glog)
     #

@@ -55,6 +55,22 @@ static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
 
 static int GetHTTPResponse(PolarisContext_t* context);
 
+#ifdef USE_SSL
+void ShowCerts(SSL* ssl) {
+  X509* cert = SSL_get_peer_certificate(ssl);
+  if (cert != NULL) {
+    char* line;
+    P1_DebugPrint("Server certificates:\n");
+    line = X509_NAME_oneline(X509_get_subject_name(cert), 0, 0);
+    P1_DebugPrint("Subject: %s\n", line);
+    line = X509_NAME_oneline(X509_get_issuer_name(cert), 0, 0);
+    P1_DebugPrint("Issuer: %s\n", line);
+  } else {
+    P1_DebugPrint("No client certificates configured.\n");
+  }
+}
+#endif
+
 /******************************************************************************/
 int Polaris_Init(PolarisContext_t* context) {
   if (POLARIS_RECV_BUFFER_SIZE < POLARIS_MAX_HTTP_MESSAGE_SIZE) {
@@ -74,6 +90,17 @@ int Polaris_Init(PolarisContext_t* context) {
   context->disconnected = 0;
   context->rtcm_callback = NULL;
   context->rtcm_callback_info = NULL;
+
+
+#ifdef USE_SSL
+  context->ssl = NULL;
+  context->ssl_ctx = NULL;
+
+  SSL_library_init();
+  OpenSSL_add_all_algorithms();
+  SSL_load_error_strings();
+#endif
+
   return POLARIS_SUCCESS;
 }
 
@@ -190,20 +217,55 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
     return POLARIS_AUTH_ERROR;
   }
 
+#ifdef USE_SSL
+  context->ssl_ctx = SSL_CTX_new(TLSv1_1_client_method());
+  // we specifically disable older insecure protocols
+  SSL_CTX_set_options(context->ssl_ctx, SSL_OP_NO_SSLv2);
+  SSL_CTX_set_options(context->ssl_ctx, SSL_OP_NO_SSLv3);
+  SSL_CTX_set_options(context->ssl_ctx, SSL_OP_NO_TLSv1);
+
+  if (context->ssl_ctx == NULL) {
+    P1_Print("SSL Context Failed to Initialize.\n");
+    return POLARIS_ERROR;
+  }
+#endif
+
   // Connect to the corrections endpoint.
   context->disconnected = 0;
   int ret = OpenSocket(context, endpoint_url, endpoint_port);
   if (ret != POLARIS_SUCCESS) {
     P1_Print("Error connecting to corrections endpoint: tcp://%s:%d.\n",
-          endpoint_url, endpoint_port);
+             endpoint_url, endpoint_port);
     return ret;
   }
+
+#ifdef USE_SSL
+  // create new SSL connection state and attach the socket
+  if (context->ssl != NULL) {
+    SSL_CTX_free(context->ssl_ctx);
+  }
+  context->ssl = SSL_new(context->ssl_ctx);
+
+  //This is important for servers that use SNI
+  SSL_set_tlsext_host_name(context->ssl, endpoint_url);
+  SSL_set_fd(context->ssl, context->socket);
+
+  // perform ssl handhshake
+  if (SSL_connect(context->ssl) == -1) {
+    P1_Print("SSL Handshake failed to %s:%d.\n", endpoint_url, endpoint_port);
+    Polaris_Disconnect(context);
+    return POLARIS_ERROR;
+  }
+
+  P1_DebugPrint("Connected with %s encryption\n", SSL_get_cipher(context->ssl));
+  ShowCerts(context->ssl);
+#endif
 
   // Send the auth token.
   //
   // Note: We use the receive buffer here to send the auth message since the
-  // auth token is very large. We haven't authenticated yet, so no data will be
-  // coming in and it should be fine to use the receive buffer.
+  // auth token is very large. We haven't authenticated yet, so no data will
+  // be coming in and it should be fine to use the receive buffer.
   size_t token_length = strlen(context->auth_token);
   PolarisHeader_t* header = Polaris_PopulateHeader(
       context->recv_buffer, POLARIS_ID_AUTH, token_length);
@@ -212,10 +274,22 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
 
   P1_DebugPrint("Sending access token message. [size=%u B]\n",
               (unsigned)message_size);
+#ifdef USE_SSL
+  ret = SSL_write(context->ssl, context->recv_buffer, message_size);
+#else
   ret = send(context->socket, context->recv_buffer, message_size, 0);
+#endif
   if (ret != message_size) {
     P1_PrintError("Error sending authentication token", ret);
+#ifdef USE_SSL
+    SSL_free(context->ssl);
+#endif
     close(context->socket);
+#ifdef USE_SSL
+    SSL_CTX_free(context->ssl_ctx);
+    context->ssl = NULL;
+    context->ssl_ctx = NULL;
+#endif
     context->socket = P1_INVALID_SOCKET;
     return POLARIS_SEND_ERROR;
   }
@@ -229,7 +303,15 @@ void Polaris_Disconnect(PolarisContext_t* context) {
     P1_DebugPrint("Closing Polaris connection.\n");
     context->disconnected = 1;
     shutdown(context->socket, SHUT_RDWR);
+#ifdef USE_SSL
+    SSL_free(context->ssl);
+#endif
     close(context->socket);
+#ifdef USE_SSL
+    SSL_CTX_free(context->ssl_ctx);
+    context->ssl = NULL;
+    context->ssl_ctx = NULL;
+#endif
     context->socket = P1_INVALID_SOCKET;
   }
 }
@@ -271,7 +353,12 @@ int Polaris_SendECEFPosition(PolarisContext_t* context, double x_m, double y_m,
 #endif
   PrintData(context->send_buffer, message_size);
 
+#ifdef USE_SSL
+  int ret = SSL_write(context->ssl, context->send_buffer, message_size);
+#else
   int ret = send(context->socket, context->send_buffer, message_size, 0);
+#endif
+
   if (ret != message_size) {
     P1_PrintError("Error sending ECEF position", ret);
     return POLARIS_SEND_ERROR;
@@ -309,7 +396,12 @@ int Polaris_SendLLAPosition(PolarisContext_t* context, double latitude_deg,
 #endif
   PrintData(context->send_buffer, message_size);
 
+#ifdef USE_SSL
+  int ret = SSL_write(context->ssl, context->send_buffer, message_size);
+#else
   int ret = send(context->socket, context->send_buffer, message_size, 0);
+#endif
+
   if (ret != message_size) {
     P1_PrintError("Error sending LLA position", ret);
     return POLARIS_SEND_ERROR;
@@ -335,7 +427,12 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id) {
               (unsigned)message_size, beacon_id);
   PrintData(context->send_buffer, message_size);
 
+#ifdef USE_SSL
+  int ret = SSL_write(context->ssl, context->send_buffer, message_size);
+#else
   int ret = send(context->socket, context->send_buffer, message_size, 0);
+#endif
+
   if (ret != message_size) {
     P1_PrintError("Error sending beacon request", ret);
     return POLARIS_SEND_ERROR;
@@ -354,8 +451,16 @@ int Polaris_Work(PolarisContext_t* context) {
   }
 
   P1_DebugPrint("Listening for data block.\n");
+
+#ifdef USE_SSL
+  P1_RecvSize_t bytes_read =
+      SSL_read(context->ssl, context->recv_buffer, POLARIS_RECV_BUFFER_SIZE);
+#else
   P1_RecvSize_t bytes_read =
       recv(context->socket, context->recv_buffer, POLARIS_RECV_BUFFER_SIZE, 0);
+#endif
+
+
   P1_DebugPrint("recv returned with %d\n", bytes_read);
   if (bytes_read < 0) {
     P1_DebugPrint("Connection terminated. [ret=%d, disconnected=%d]\n",
@@ -475,7 +580,7 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
   P1_SetTimeMS(POLARIS_SEND_TIMEOUT_MS, &timeout);
   setsockopt(context->socket, 0, SO_SNDTIMEO, &timeout, sizeof(timeout));
 
-  // Lookup the IP of the API endpoint used for auth requests.
+  // Lookup the IP of the endpoint used for auth requests.
   P1_SocketAddrV4_t address;
   if (P1_SetAddress(endpoint_url, endpoint_port, &address) < 0) {
     P1_Print("Error locating address '%s'.\n", endpoint_url);
@@ -484,7 +589,7 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
     return POLARIS_SOCKET_ERROR;
   }
 
-  // Connect to the API server.
+  // Connect to the server.
   P1_DebugPrint("Connecting to 'tcp://%s:%d'.\n", endpoint_url, endpoint_port);
   int ret =
       connect(context->socket, (P1_SocketAddr_t*)&address, sizeof(address));

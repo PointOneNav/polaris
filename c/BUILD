@@ -6,4 +6,7 @@ cc_library(
     srcs = glob(["src/**/*.c"]),
     hdrs = glob(["src/**/*.h"]),
     includes = ["src"],
+    deps = [
+        "@boringssl//:ssl",
+    ],
 )
