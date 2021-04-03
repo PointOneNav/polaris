@@ -484,7 +484,15 @@ int Polaris_Work(PolarisContext_t* context) {
   if (bytes_read < 0) {
     P1_DebugPrint("Connection terminated. [ret=%d, disconnected=%d]\n",
                 (int)bytes_read, context->disconnected);
+#ifdef USE_SSL
+    SSL_free(context->ssl);
+#endif
     close(context->socket);
+#ifdef USE_SSL
+    SSL_CTX_free(context->ssl_ctx);
+    context->ssl = NULL;
+    context->ssl_ctx = NULL;
+#endif
     context->socket = P1_INVALID_SOCKET;
     if (context->disconnected) {
       return 0;
@@ -498,7 +506,15 @@ int Polaris_Work(PolarisContext_t* context) {
       P1_Print(
           "Warning: Polaris connection closed and no data received. Is your "
           "authentication token valid? Did you send a position?\n");
+#ifdef USE_SSL
+      SSL_free(context->ssl);
+#endif
       close(context->socket);
+#ifdef USE_SSL
+      SSL_CTX_free(context->ssl_ctx);
+    context->ssl = NULL;
+    context->ssl_ctx = NULL;
+#endif
       context->socket = P1_INVALID_SOCKET;
       return POLARIS_FORBIDDEN;
     }
@@ -558,7 +574,15 @@ int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
         int elapsed_ms = P1_GetElapsedMS(&last_read_time, &current_time);
         if (elapsed_ms >= connection_timeout_ms) {
           P1_Print("Warning: Connection timed out after %d ms.\n", elapsed_ms);
+#ifdef USE_SSL
+          SSL_free(context->ssl);
+#endif
           close(context->socket);
+#ifdef USE_SSL
+          SSL_CTX_free(context->ssl_ctx);
+    context->ssl = NULL;
+    context->ssl_ctx = NULL;
+#endif
           context->socket = P1_INVALID_SOCKET;
           ret = POLARIS_TIMED_OUT;
           break;
@@ -603,7 +627,15 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
   P1_SocketAddrV4_t address;
   if (P1_SetAddress(endpoint_url, endpoint_port, &address) < 0) {
     P1_Print("Error locating address '%s'.\n", endpoint_url);
+#ifdef USE_SSL
+    SSL_free(context->ssl);
+#endif
     close(context->socket);
+#ifdef USE_SSL
+    SSL_CTX_free(context->ssl_ctx);
+    context->ssl = NULL;
+    context->ssl_ctx = NULL;
+#endif
     context->socket = P1_INVALID_SOCKET;
     return POLARIS_SOCKET_ERROR;
   }
@@ -614,7 +646,15 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
       connect(context->socket, (P1_SocketAddr_t*)&address, sizeof(address));
   if (ret < 0) {
     P1_PrintError("Error connecting to endpoint", ret);
+#ifdef USE_SSL
+    SSL_free(context->ssl);
+#endif
     close(context->socket);
+#ifdef USE_SSL
+    SSL_CTX_free(context->ssl_ctx);
+    context->ssl = NULL;
+    context->ssl_ctx = NULL;
+#endif
     context->socket = P1_INVALID_SOCKET;
     return POLARIS_SOCKET_ERROR;
   }
@@ -663,7 +703,15 @@ static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
   // authentication, before data is coming in.
   if (POLARIS_RECV_BUFFER_SIZE < header_size + content_length + 1) {
     P1_Print("Error populating POST request: buffer too small.\n");
+#ifdef USE_SSL
+    SSL_free(context->ssl);
+#endif
     close(context->socket);
+#ifdef USE_SSL
+    SSL_CTX_free(context->ssl_ctx);
+    context->ssl = NULL;
+    context->ssl_ctx = NULL;
+#endif
     context->socket = P1_INVALID_SOCKET;
     return POLARIS_NOT_ENOUGH_SPACE;
   }
@@ -680,7 +728,15 @@ static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
   if (header_size < 0) {
     // This shouldn't happen.
     P1_Print("Error populating POST request.\n");
+#ifdef USE_SSL
+    SSL_free(context->ssl);
+#endif
     close(context->socket);
+#ifdef USE_SSL
+    SSL_CTX_free(context->ssl_ctx);
+    context->ssl = NULL;
+    context->ssl_ctx = NULL;
+#endif
     context->socket = P1_INVALID_SOCKET;
     return POLARIS_ERROR;
   }
