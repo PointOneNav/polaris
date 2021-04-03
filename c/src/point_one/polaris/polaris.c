@@ -10,6 +10,10 @@
 #include <stdlib.h>  // For malloc()
 #include <string.h>  // For memmove()
 
+#ifdef USE_SSL
+#include <openssl/ssl.h>
+#endif
+
 #include "point_one/polaris/polaris_internal.h"
 #include "point_one/polaris/portability.h"
 
@@ -205,8 +209,14 @@ int Polaris_SetAuthToken(PolarisContext_t* context, const char* auth_token) {
 
 /******************************************************************************/
 int Polaris_Connect(PolarisContext_t* context) {
+#ifdef USE_SSL
+  return Polaris_ConnectTo(context, POLARIS_ENDPOINT_URL,
+                           POLARIS_ENDPOINT_TLS_PORT);
+#else
   return Polaris_ConnectTo(context, POLARIS_ENDPOINT_URL,
                            POLARIS_ENDPOINT_PORT);
+#endif
+
 }
 
 /******************************************************************************/

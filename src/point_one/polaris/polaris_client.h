@@ -66,7 +66,7 @@ class PolarisClient {
   std::function<void(const uint8_t* buffer, size_t size_bytes)> callback_;
 
   std::string endpoint_url_ = POLARIS_ENDPOINT_URL;
-  int endpoint_port_ = POLARIS_ENDPOINT_PORT;
+  int endpoint_port_ = POLARIS_ENDPOINT_TLS_PORT;
 
   bool auth_valid_ = false;
   bool connected_ = false;

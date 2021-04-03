@@ -5,23 +5,15 @@
  ******************************************************************************/
 
 #pragma once
-#define USE_SSL //TODO: take this out.
 
 #include <stdint.h>
 
-#ifdef USE_SSL
-#include <openssl/ssl.h>
-#include <openssl/err.h>
-#endif
 
 #include "point_one/polaris/socket.h"
 
 #define POLARIS_ENDPOINT_URL "polaris.pointonenav.com"
-#ifdef USE_SSL
-#define POLARIS_ENDPOINT_PORT 8090
-#else
 #define POLARIS_ENDPOINT_PORT 8088
-#endif
+#define POLARIS_ENDPOINT_TLS_PORT 8090
 
 #define POLARIS_MAX_UNIQUE_ID_SIZE 36
 
@@ -109,10 +101,10 @@ struct PolarisContext_s {
   PolarisCallback_t rtcm_callback;
   void* rtcm_callback_info;
 
-#ifdef USE_SSL
-  SSL_CTX* ssl_ctx;
-  SSL* ssl;
-#endif
+  // Note: we're using void* to avoid needing the inclusion of SSL libs in the
+  // h file.
+  void* ssl_ctx;
+  void* ssl;
 };
 
 #ifdef __cplusplus
