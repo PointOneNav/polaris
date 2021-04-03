@@ -61,6 +61,7 @@ static int GetHTTPResponse(PolarisContext_t* context);
 
 #ifdef USE_SSL
 void ShowCerts(SSL* ssl) {
+  #if defined(POLARIS_DEBUG) || defined(POLARIS_TRACE)
   X509* cert = SSL_get_peer_certificate(ssl);
   if (cert != NULL) {
     char* line;
@@ -72,6 +73,7 @@ void ShowCerts(SSL* ssl) {
   } else {
     P1_DebugPrint("No client certificates configured.\n");
   }
+  #endif
 }
 #endif
 
@@ -155,9 +157,16 @@ int Polaris_Authenticate(PolarisContext_t* context, const char* api_key,
 
   P1_DebugPrint("Sending auth request. [api_key=%s, unique_id=%s]\n", api_key,
              unique_id);
+#ifdef USE_SSL
+  int status_code =
+      SendPOSTRequest(context, POLARIS_API_URL, 443, "/api/v1/auth/token",
+                      context->recv_buffer, (size_t)content_size);
+
+#else
   int status_code =
       SendPOSTRequest(context, POLARIS_API_URL, 80, "/api/v1/auth/token",
                       context->recv_buffer, (size_t)content_size);
+#endif
   if (status_code < 0) {
     P1_Print("Error sending authentication request.\n");
     return status_code;
@@ -680,17 +689,67 @@ static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
 
   size_t message_size = header_size + content_length;
 
+
+#ifdef USE_SSL
+  context->ssl_ctx = SSL_CTX_new(TLSv1_1_client_method());
+  // we specifically disable older insecure protocols
+  SSL_CTX_set_options(context->ssl_ctx, SSL_OP_NO_SSLv2);
+  SSL_CTX_set_options(context->ssl_ctx, SSL_OP_NO_SSLv3);
+  SSL_CTX_set_options(context->ssl_ctx, SSL_OP_NO_TLSv1);
+
+  if (context->ssl_ctx == NULL) {
+    P1_Print("SSL Context Failed to Initialize.\n");
+    return POLARIS_ERROR;
+  }
+#endif
+
   // Send the request.
   int ret = OpenSocket(context, endpoint_url, endpoint_port);
   if (ret != POLARIS_SUCCESS) {
     return ret;
   }
 
+
+#ifdef USE_SSL
+    // create new SSL connection state and attach the socket
+  if (context->ssl != NULL) {
+    SSL_CTX_free(context->ssl_ctx);
+  }
+  context->ssl = SSL_new(context->ssl_ctx);
+
+  //This is important for servers that use SNI
+  SSL_set_tlsext_host_name(context->ssl, endpoint_url);
+  SSL_set_fd(context->ssl, context->socket);
+
+  // perform ssl handhshake
+  if (SSL_connect(context->ssl) == -1) {
+    P1_Print("SSL Handshake failed to %s:%d.\n", endpoint_url, endpoint_port);
+    Polaris_Disconnect(context);
+    return POLARIS_ERROR;
+  }
+
+  P1_DebugPrint("Connected with %s encryption\n", SSL_get_cipher(context->ssl));
+  ShowCerts(context->ssl);
+#endif
+
   P1_DebugPrint("Sending POST request. [size=%u B]\n", (unsigned)message_size);
+#ifdef USE_SSL
+  ret = SSL_write(context->ssl, context->recv_buffer, message_size);
+#else
   ret = send(context->socket, context->recv_buffer, message_size, 0);
+#endif
+
   if (ret != message_size) {
     P1_PrintError("Error sending POST request", ret);
+#ifdef USE_SSL
+    SSL_free(context->ssl);
+#endif
     close(context->socket);
+#ifdef USE_SSL
+    SSL_CTX_free(context->ssl_ctx);
+    context->ssl = NULL;
+    context->ssl_ctx = NULL;
+#endif
     context->socket = P1_INVALID_SOCKET;
     return POLARIS_SEND_ERROR;
   }
@@ -704,16 +763,31 @@ static int GetHTTPResponse(PolarisContext_t* context) {
   // Read until the connection is closed.
   size_t total_bytes = 0;
   int bytes_read;
+
+#ifdef USE_SSL
+  while ((bytes_read = SSL_read(context->ssl, context->recv_buffer + total_bytes,
+                            POLARIS_RECV_BUFFER_SIZE - total_bytes - 1)) >
+         0) {
+#else
   while ((bytes_read = recv(context->socket, context->recv_buffer + total_bytes,
                             POLARIS_RECV_BUFFER_SIZE - total_bytes - 1, 0)) >
          0) {
+#endif
     total_bytes += (size_t)bytes_read;
     if (total_bytes == POLARIS_RECV_BUFFER_SIZE - 1) {
       break;
     }
   }
 
+#ifdef USE_SSL
+  SSL_free(context->ssl);
+#endif
   close(context->socket);
+#ifdef USE_SSL
+  SSL_CTX_free(context->ssl_ctx);
+    context->ssl = NULL;
+    context->ssl_ctx = NULL;
+#endif
   context->socket = P1_INVALID_SOCKET;
 
   P1_DebugPrint("Received HTTP request. [size=%u B]\n", (unsigned)total_bytes);
