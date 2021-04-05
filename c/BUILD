@@ -8,12 +8,12 @@ cc_library(
     includes = ["src"],
 )
 
-# Polaris client C library - all messages and supporting code.
+# Polaris client C library with TLS enabled.
 cc_library(
     name = "polaris_client_tls",
     srcs = glob(["src/**/*.c"]),
     hdrs = glob(["src/**/*.h"]),
-    copts = ["-DUSE_SSL"],
+    copts = ["-DPOLARIS_USE_SSL=1"],
     includes = ["src"],
     deps = [
         "@boringssl//:ssl",

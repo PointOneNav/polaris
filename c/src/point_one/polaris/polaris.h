@@ -8,7 +8,6 @@
 
 #include <stdint.h>
 
-
 #include "point_one/polaris/socket.h"
 
 #define POLARIS_ENDPOINT_URL "polaris.pointonenav.com"
@@ -101,8 +100,8 @@ struct PolarisContext_s {
   PolarisCallback_t rtcm_callback;
   void* rtcm_callback_info;
 
-  // Note: we're using void* to avoid needing the inclusion of SSL libs in the
-  // h file.
+  // Note: We're using void* to avoid needing the inclusion of SSL libs in the
+  // header file.
   void* ssl_ctx;
   void* ssl;
 };
@@ -125,6 +124,10 @@ int Polaris_Init(PolarisContext_t* context);
  *
  * Authentication uses the provided API key to generate an authentication token
  * that can be used to receive corrections.
+ *
+ * @note
+ * To enable secure connections using TLS, the library must be compiled with
+ * `POLARIS_USE_SSL` defined.
  *
  * @post
  * On success, `context.auth_token` will be populated with the generated token.

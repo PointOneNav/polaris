@@ -47,10 +47,11 @@ def dependencies():
         remote = "https://github.com/google/glog.git",
     )
 
-    #-------------------------------------------------------------------------------
+    #---------------------------------------------------------------------------
     # Google BoringSSL
     #
-    # Optional; Only used if the system is compiled with USE_SSL
+    # Optional; only used if the system is compiled with POLARIS_USE_SSL
+    # defined.
     maybe(
         git_repository,
         name = "boringssl",
