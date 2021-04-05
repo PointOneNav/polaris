@@ -19,8 +19,7 @@ jobs:
       matrix:
         arch: [x64]
         os: [ubuntu-latest]
-        #tool: [cmake, bazel]
-        tool: [bazel]
+        tool: [cmake, bazel]
         compiler: [g++]
         include:
           - arch: armv7hf
@@ -65,7 +64,37 @@ jobs:
       with:
         cmake-version: '3.16.x'
 
-    # TODO Install dependencies (glog, gflags, Boost -- possibly already available).
+    # Note: Boost and OpenSSL are already available in the image. OpenSSL is
+    # installed in the system image and works out of the box. Boost is
+    # precompiled and available in the Github tool cache (/opt/hostedtoolcache/)
+    # but we need to explicitly set the BOOST_ROOT path to the pre-defined
+    # variable BOOST_ROOT_1_72_0.
+    - name: Install Boost
+      if: matrix.tool == 'cmake'
+      run: |
+        echo "BOOST_ROOT=${BOOST_ROOT_1_72_0}" >> $GITHUB_ENV
+
+    - name: Install GFlags
+      if: matrix.tool == 'cmake'
+      run: |
+        curl -L https://github.com/gflags/gflags/archive/refs/tags/v2.2.2.tar.gz --output gflags.tar.gz
+        tar xvzf gflags.tar.gz
+        cd gflags-2.2.2
+        cmake -B build -DBUILD_SHARED_LIBS=ON .
+        cd build
+        make -j10
+        sudo make install
+
+    - name: Install GLog
+      if: matrix.tool == 'cmake'
+      run: |
+        curl -L https://github.com/google/glog/archive/0a2e5931bd5ff22fd3bf8999eb8ce776f159cda6.tar.gz --output glog.tar.gz
+        tar xvzf glog.tar.gz
+        cd glog-0a2e5931bd5ff22fd3bf8999eb8ce776f159cda6
+        cmake -B build -DBUILD_SHARED_LIBS=ON .
+        cd build
+        make -j10
+        sudo make install
 
     - name: Setup Build (CMake)
       if: matrix.tool == 'cmake'
