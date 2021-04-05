@@ -222,7 +222,7 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
   }
 
 #ifdef POLARIS_USE_SSL
-  context->ssl_ctx = SSL_CTX_new(TLSv1_1_client_method());
+  context->ssl_ctx = SSL_CTX_new(TLS_client_method());
   // Note that we only support TLS. We specifically disable older insecure
   // protocols.
   SSL_CTX_set_options(context->ssl_ctx, SSL_OP_NO_SSLv2);
@@ -665,7 +665,7 @@ static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
   size_t message_size = header_size + content_length;
 
 #ifdef POLARIS_USE_SSL
-  context->ssl_ctx = SSL_CTX_new(TLSv1_1_client_method());
+  context->ssl_ctx = SSL_CTX_new(TLS_client_method());
   // we specifically disable older insecure protocols
   SSL_CTX_set_options(context->ssl_ctx, SSL_OP_NO_SSLv2);
   SSL_CTX_set_options(context->ssl_ctx, SSL_OP_NO_SSLv3);
