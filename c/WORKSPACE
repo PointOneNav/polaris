@@ -1,1 +1,7 @@
 workspace(name = "p1_polaris_c_client")
+
+#-------------------------------------------------------------------------------
+# Import Polaris Client dependencies.
+load("//bazel:repositories.bzl", polaris_dependencies = "dependencies")
+
+polaris_dependencies()
