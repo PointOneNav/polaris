@@ -59,6 +59,8 @@ Navigation contract or sales@pointonenav.com if you do not have one.
 
 - [Bazel](https://bazel.build/) 3.3+, or [CMake](https://cmake.org/) 3.3+ and
   [GNU Make](https://www.gnu.org/software/make/)
+- [OpenSSL](https://www.openssl.org/) or [BoringSSL](https://boringssl.googlesource.com/boringssl/) (optional; required
+  for TLS support (recommended))
 
 ### Building From Source ###
 
@@ -204,6 +206,8 @@ operations.
 - [Google gflags 2.2.2+](https://github.com/gflags/gflags)
 - [Google glog 0.4.0+](https://github.com/google/glog)
 - [Boost 1.58+](https://www.boost.org/) (for building example applications only)
+- [OpenSSL](https://www.openssl.org/) or [BoringSSL](https://boringssl.googlesource.com/boringssl/) (optional; required
+  for TLS support (recommended))
 
 ### Building From Source ###
 
