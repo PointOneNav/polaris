@@ -64,15 +64,16 @@ jobs:
       with:
         cmake-version: '3.16.x'
 
-    # Note: Boost and OpenSSL are already available in the image. OpenSSL is
-    # installed in the system image and works out of the box. Boost is
-    # precompiled and available in the Github tool cache (/opt/hostedtoolcache/)
-    # but we need to explicitly set the BOOST_ROOT path to the pre-defined
-    # variable BOOST_ROOT_1_72_0.
-    - name: Install Boost
-      if: matrix.tool == 'cmake'
+    # Note: OpenSSL is installed in the system image and works out of the box.
+    # Boost used to be maintained by Github, but was removed from the images in
+    # March 2021 (https://github.com/actions/virtual-environments/issues/2667).
+    # To get around this, we install it with the apt package for Linux. For
+    # Windows, we would need to download and install the pre-built binaries from
+    # https://sourceforge.net/projects/boost/files/boost-binaries.
+    - name: Install Boost (Linux)
+      if: matrix.tool == 'cmake' && matrix.os == 'ubuntu-latest'
       run: |
-        echo "BOOST_ROOT=${BOOST_ROOT_1_72_0}" >> $GITHUB_ENV
+        sudo apt install -y libboost-all-dev
 
     - name: Install GFlags
       if: matrix.tool == 'cmake'
