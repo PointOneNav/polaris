@@ -23,15 +23,15 @@ endif()
 # Check for dependencies.
 ################################################################################
 
-# Find glog.
-option(GLOG_PREFER_EXPORTED_GLOG_CMAKE_CONFIGURATION TRUE)
-find_package(Glog REQUIRED)
-include_directories(${GLOG_INCLUDE_DIRS})
-
 # Find gflags.
 option(GFLAGS_PREFER_EXPORTED_GFLAGS_CMAKE_CONFIGURATION TRUE)
 find_package(Gflags REQUIRED)
 include_directories(${GFLAGS_INCLUDE_DIRS})
+
+# Find glog (requires gflags).
+option(GLOG_PREFER_EXPORTED_GLOG_CMAKE_CONFIGURATION TRUE)
+find_package(Glog REQUIRED)
+include_directories(${GLOG_INCLUDE_DIRS})
 
 ################################################################################
 # Library Definitions
