@@ -51,7 +51,7 @@
  * be received until the client is authenticated.
  */
 #ifndef POLARIS_SEND_BUFFER_SIZE
-# define POLARIS_SEND_BUFFER_SIZE 1024
+# define POLARIS_SEND_BUFFER_SIZE 64
 #endif
 
 /**
