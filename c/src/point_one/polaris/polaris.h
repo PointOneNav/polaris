@@ -127,7 +127,7 @@ int Polaris_Init(PolarisContext_t* context);
  *
  * @note
  * To enable secure connections using TLS, the library must be compiled with
- * `POLARIS_USE_SSL` defined.
+ * `POLARIS_USE_TLS` defined.
  *
  * @post
  * On success, `context.auth_token` will be populated with the generated token.

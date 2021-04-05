@@ -13,7 +13,7 @@ cc_library(
     name = "polaris_client_tls",
     srcs = glob(["src/**/*.c"]),
     hdrs = glob(["src/**/*.h"]),
-    copts = ["-DPOLARIS_USE_SSL=1"],
+    copts = ["-DPOLARIS_USE_TLS=1"],
     includes = ["src"],
     deps = [
         "@boringssl//:ssl",

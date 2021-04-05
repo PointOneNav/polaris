@@ -10,7 +10,7 @@
 #include <stdlib.h>  // For malloc()
 #include <string.h>  // For memmove()
 
-#ifdef POLARIS_USE_SSL
+#ifdef POLARIS_USE_TLS
 #include <openssl/ssl.h>
 #endif
 
@@ -61,7 +61,7 @@ static int GetHTTPResponse(PolarisContext_t* context);
 
 static void CloseSocket(PolarisContext_t* context);
 
-#ifdef POLARIS_USE_SSL
+#ifdef POLARIS_USE_TLS
 static void ShowCerts(SSL* ssl);
 #endif
 
@@ -85,7 +85,7 @@ int Polaris_Init(PolarisContext_t* context) {
   context->rtcm_callback = NULL;
   context->rtcm_callback_info = NULL;
 
-#ifdef POLARIS_USE_SSL
+#ifdef POLARIS_USE_TLS
   context->ssl = NULL;
   context->ssl_ctx = NULL;
 
@@ -144,7 +144,7 @@ int Polaris_Authenticate(PolarisContext_t* context, const char* api_key,
 
   P1_DebugPrint("Sending auth request. [api_key=%s, unique_id=%s]\n", api_key,
              unique_id);
-#ifdef POLARIS_USE_SSL
+#ifdef POLARIS_USE_TLS
   int status_code =
       SendPOSTRequest(context, POLARIS_API_URL, 443, "/api/v1/auth/token",
                       context->recv_buffer, (size_t)content_size);
@@ -204,7 +204,7 @@ int Polaris_SetAuthToken(PolarisContext_t* context, const char* auth_token) {
 
 /******************************************************************************/
 int Polaris_Connect(PolarisContext_t* context) {
-#ifdef POLARIS_USE_SSL
+#ifdef POLARIS_USE_TLS
   return Polaris_ConnectTo(context, POLARIS_ENDPOINT_URL,
                            POLARIS_ENDPOINT_TLS_PORT);
 #else
@@ -221,7 +221,7 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
     return POLARIS_AUTH_ERROR;
   }
 
-#ifdef POLARIS_USE_SSL
+#ifdef POLARIS_USE_TLS
   context->ssl_ctx = SSL_CTX_new(TLS_client_method());
   // Note that we only support TLS. We specifically disable older insecure
   // protocols.
@@ -244,7 +244,7 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
     return ret;
   }
 
-#ifdef POLARIS_USE_SSL
+#ifdef POLARIS_USE_TLS
   // Create new SSL connection state and attach the socket.
   if (context->ssl != NULL) {
     SSL_CTX_free(context->ssl_ctx);
@@ -281,7 +281,7 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
 
   P1_DebugPrint("Sending access token message. [size=%u B]\n",
               (unsigned)message_size);
-#ifdef POLARIS_USE_SSL
+#ifdef POLARIS_USE_TLS
   ret = SSL_write(context->ssl, context->recv_buffer, message_size);
 #else
   ret = send(context->socket, context->recv_buffer, message_size, 0);
@@ -342,7 +342,7 @@ int Polaris_SendECEFPosition(PolarisContext_t* context, double x_m, double y_m,
 #endif
   PrintData(context->send_buffer, message_size);
 
-#ifdef POLARIS_USE_SSL
+#ifdef POLARIS_USE_TLS
   int ret = SSL_write(context->ssl, context->send_buffer, message_size);
 #else
   int ret = send(context->socket, context->send_buffer, message_size, 0);
@@ -385,7 +385,7 @@ int Polaris_SendLLAPosition(PolarisContext_t* context, double latitude_deg,
 #endif
   PrintData(context->send_buffer, message_size);
 
-#ifdef POLARIS_USE_SSL
+#ifdef POLARIS_USE_TLS
   int ret = SSL_write(context->ssl, context->send_buffer, message_size);
 #else
   int ret = send(context->socket, context->send_buffer, message_size, 0);
@@ -416,7 +416,7 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id) {
               (unsigned)message_size, beacon_id);
   PrintData(context->send_buffer, message_size);
 
-#ifdef POLARIS_USE_SSL
+#ifdef POLARIS_USE_TLS
   int ret = SSL_write(context->ssl, context->send_buffer, message_size);
 #else
   int ret = send(context->socket, context->send_buffer, message_size, 0);
@@ -441,7 +441,7 @@ int Polaris_Work(PolarisContext_t* context) {
 
   P1_DebugPrint("Listening for data block.\n");
 
-#ifdef POLARIS_USE_SSL
+#ifdef POLARIS_USE_TLS
   P1_RecvSize_t bytes_read =
       SSL_read(context->ssl, context->recv_buffer, POLARIS_RECV_BUFFER_SIZE);
 #else
@@ -587,11 +587,11 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
 }
 
 void CloseSocket(PolarisContext_t* context) {
-#ifdef POLARIS_USE_SSL
+#ifdef POLARIS_USE_TLS
   SSL_free(context->ssl);
 #endif
   close(context->socket);
-#ifdef POLARIS_USE_SSL
+#ifdef POLARIS_USE_TLS
   SSL_CTX_free(context->ssl_ctx);
   context->ssl = NULL;
   context->ssl_ctx = NULL;
@@ -664,7 +664,7 @@ static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
 
   size_t message_size = header_size + content_length;
 
-#ifdef POLARIS_USE_SSL
+#ifdef POLARIS_USE_TLS
   context->ssl_ctx = SSL_CTX_new(TLS_client_method());
   // we specifically disable older insecure protocols
   SSL_CTX_set_options(context->ssl_ctx, SSL_OP_NO_SSLv2);
@@ -683,7 +683,7 @@ static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
     return ret;
   }
 
-#ifdef POLARIS_USE_SSL
+#ifdef POLARIS_USE_TLS
   // Create new SSL connection state and attach the socket.
   if (context->ssl != NULL) {
     SSL_CTX_free(context->ssl_ctx);
@@ -708,7 +708,7 @@ static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
 #endif
 
   P1_DebugPrint("Sending POST request. [size=%u B]\n", (unsigned)message_size);
-#ifdef POLARIS_USE_SSL
+#ifdef POLARIS_USE_TLS
   ret = SSL_write(context->ssl, context->recv_buffer, message_size);
 #else
   ret = send(context->socket, context->recv_buffer, message_size, 0);
@@ -730,7 +730,7 @@ static int GetHTTPResponse(PolarisContext_t* context) {
   size_t total_bytes = 0;
   int bytes_read;
 
-#ifdef POLARIS_USE_SSL
+#ifdef POLARIS_USE_TLS
   while ((bytes_read = SSL_read(context->ssl, context->recv_buffer + total_bytes,
                             POLARIS_RECV_BUFFER_SIZE - total_bytes - 1)) >
          0) {
@@ -776,7 +776,7 @@ static int GetHTTPResponse(PolarisContext_t* context) {
   return status_code;
 }
 
-#ifdef POLARIS_USE_SSL
+#ifdef POLARIS_USE_TLS
 void ShowCerts(SSL* ssl) {
   #if defined(POLARIS_DEBUG) || defined(POLARIS_TRACE)
   X509* cert = SSL_get_peer_certificate(ssl);
