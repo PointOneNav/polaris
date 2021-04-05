@@ -20,7 +20,8 @@ def dependencies():
     # Google Commandline Flags (gflags)
     #
     # Required by glog.
-    http_archive(
+    maybe(
+        http_archive,
         name = "com_github_gflags_gflags",
         sha256 = "34af2f15cf7367513b352bdcd2493ab14ce43692d2dcd9dfc499492966c64dcf",
         strip_prefix = "gflags-2.2.2",
@@ -38,9 +39,24 @@ def dependencies():
     # commit data to be omitted incorrectly, resulting in unexpected "Could not
     # parse object" errors. See
     # https://github.com/bazelbuild/bazel/issues/10292.
-    git_repository(
+    maybe(
+        git_repository,
         name = "com_github_google_glog",
         # 2020/5/12
         commit = "0a2e5931bd5ff22fd3bf8999eb8ce776f159cda6",
         remote = "https://github.com/google/glog.git",
+    )
+
+    #---------------------------------------------------------------------------
+    # Google BoringSSL
+    #
+    # Optional; only used if the system is compiled with POLARIS_USE_SSL
+    # defined.
+    maybe(
+        git_repository,
+        name = "boringssl",
+        commit = "87f3087d6343b89142d1191388a5885d74459df2",
+        # 2020/4/7
+        remote = "https://boringssl.googlesource.com/boringssl",
+        shallow_since = "1586306564 +0000",
     )

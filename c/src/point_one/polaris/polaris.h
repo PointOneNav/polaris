@@ -12,6 +12,7 @@
 
 #define POLARIS_ENDPOINT_URL "polaris.pointonenav.com"
 #define POLARIS_ENDPOINT_PORT 8088
+#define POLARIS_ENDPOINT_TLS_PORT 8090
 
 #define POLARIS_MAX_UNIQUE_ID_SIZE 36
 
@@ -98,6 +99,11 @@ struct PolarisContext_s {
 
   PolarisCallback_t rtcm_callback;
   void* rtcm_callback_info;
+
+  // Note: We're using void* to avoid needing the inclusion of SSL libs in the
+  // header file.
+  void* ssl_ctx;
+  void* ssl;
 };
 
 #ifdef __cplusplus
@@ -118,6 +124,10 @@ int Polaris_Init(PolarisContext_t* context);
  *
  * Authentication uses the provided API key to generate an authentication token
  * that can be used to receive corrections.
+ *
+ * @note
+ * To enable secure connections using TLS, the library must be compiled with
+ * `POLARIS_USE_SSL` defined.
  *
  * @post
  * On success, `context.auth_token` will be populated with the generated token.
