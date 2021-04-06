@@ -83,7 +83,7 @@ jobs:
         cd gflags-2.2.2
         cmake -B build -DBUILD_SHARED_LIBS=ON .
         cd build
-        make -j10
+        make -j
         sudo make install
 
     - name: Install GLog
@@ -94,7 +94,7 @@ jobs:
         cd glog-0a2e5931bd5ff22fd3bf8999eb8ce776f159cda6
         cmake -B build -DBUILD_SHARED_LIBS=ON .
         cd build
-        make -j10
+        make -j
         sudo make install
 
     - name: Setup Build (CMake)
@@ -194,7 +194,7 @@ jobs:
     - name: Build Library And Examples (GNU Make)
       if: matrix.tool == 'make'
       run: |
-        make
+        make -j
 
     # CMake build support.
     - name: Install CMake 3.16.x
@@ -214,7 +214,7 @@ jobs:
       if: matrix.tool == 'cmake' && matrix.os == 'ubuntu-latest'
       run: |
         cd cmake_build
-        make
+        make -j
         make install
 
     - name: Build Library And Examples (CMake, Windows)
