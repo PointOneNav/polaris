@@ -535,7 +535,11 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
 
 #ifdef POLARIS_USE_TLS
   // Configure TLS.
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+  context->ssl_ctx = SSL_CTX_new(TLSv1_2_client_method());
+#else
   context->ssl_ctx = SSL_CTX_new(TLS_client_method());
+#endif
   // we specifically disable older insecure protocols
   SSL_CTX_set_options(context->ssl_ctx, SSL_OP_NO_SSLv2);
   SSL_CTX_set_options(context->ssl_ctx, SSL_OP_NO_SSLv3);
