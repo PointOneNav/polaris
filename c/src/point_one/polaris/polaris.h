@@ -120,6 +120,18 @@ extern "C" {
 int Polaris_Init(PolarisContext_t* context);
 
 /**
+ * @brief Free memory and data structures used by a Polaris context.
+ *
+ * @note
+ * This function releases any existing TLS or socket connections. You must call
+ * this function before calling @ref Polaris_Init() a second time on an existing
+ * context.
+ *
+ * @param context The Polaris context to be freed.
+ */
+void Polaris_Free(PolarisContext_t* context);
+
+/**
  * @brief Authenticate with Polaris.
  *
  * Authentication uses the provided API key to generate an authentication token
@@ -200,6 +212,13 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
 
 /**
  * @brief Disconnect from the corrections stream.
+ *
+ * @note
+ * This function may be called asynchronously from @ref Polaris_Work() or @ref
+ * Polaris_Run(), and therefore does _not_ free the existing socket or TLS
+ * connection. You must call @ref Polaris_Free() to do so if neither @ref
+ * Polaris_Work() or @ref Polaris_Run() is executing when this function is
+ * called.
  *
  * @param context The Polaris context to be disconnected.
  */

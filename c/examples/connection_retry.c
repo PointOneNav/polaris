@@ -49,9 +49,11 @@ int main(int argc, const char* argv[]) {
       int ret = Polaris_Authenticate(&context, api_key, unique_id);
       if (ret == POLARIS_FORBIDDEN) {
         P1_printf("Authentication rejected. Is your API key valid?\n");
+        Polaris_Free(&context);
         return 3;
       } else if (ret != POLARIS_SUCCESS) {
         P1_printf("Authentication failed. Retrying.\n");
+        Polaris_Free(&context);
         continue;
       }
 
@@ -75,6 +77,7 @@ int main(int argc, const char* argv[]) {
             "authentication.\n");
         auth_valid = 0;
         reconnect_count = 0;
+        Polaris_Free(&context);
       }
       continue;
     }
@@ -87,6 +90,7 @@ int main(int argc, const char* argv[]) {
     if (Polaris_SendLLAPosition(&context, 37.773971, -122.430996, -0.02) !=
         POLARIS_SUCCESS) {
       Polaris_Disconnect(&context);
+      Polaris_Free(&context);
       if (++reconnect_count >= MAX_RECONNECTS) {
         P1_printf(
             "Max reconnects exceeded. Clearing access token and retrying "
@@ -128,6 +132,8 @@ int main(int argc, const char* argv[]) {
       reconnect_count = 0;
     }
   }
+
+  Polaris_Free(&context);
 
   P1_printf("Finished.\n");
 

@@ -193,6 +193,7 @@ The generated example applications will be located in `examples/<APPLICATION NAM
    ```c
    Polaris_Disconnect(&context);
    ```
+9. Finally, call `Polaris_Free()` to free the context.
 
 If desired, you can use the `Polaris_Work()` function instead of `Polaris_Run()` to perform non-blocking data receive
 operations.

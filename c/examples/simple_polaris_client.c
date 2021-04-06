@@ -71,6 +71,7 @@ int main(int argc, const char* argv[]) {
   signal(SIGTERM, HandleSignal);
 
   Polaris_Run(&context, 30000);
+  Polaris_Free(&context);
 
   P1_printf("Finished.\n");
 

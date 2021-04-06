@@ -102,6 +102,11 @@ int Polaris_Init(PolarisContext_t* context) {
 }
 
 /******************************************************************************/
+void Polaris_Free(PolarisContext_t* context) {
+  CloseSocket(context);
+}
+
+/******************************************************************************/
 int Polaris_Authenticate(PolarisContext_t* context, const char* api_key,
                          const char* unique_id) {
   // Sanity check the inputs.
@@ -270,7 +275,6 @@ void Polaris_Disconnect(PolarisContext_t* context) {
     SSL_shutdown(context->ssl);
 #endif
     shutdown(context->socket, SHUT_RDWR);
-    CloseSocket(context);
   }
 }
 
@@ -402,6 +406,7 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id) {
 /******************************************************************************/
 int Polaris_Work(PolarisContext_t* context) {
   if (context->disconnected) {
+    P1_DebugPrint("Connection terminated.\n");
     return 0;
   } else if (context->socket == P1_INVALID_SOCKET) {
     P1_Print("Error: Polaris connection not currently open.\n");
@@ -472,17 +477,21 @@ int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
 
   size_t total_bytes = 0;
   int ret = POLARIS_ERROR;
-  while (!context->disconnected) {
+  while (1) {
     // Read the next data block.
     ret = Polaris_Work(context);
 
     if (ret < 0) {
       // Connection closed remotely or another error occurred.
+      P1_DebugPrint("Connection terminated. [ret=%d]\n", ret);
+      CloseSocket(context);
       break;
     } else if (ret == 0) {
       // Did the user call disconnect?
       if (context->disconnected) {
         ret = POLARIS_SUCCESS;
+        P1_DebugPrint("Connection terminated.\n");
+        CloseSocket(context);
         break;
       }
       // Read timed out - see if we've hit the connection timeout. Otherwise,
@@ -502,6 +511,12 @@ int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
       // Data received and dispatched to the callback.
       total_bytes += (size_t)ret;
       P1_GetCurrentTime(&last_read_time);
+
+      if (context->disconnected) {
+        P1_DebugPrint("Connection terminated.\n");
+        CloseSocket(context);
+        break;
+      }
     }
   }
 
