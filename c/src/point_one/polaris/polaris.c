@@ -266,6 +266,9 @@ void Polaris_Disconnect(PolarisContext_t* context) {
   if (context->socket != P1_INVALID_SOCKET) {
     P1_DebugPrint("Closing Polaris connection.\n");
     context->disconnected = 1;
+#ifdef POLARIS_USE_TLS
+    SSL_shutdown(context->ssl);
+#endif
     shutdown(context->socket, SHUT_RDWR);
     CloseSocket(context);
   }
@@ -590,6 +593,10 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
 void CloseSocket(PolarisContext_t* context) {
 #ifdef POLARIS_USE_TLS
   if (context->ssl != NULL) {
+    if (SSL_get_shutdown(context->ssl) == 0) {
+      SSL_shutdown(context->ssl);
+    }
+
     SSL_free(context->ssl);
     context->ssl = NULL;
   }
