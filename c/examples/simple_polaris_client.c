@@ -41,6 +41,7 @@ int main(int argc, const char* argv[]) {
   P1_printf("Opened Polaris context. Authenticating...\n");
 
   if (Polaris_Authenticate(&context, api_key, unique_id) != POLARIS_SUCCESS) {
+    Polaris_Free(&context);
     return 3;
   }
 
@@ -50,6 +51,7 @@ int main(int argc, const char* argv[]) {
   Polaris_SetRTCMCallback(&context, HandleData, NULL);
 
   if (Polaris_Connect(&context) != POLARIS_SUCCESS) {
+    Polaris_Free(&context);
     return 3;
   }
 
@@ -61,6 +63,7 @@ int main(int argc, const char* argv[]) {
   if (Polaris_SendLLAPosition(&context, 37.773971, -122.430996, -0.02) !=
       POLARIS_SUCCESS) {
     Polaris_Disconnect(&context);
+    Polaris_Free(&context);
     return 4;
   }
 
