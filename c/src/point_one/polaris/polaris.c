@@ -449,7 +449,6 @@ int Polaris_Work(PolarisContext_t* context) {
       recv(context->socket, context->recv_buffer, POLARIS_RECV_BUFFER_SIZE, 0);
 #endif
 
-  P1_DebugPrint("recv returned with %d\n", bytes_read);
   if (bytes_read < 0) {
     P1_DebugPrint("Connection terminated. [ret=%d, disconnected=%d]\n",
                 (int)bytes_read, context->disconnected);
