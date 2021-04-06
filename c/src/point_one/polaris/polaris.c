@@ -25,6 +25,10 @@
 #define P1_PrintError(x, ...) \
   P1_perror("polaris.c:" STR(__LINE__) "] " x, ##__VA_ARGS__)
 
+#if defined(POLARIS_TRACE) && !defined(POLARIS_DEBUG)
+# define POLARIS_DEBUG 1
+#endif
+
 #if defined(POLARIS_DEBUG) || defined(POLARIS_TRACE)
 # define P1_DebugPrint(x, ...) P1_Print(x, ##__VA_ARGS__)
 #else
