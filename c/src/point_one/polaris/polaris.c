@@ -595,7 +595,7 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
 
   // Perform SSL handhshake.
   if (SSL_connect(context->ssl) == -1) {
-    P1_Print("SSL Handshake failed to %s:%d.\n", endpoint_url, endpoint_port);
+    P1_Print("SSL handshake failed to %s:%d.\n", endpoint_url, endpoint_port);
     CloseSocket(context);
     return POLARIS_ERROR;
   }
