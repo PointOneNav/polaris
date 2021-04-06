@@ -562,9 +562,9 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
   // Set send/receive timeouts.
   P1_TimeValue_t timeout;
   P1_SetTimeMS(POLARIS_RECV_TIMEOUT_MS, &timeout);
-  setsockopt(context->socket, 0, SO_RCVTIMEO, &timeout, sizeof(timeout));
+  setsockopt(context->socket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
   P1_SetTimeMS(POLARIS_SEND_TIMEOUT_MS, &timeout);
-  setsockopt(context->socket, 0, SO_SNDTIMEO, &timeout, sizeof(timeout));
+  setsockopt(context->socket, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
 
   // Lookup the IP of the endpoint used for auth requests.
   P1_SocketAddrV4_t address;

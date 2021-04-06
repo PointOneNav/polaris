@@ -27,6 +27,9 @@ typedef BaseType_t P1_RecvSize_t;
 
 #define IPPROTO_TCP FREERTOS_IPPROTO_TCP
 
+// Not currently used/ignored by FreeRTOS. Setting to the same value as POSIX.
+#define SOL_SOCKET 1
+
 #define SO_RCVTIMEO FREERTOS_SO_RCVTIMEO
 #define SO_SNDTIMEO FREERTOS_SO_SNDTIMEO
 
