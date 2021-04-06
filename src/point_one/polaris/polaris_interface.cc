@@ -20,6 +20,7 @@ PolarisInterface::PolarisInterface() {
 /******************************************************************************/
 PolarisInterface::~PolarisInterface() {
   Disconnect();
+  Polaris_Free(&context_);
 }
 
 /******************************************************************************/

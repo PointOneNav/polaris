@@ -19,8 +19,7 @@ jobs:
       matrix:
         arch: [x64]
         os: [ubuntu-latest]
-        #tool: [cmake, bazel]
-        tool: [bazel]
+        tool: [cmake, bazel]
         compiler: [g++]
         include:
           - arch: armv7hf
@@ -65,7 +64,38 @@ jobs:
       with:
         cmake-version: '3.16.x'
 
-    # TODO Install dependencies (glog, gflags, Boost -- possibly already available).
+    # Note: OpenSSL is installed in the system image and works out of the box.
+    # Boost used to be maintained by Github, but was removed from the images in
+    # March 2021 (https://github.com/actions/virtual-environments/issues/2667).
+    # To get around this, we install it with the apt package for Linux. For
+    # Windows, we would need to download and install the pre-built binaries from
+    # https://sourceforge.net/projects/boost/files/boost-binaries.
+    - name: Install Boost (Linux)
+      if: matrix.tool == 'cmake' && matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt install -y libboost-all-dev
+
+    - name: Install GFlags
+      if: matrix.tool == 'cmake'
+      run: |
+        curl -L https://github.com/gflags/gflags/archive/refs/tags/v2.2.2.tar.gz --output gflags.tar.gz
+        tar xvzf gflags.tar.gz
+        cd gflags-2.2.2
+        cmake -B build -DBUILD_SHARED_LIBS=ON .
+        cd build
+        make -j
+        sudo make install
+
+    - name: Install GLog
+      if: matrix.tool == 'cmake'
+      run: |
+        curl -L https://github.com/google/glog/archive/0a2e5931bd5ff22fd3bf8999eb8ce776f159cda6.tar.gz --output glog.tar.gz
+        tar xvzf glog.tar.gz
+        cd glog-0a2e5931bd5ff22fd3bf8999eb8ce776f159cda6
+        cmake -B build -DBUILD_SHARED_LIBS=ON .
+        cd build
+        make -j
+        sudo make install
 
     - name: Setup Build (CMake)
       if: matrix.tool == 'cmake'
@@ -164,7 +194,7 @@ jobs:
     - name: Build Library And Examples (GNU Make)
       if: matrix.tool == 'make'
       run: |
-        make
+        make -j
 
     # CMake build support.
     - name: Install CMake 3.16.x
@@ -184,7 +214,7 @@ jobs:
       if: matrix.tool == 'cmake' && matrix.os == 'ubuntu-latest'
       run: |
         cd cmake_build
-        make
+        make -j
         make install
 
     - name: Build Library And Examples (CMake, Windows)
