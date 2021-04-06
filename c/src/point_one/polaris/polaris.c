@@ -533,7 +533,7 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
   context->socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   if (context->socket < 0) {
     P1_Print("Error opening socket.\n");
-    context->socket = P1_INVALID_SOCKET;
+    CloseSocket(context);
     return POLARIS_SOCKET_ERROR;
   }
 
@@ -564,9 +564,6 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
 
 #ifdef POLARIS_USE_TLS
   // Create new SSL connection state and attach the socket.
-  if (context->ssl != NULL) {
-    SSL_CTX_free(context->ssl_ctx);
-  }
   context->ssl = SSL_new(context->ssl_ctx);
   SSL_set_fd(context->ssl, context->socket);
 
@@ -577,7 +574,7 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
   // Perform SSL handhshake.
   if (SSL_connect(context->ssl) == -1) {
     P1_Print("SSL Handshake failed to %s:%d.\n", endpoint_url, endpoint_port);
-    Polaris_Disconnect(context);
+    CloseSocket(context);
     return POLARIS_ERROR;
   }
 
@@ -592,15 +589,23 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
 /******************************************************************************/
 void CloseSocket(PolarisContext_t* context) {
 #ifdef POLARIS_USE_TLS
-  SSL_free(context->ssl);
+  if (context->ssl != NULL) {
+    SSL_free(context->ssl);
+    context->ssl = NULL;
+  }
 #endif
-  close(context->socket);
+
+  if (context->socket != P1_INVALID_SOCKET) {
+    close(context->socket);
+    context->socket = P1_INVALID_SOCKET;
+  }
+
 #ifdef POLARIS_USE_TLS
-  SSL_CTX_free(context->ssl_ctx);
-  context->ssl = NULL;
-  context->ssl_ctx = NULL;
+  if (context->ssl_ctx != NULL) {
+    SSL_CTX_free(context->ssl_ctx);
+    context->ssl_ctx = NULL;
+  }
 #endif
-  context->socket = P1_INVALID_SOCKET;
 }
 
 /******************************************************************************/
