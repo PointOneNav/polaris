@@ -6,6 +6,7 @@
 
 #include "point_one/polaris/polaris.h"
 
+#include <errno.h>
 #include <stdio.h>   // For sscanf() and snprintf()
 #include <stdlib.h>  // For malloc()
 #include <string.h>  // For memmove()
@@ -424,13 +425,20 @@ int Polaris_Work(PolarisContext_t* context) {
 #endif
 
   if (bytes_read < 0) {
-    P1_DebugPrint("Connection terminated. [ret=%d, disconnected=%d]\n",
-                (int)bytes_read, context->disconnected);
-    CloseSocket(context);
-    if (context->disconnected) {
+    if (errno == EAGAIN || errno == ETIMEDOUT) {
+      P1_DebugPrint("Socket timed out.\n");
       return 0;
     } else {
-      return POLARIS_CONNECTION_CLOSED;
+      P1_DebugPrint(
+          "Connection terminated. [ret=%d, errno=%d, "
+          "disconnected=%d]\n",
+          (int)bytes_read, errno, context->disconnected);
+      CloseSocket(context);
+      if (context->disconnected) {
+        return 0;
+      } else {
+        return POLARIS_CONNECTION_CLOSED;
+      }
     }
   } else if (bytes_read == 0) {
     // If recv() times out before we've gotten anything, the socket was probably
