@@ -35,16 +35,16 @@
 void PrintData(const uint8_t* buffer, size_t length) {
   for (size_t i = 0; i < length; ++i) {
     if (i % 16 != 0) {
-      P1_DebugPrint(" ");
+      P1_fprintf(stderr, " ");
     }
 
-    P1_DebugPrint("%02x", buffer[i]);
+    P1_fprintf(stderr, "%02x", buffer[i]);
 
     if (i % 16 == 15) {
-      P1_DebugPrint("\n");
+      P1_fprintf(stderr, "\n");
     }
   }
-  P1_DebugPrint("\n");
+  P1_fprintf(stderr, "\n");
 }
 #else
 # define PrintData(buffer, length) do {} while(0)
