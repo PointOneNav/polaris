@@ -669,7 +669,18 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
 
   // Perform SSL handhshake.
   if (SSL_connect(context->ssl) == -1) {
-    P1_Print("SSL handshake failed to %s:%d.\n", endpoint_url, endpoint_port);
+    P1_Print("SSL handshake failed to tcp://%s:%d.\n", endpoint_url,
+             endpoint_port);
+    CloseSocket(context, 1);
+    return POLARIS_ERROR;
+  }
+
+  const SSL_CIPHER* c = SSL_get_current_cipher(context->ssl);
+  if (c == NULL) {
+    P1_Print(
+        "Server failed to negotiate encryption cipher. Verify that endpoint "
+        "tcp://%s:%d supports TLS 1.2 or better.\n",
+        endpoint_url, endpoint_port);
     CloseSocket(context, 1);
     return POLARIS_ERROR;
   }
