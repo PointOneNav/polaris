@@ -381,7 +381,7 @@ associate the receiver with an appropriate corrections stream.
 
 For example, to run an NTRIP server on TCP port 2101 (the standard NTRIP port), run the following command:
 ```
-bazel run -c opt examples/ntrip:ntrip_example -- --polaris_api_key=<POLARIS_API_KEY> 0.0.0.0 2101 examples/ntrip
+bazel run -c opt examples/ntrip:ntrip_server_example -- --polaris_api_key=<POLARIS_API_KEY> 0.0.0.0 2101 examples/ntrip
 ```
 
 Any GNSS receiver that supports an NTRIP connection can then connect to the computer running this application to receive
