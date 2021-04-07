@@ -12,6 +12,7 @@
 #include <string.h>  // For memmove()
 
 #ifdef POLARIS_USE_TLS
+#include <openssl/err.h>
 #include <openssl/ssl.h>
 #endif
 
@@ -25,6 +26,66 @@
   P1_fprintf(stderr, "polaris.c:" STR(__LINE__) "] " x, ##__VA_ARGS__)
 #define P1_PrintError(x, ...) \
   P1_perror("polaris.c:" STR(__LINE__) "] " x, ##__VA_ARGS__)
+
+#if defined(POLARIS_USE_TLS)
+static void __P1_PrintWriteError(int line, PolarisContext_t* context,
+                                 const char* message, int ret) {
+  SSL_load_error_strings();
+  int ssl_error = SSL_get_error(context->ssl, ret);
+  if (ssl_error == SSL_ERROR_SYSCALL) {
+    P1_fprintf(stderr,
+               "polaris.c:%d] %s. [error=%s (syscall: errno=%d; %s)]\n",
+               line, message, strerror(errno), errno,
+               ERR_error_string(ssl_error, NULL));
+  } else {
+    // Note: OpenSSL has a function sort of like strerror(), SSL_error_string(),
+    // but in practice its output is less than helpful most of the time. We'll
+    // still print it, but we'll also print out our own error name string:
+    const char* error_name;
+    switch (ssl_error) {
+      case SSL_ERROR_NONE:
+        error_name = "SSL_ERROR_NONE";
+        break;
+      case SSL_ERROR_SSL:
+        error_name = "SSL_ERROR_SSL";
+        break;
+      case SSL_ERROR_WANT_READ:
+        error_name = "SSL_ERROR_WANT_READ";
+        break;
+      case SSL_ERROR_WANT_WRITE:
+        error_name = "SSL_ERROR_WANT_WRITE";
+        break;
+      case SSL_ERROR_WANT_X509_LOOKUP:
+        error_name = "SSL_ERROR_WANT_X509_LOOKUP";
+        break;
+      // case SSL_ERROR_SYSCALL:
+      //   error_name = "SSL_ERROR_SYSCALL";
+      //   break;
+      case SSL_ERROR_ZERO_RETURN:
+        error_name = "SSL_ERROR_ZERO_RETURN";
+        break;
+      case SSL_ERROR_WANT_CONNECT:
+        error_name = "SSL_ERROR_WANT_CONNECT";
+        break;
+      case SSL_ERROR_WANT_ACCEPT:
+        error_name = "SSL_ERROR_WANT_ACCEPT";
+        break;
+      default:
+        error_name = "<UNKNOWN>";
+        break;
+    }
+
+    P1_fprintf(stderr, "polaris.c:%d] %s. [error=%s (%d; %s)]\n", line, message,
+               error_name, ssl_error, ERR_error_string(ssl_error, NULL));
+  }
+}
+
+#define P1_PrintWriteError(context, x, ret) \
+  __P1_PrintWriteError(__LINE__, context, x, ret)
+#else
+#define P1_PrintWriteError(context, x, ret) P1_PrintError(x, ret)
+#endif
+
 
 #if defined(POLARIS_TRACE) && !defined(POLARIS_DEBUG)
 # define POLARIS_DEBUG 1
@@ -96,7 +157,6 @@ int Polaris_Init(PolarisContext_t* context) {
 
   SSL_library_init();
   OpenSSL_add_all_algorithms();
-  SSL_load_error_strings();
 #endif
 
   return POLARIS_SUCCESS;
@@ -259,7 +319,7 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
   ret = send(context->socket, context->recv_buffer, message_size, 0);
 #endif
   if (ret != message_size) {
-    P1_PrintError("Error sending authentication token", ret);
+    P1_PrintWriteError(context, "Error sending authentication token", ret);
     CloseSocket(context, 1);
     return POLARIS_SEND_ERROR;
   }
@@ -329,7 +389,7 @@ int Polaris_SendECEFPosition(PolarisContext_t* context, double x_m, double y_m,
 #endif
 
   if (ret != message_size) {
-    P1_PrintError("Error sending ECEF position", ret);
+    P1_PrintWriteError(context, "Error sending ECEF position", ret);
     return POLARIS_SEND_ERROR;
   } else {
     return POLARIS_SUCCESS;
@@ -372,7 +432,7 @@ int Polaris_SendLLAPosition(PolarisContext_t* context, double latitude_deg,
 #endif
 
   if (ret != message_size) {
-    P1_PrintError("Error sending LLA position", ret);
+    P1_PrintWriteError(context, "Error sending LLA position", ret);
     return POLARIS_SEND_ERROR;
   } else {
     return POLARIS_SUCCESS;
@@ -403,7 +463,7 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id) {
 #endif
 
   if (ret != message_size) {
-    P1_PrintError("Error sending beacon request", ret);
+    P1_PrintWriteError(context, "Error sending beacon request", ret);
     return POLARIS_SEND_ERROR;
   } else {
     return POLARIS_SUCCESS;
@@ -609,7 +669,18 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
 
   // Perform SSL handhshake.
   if (SSL_connect(context->ssl) == -1) {
-    P1_Print("SSL handshake failed to %s:%d.\n", endpoint_url, endpoint_port);
+    P1_Print("SSL handshake failed to tcp://%s:%d.\n", endpoint_url,
+             endpoint_port);
+    CloseSocket(context, 1);
+    return POLARIS_ERROR;
+  }
+
+  const SSL_CIPHER* c = SSL_get_current_cipher(context->ssl);
+  if (c == NULL) {
+    P1_Print(
+        "Server failed to negotiate encryption cipher. Verify that endpoint "
+        "tcp://%s:%d supports TLS 1.2 or better.\n",
+        endpoint_url, endpoint_port);
     CloseSocket(context, 1);
     return POLARIS_ERROR;
   }
@@ -727,7 +798,7 @@ static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
 #endif
 
   if (ret != message_size) {
-    P1_PrintError("Error sending POST request", ret);
+    P1_PrintWriteError(context, "Error sending POST request", ret);
     CloseSocket(context, 1);
     return POLARIS_SEND_ERROR;
   }

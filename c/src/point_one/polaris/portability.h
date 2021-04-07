@@ -52,17 +52,26 @@ static inline int P1_GetElapsedMS(const P1_TimeValue_t* start,
 
 #else // POSIX
 
+# include <errno.h>
 # include <stdio.h>
 # include <sys/time.h>
 
 # ifndef P1_printf
 #  define P1_printf printf
 # endif
+
 # ifndef P1_fprintf
 #  define P1_fprintf fprintf
 # endif
+
+// The standard POSIX perror() does not include the numeric error code in the
+// printout, which is often very useful, so we do not use it.
+//
+// Note that we ignore the ret argument here, which is meant for use with
+// FreeRTOS, and instead get the actual error value from errno on POSIX systems.
 # ifndef P1_perror
-#  define P1_perror(format, ...) perror(format)
+#  define P1_perror(format, ret) \
+  P1_fprintf(stderr, format ". [error=%s (%d)]\n", strerror(errno), errno)
 # endif
 
 typedef struct timeval P1_TimeValue_t;
