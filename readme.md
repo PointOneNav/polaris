@@ -20,6 +20,7 @@ Documentation on the protocol used by the Polaris Service can be found at https:
 
 ### Table Of Contents ###
 
+* [Polaris API Key and Unique ID](#polaris-api-key-and-unique-id)
 * [Polaris C Client](#polaris-c-client)
   * [Requirements](#requirements)
   * [Building From Source](#building-from-source)
@@ -48,10 +49,20 @@ Documentation on the protocol used by the Polaris Service can be found at https:
       * [Running the example](#running-the-example)
       * [Verifying Corrections](#verifying-corrections)
 
-### Polaris API Key ###
+## Polaris API Key and Unique ID ##
 
 To establish a connection, you must provide a valid Polaris API key. Please contact the administrator of your Point One
 Navigation contract or sales@pointonenav.com if you do not have one.
+
+Each time you connect to Polaris, you must provide both your assigned API key and a unique ID - a string used to
+identify the connection. Unique IDs must be unique across all Polaris sessions using your API key.
+
+**Important: if two connections use the same unique ID, they will conflict and will not work correctly.**
+
+Unique IDs have the following requirements:
+- Maximum of 36 characters long
+- A mixture of uppercase and lowercase letters and numbers
+- May include the following special characters: `-` and `_`
 
 ## Polaris C Client ##
 
