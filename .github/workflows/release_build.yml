@@ -141,7 +141,7 @@ jobs:
       env:
         POLARIS_API_KEY: ${{ secrets.POLARIS_API_KEY }}
       run: |
-        ./test/run_unit_tests.sh --tool=${{ matrix.tool }}
+        ./test/run_unit_tests.sh --tool=${{ matrix.tool }} --unique-id-prefix=${{ matrix.tool }}_cpp
 
     # Package artifacts (Bazel only -- no need to do this for multiple build
     # tools).
@@ -255,7 +255,7 @@ jobs:
       env:
         POLARIS_API_KEY: ${{ secrets.POLARIS_API_KEY }}
       run: |
-        ./test/run_unit_tests.sh --tool=${{ matrix.tool }}
+        ./test/run_unit_tests.sh --tool=${{ matrix.tool }} --unique-id-prefix=${{ matrix.tool }}_c_
 
     # Package artifacts (GNU Make only -- no need to do this for multiple build
     # tools).

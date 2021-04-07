@@ -43,8 +43,12 @@ class TestApplicationBase(object):
             help="The tool used to compile the application (bazel, cmake, make), used to determine the default "
             "application path. Ignored if --path is specified.")
         self.parser.add_argument(
-            '--unique-id', metavar='ID', default='test_' + application_name,
-            help="The unique ID to assign to this instance.")
+            '--unique-id', metavar='ID', default=application_name,
+            help="The unique ID to assign to this instance. The ID will be prepended with PREFIX if --unique-id-prefix "
+            "is specified.")
+        self.parser.add_argument(
+            '--unique-id-prefix', metavar='PREFIX',
+            help="An optional prefix to prepend to the unique ID.")
 
         self.options = None
 
@@ -73,6 +77,8 @@ class TestApplicationBase(object):
                 print('Error: Unsupported --tool value.')
                 sys.exit(self.ARGUMENT_ERROR)
 
+        if self.options.unique_id_prefix is not None:
+            self.options.unique_id = self.options.unique_id_prefix + self.options.unique_id
         if len(self.options.unique_id) > 36:
             self.options.unique_id = self.options.unique_id[:36]
             print("Unique ID too long. Truncating to '%s'." % self.options.unique_id)
