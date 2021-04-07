@@ -100,21 +100,21 @@ jobs:
     - name: Setup Build (CMake)
       if: matrix.tool == 'cmake'
       run: |
-        mkdir cmake_build
-        cd cmake_build
+        mkdir build
+        cd build
         cmake -DCMAKE_INSTALL_PREFIX=install ..
 
     - name: Build Library And Examples (CMake, Linux)
       if: matrix.tool == 'cmake' && matrix.os == 'ubuntu-latest'
       run: |
-        cd cmake_build
+        cd build
         make
         make install
 
     - name: Build Library And Examples (CMake, Windows)
       if: matrix.tool == 'cmake' && matrix.os == 'windows-latest'
       run: |
-        cd cmake_build
+        cd build
         MSBuild.exe p1_polaris_client.sln
 
     # Bazel build support.
@@ -134,6 +134,14 @@ jobs:
       run: |
         bazel build -c opt --config=${{ matrix.arch }} //:polaris_client
         bazel build -c opt --config=${{ matrix.arch }} //examples:*
+
+    # Run unit tests.
+    - name: Run Unit Tests
+      if: matrix.arch == 'x64'
+      env:
+        POLARIS_API_KEY: ${{ secrets.POLARIS_API_KEY }}
+      run: |
+        ./test/run_unit_tests.sh --tool=${{ matrix.tool }}
 
     # Package artifacts (Bazel only -- no need to do this for multiple build
     # tools).
@@ -206,21 +214,21 @@ jobs:
     - name: Setup Build (CMake)
       if: matrix.tool == 'cmake'
       run: |
-        mkdir cmake_build
-        cd cmake_build
+        mkdir build
+        cd build
         cmake -DCMAKE_INSTALL_PREFIX=install ..
 
     - name: Build Library And Examples (CMake, Linux)
       if: matrix.tool == 'cmake' && matrix.os == 'ubuntu-latest'
       run: |
-        cd cmake_build
+        cd build
         make -j
         make install
 
     - name: Build Library And Examples (CMake, Windows)
       if: matrix.tool == 'cmake' && matrix.os == 'windows-latest'
       run: |
-        cd cmake_build
+        cd build
         MSBuild.exe p1_polaris_c_client.sln
 
     # Bazel build support.
@@ -240,6 +248,14 @@ jobs:
       run: |
         bazel build -c opt --config=${{ matrix.arch }} //:polaris_client
         bazel build -c opt --config=${{ matrix.arch }} //examples:*
+
+    # Run unit tests.
+    - name: Run Unit Tests
+      if: matrix.arch == 'x64'
+      env:
+        POLARIS_API_KEY: ${{ secrets.POLARIS_API_KEY }}
+      run: |
+        ./test/run_unit_tests.sh --tool=${{ matrix.tool }}
 
     # Package artifacts (GNU Make only -- no need to do this for multiple build
     # tools).
