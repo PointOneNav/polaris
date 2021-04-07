@@ -15,8 +15,15 @@ class TestApplicationBase(object):
     EXECUTION_ERROR = 3
     NONZERO_EXIT = 4
 
-    def __init__(self, application_name):
-        self.root_dir = os.path.abspath(os.path.normpath(os.path.join(os.path.dirname(__file__), '..')))
+    DEFAULT_ROOT_DIR = os.path.abspath(os.path.normpath(os.path.join(os.path.dirname(__file__), '..')))
+    DEFAULT_COMMAND = ['%(path)s', '%(polaris_api_key)s', '%(unique_id)s']
+
+    def __init__(self, application_name, root_dir=None):
+        if root_dir is None:
+            self.root_dir = self.DEFAULT_ROOT_DIR
+        else:
+            self.root_dir = root_dir
+
         self.application_name = application_name
 
         # Define and parse arguments.
@@ -41,7 +48,6 @@ class TestApplicationBase(object):
 
         self.options = None
 
-        self.default_command = ['%(path)s', '%(polaris_api_key)s', '%(unique_id)s']
         self.program_args = []
 
         self.proc = None
@@ -75,11 +81,13 @@ class TestApplicationBase(object):
 
     def run(self, return_result=False):
         # Setup the command to be run.
-        command = copy.deepcopy(self.default_command)
+        command = copy.deepcopy(self.DEFAULT_COMMAND)
         command.extend(self.program_args)
         for i in range(len(command)):
-            if command[i] == '%(polaris_api_key)s':
-                command[i] = '<POLARIS_API_KEY>'
+            if command[i].endswith('%(polaris_api_key)s'):
+                # We temporarily replace the API key placeholder with <POLARIS_API_KEY> before printing to the console
+                # to avoid printing the actual key to the console. It will be swapped with the real key below.
+                command[i] = command[i].replace('%(polaris_api_key)s', '<POLARIS_API_KEY>')
             else:
                 command[i] = command[i] % self.options.__dict__
 
@@ -88,8 +96,8 @@ class TestApplicationBase(object):
         command.insert(0, 'stdbuf')
         command.insert(1, '-o0')
         for i in range(len(command)):
-            if command[i] == '<POLARIS_API_KEY>':
-                command[i] = self.options.polaris_api_key
+            if command[i].endswith('<POLARIS_API_KEY>'):
+                command[i] = command[i].replace('<POLARIS_API_KEY>', self.options.polaris_api_key)
 
         # Run the command.
         def preexec_function():
@@ -186,7 +194,7 @@ class StandardApplication(TestApplicationBase):
             return super().check_pass_fail(exit_code)
 
     def on_stdout(self, line):
-        if re.match(r'Application received \d+ bytes.', line):
+        if re.match(r'.*Application received \d+ bytes.', line):
             print('Corrections data detected.')
             self.data_received = True
             self.stop()
