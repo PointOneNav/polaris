@@ -1,8 +1,9 @@
 package(default_visibility = ["//visibility:public"])
 
-# Polaris client C library - all messages and supporting code.
+# Polaris client C library - all messages and supporting code - _without_ TLS
+# enabled (not recommended).
 cc_library(
-    name = "polaris_client",
+    name = "polaris_client_no_tls",
     srcs = glob(["src/**/*.c"]),
     hdrs = glob(["src/**/*.h"]),
     includes = ["src"],
