@@ -1,13 +1,14 @@
 from argparse import ArgumentParser
 import copy
 import os
+import re
 import signal
 import subprocess
 import sys
 import threading
 
 
-class TestApplication(object):
+class TestApplicationBase(object):
     TEST_PASSED = 0
     TEST_FAILED = 1
     ARGUMENT_ERROR = 2
@@ -160,3 +161,32 @@ class TestApplication(object):
 
     def on_stdout(self, line):
         pass
+
+
+class StandardApplication(TestApplicationBase):
+    """!
+    @brief Unit test for an example application that prints a data received
+           message and requires no outside input.
+
+    The data received message must be formatted as:
+    ```
+    Application received N bytes.
+    ```
+    """
+
+    def __init__(self, application_name):
+        super().__init__(application_name=application_name)
+        self.data_received = False
+
+    def check_pass_fail(self, exit_code):
+        if exit_code == 0 and not self.data_received:
+            print('No corrections data received.')
+            return self.TEST_FAILED
+        else:
+            return super().check_pass_fail(exit_code)
+
+    def on_stdout(self, line):
+        if re.match(r'Application received \d+ bytes.', line):
+            print('Corrections data detected.')
+            self.data_received = True
+            self.stop()
