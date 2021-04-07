@@ -90,10 +90,12 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 http_archive(
     name = "p1_polaris",
-    strip_prefix = "polaris-1.0.0",
-    urls = ["https://github.com/PointOneNav/polaris/archive/v1.0.0.tar.gz"],
+    strip_prefix = "polaris-1.0.1",
+    urls = ["https://github.com/PointOneNav/polaris/archive/v1.0.1.tar.gz"],
 )
 ```
+
+replacing `1.0.1` with the latest version of Polaris Client.
 
 Then you can add `@p1_polaris//c:polaris_client` to the `deps` section of a `cc_binary()` or `cc_library()` rule in
 your project, and add `#include <point_one/polaris/polaris.h>` to your source code. For example:
@@ -302,14 +304,16 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 http_archive(
     name = "p1_polaris",
-    strip_prefix = "polaris-1.0.0",
-    urls = ["https://github.com/PointOneNav/polaris/archive/v1.0.0.tar.gz"],
+    strip_prefix = "polaris-1.0.1",
+    urls = ["https://github.com/PointOneNav/polaris/archive/v1.0.1.tar.gz"],
 )
 
 load("@p1_polaris//bazel:repositories.bzl", polaris_dependencies = "dependencies")
 
 polaris_dependencies()
 ```
+
+replacing `1.0.1` with the latest version of Polaris Client.
 
 This will automatically download and import all requirements for the Polaris C++ Client.
 
