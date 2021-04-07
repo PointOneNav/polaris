@@ -29,6 +29,9 @@ Documentation on the protocol used by the Polaris Service can be found at https:
     * [CMake](#cmake)
     * [GNU Make](#gnu-make)
   * [Using Polaris C Client](#using-polaris-c-client)
+  * [Example Applications](#example-applications)
+    * [Simple Polaris Client](#simple-polaris-client)
+    * [Connection Retry](#connection-retry)
 * [Polaris C++ Client](#polaris-c-client-1)
   * [Requirements](#requirements-1)
   * [Building From Source](#building-from-source-1)
@@ -39,7 +42,7 @@ Documentation on the protocol used by the Polaris Service can be found at https:
     * [Building On Mac OS](#building-on-mac-os)
   * [Using Polaris C++ Client](#using-polaris-c-client-1)
   * [Example Applications](#example-applications)
-    * [Simple Polaris Client](#simple-polaris-client)
+    * [Simple Polaris Client](#simple-polaris-client-1)
     * [Generic Serial Receiver Example](#generic-serial-receiver-example)
     * [NTRIP Server Example](#ntrip-server-example)
     * [Septentrio Example](#septentrio-example)
@@ -120,6 +123,17 @@ To compile and run the included example applications using Bazel, follow these s
    bazel build -c opt //c/examples:*
    ```
 
+The generated example applications will be stored within the Bazel cache directory
+(`bazel-bin/examples/<APPLICATION_NAME>`). You may run them directly from the `bazel-bin/` directory if you wish, but
+they are more commonly run using the `bazel run` command. For example, to run the
+[Simple Polaris Client](#simple-polaris-client) example application, run the following:
+
+```bash
+bazel run -c opt //c/examples:simple_polaris_client -- <POLARIS_API_KEY> [<UNIQUE_ID>]
+```
+
+See [Simple Polaris Client](#simple-polaris-client) for more details.
+
 #### CMake ####
 
 > Note: The C client does not currently have any external dependencies.
@@ -140,7 +154,15 @@ To compile and run the included example applications using Bazel, follow these s
    make
    ```
 
-The generated example applications will be located in `build/examples/<APPLICATION NAME>`.
+The generated example applications will be located at `examples/<APPLICATION NAME>` in the `build/` directory. For
+example, to run the [Simple Polaris Client](#simple-polaris-client) example application from the `build/` directory,
+run the following:
+
+```bash
+./examples/simple_polaris_client <POLARIS_API_KEY> [<UNIQUE_ID>]
+```
+
+See [Simple Polaris Client](#simple-polaris-client) for more details.
 
 #### GNU Make ###
 
@@ -156,7 +178,15 @@ The generated example applications will be located in `build/examples/<APPLICATI
    make
    ```
 
-The generated example applications will be located in `examples/<APPLICATION NAME>`.
+The generated example applications will be located at `examples/<APPLICATION NAME>` in the current directory
+(`polaris/c/`). For example, to run the [Simple Polaris Client](#simple-polaris-client) example application, run the
+following:
+
+```bash
+./examples/simple_polaris_client <POLARIS_API_KEY> [<UNIQUE_ID>]
+```
+
+See [Simple Polaris Client](#simple-polaris-client) for more details.
 
 ### Using Polaris C Client ###
 
@@ -204,10 +234,40 @@ The generated example applications will be located in `examples/<APPLICATION NAM
    ```c
    Polaris_Disconnect(&context);
    ```
-9. Finally, call `Polaris_Free()` to free the context.
+9. Finally, call `Polaris_Free()` to free memory held by the context.
+   ```c
+   Polaris_Free(&context);
+   ```
 
 If desired, you can use the `Polaris_Work()` function instead of `Polaris_Run()` to perform non-blocking data receive
 operations.
+
+### Example Applications ###
+
+#### Simple Polaris Client ####
+
+A small example of establishing a Polaris connection and receiving RTCM corrections data.
+
+To run the application, run the following command:
+```
+bazel run //c/examples:simple_polaris_client -- <POLARIS_API_KEY> [<UNIQUE_ID>]
+```
+where `<POLARIS_API_KEY>` is the API key assigned to you by Point One, and `<UNIQUE_ID>` is a unique ID string of your
+choosing. If the second argument is omitted, the application will use a built-in unique ID for test purposes. See
+[Polaris API Key and Unique ID](#polaris-api-key-and-unique-id) for details.
+
+#### Connection Retry ####
+
+An extension of the simple example, adding error detection and connection retry logic consistent with how Polaris might
+be used in a real-time application.
+
+To run the application, run the following command:
+```
+bazel run //c/examples:connection_retry -- <POLARIS_API_KEY> [<UNIQUE_ID>]
+```
+where `<POLARIS_API_KEY>` is the API key assigned to you by Point One, and `<UNIQUE_ID>` is a unique ID string of your
+choosing. If the second argument is omitted, the application will use a built-in unique ID for test purposes. See
+[Polaris API Key and Unique ID](#polaris-api-key-and-unique-id) for details.
 
 ## Polaris C++ Client ##
 
@@ -274,6 +334,17 @@ To compile and run the included example applications using Bazel, follow these s
    bazel build -c opt //examples:*
    ```
 
+The generated example applications will be stored within the Bazel cache directory
+(`bazel-bin/examples/<APPLICATION_NAME>`). You may run them directly from the `bazel-bin/` directory if you wish, but
+they are more commonly run using the `bazel run` command. For example, to run the
+[Simple Polaris Client](#simple-polaris-client-1) example application, run the following:
+
+```bash
+bazel run -c opt //examples:simple_polaris_client -- --polaris_api_key=<POLARIS_API_KEY>
+```
+
+See [Simple Polaris Client](#simple-polaris-client-1) for more details.
+
 ##### Cross-Compiling With Bazel #####
 
 The Bazel build flow supports cross-compilation for 32- and 64-bit ARM architectures. To build for either architecture,
@@ -308,7 +379,15 @@ bazel build --config=aarch64 //examples:simple_polaris_client
    make
    ```
 
-The generated example applications will be located in `build/examples/<APPLICATION NAME>`.
+The generated example applications will be located at `examples/<APPLICATION NAME>` in the `build/` directory. For
+example, to run the [Simple Polaris Client](#simple-polaris-client-1) example application from the `build/` directory,
+run the following:
+
+```bash
+./examples/simple_polaris_client --polaris_api_key=<POLARIS_API_KEY>
+```
+
+See [Simple Polaris Client](#simple-polaris-client-1) for more details.
 
 #### Building On Mac OS ####
 
@@ -373,6 +452,14 @@ function immediately.
 
 A small example of establishing a Polaris connection and receiving RTCM corrections data.
 
+To run the application, run the following command:
+```
+bazel run //examples:simple_polaris_client -- --polaris_api_key=<POLARIS_API_KEY>
+```
+where `<POLARIS_API_KEY>` is the API key assigned to you by Point One. The application uses a built-in unique ID by
+default, but you may change the unique ID using the `--polaris_unique_id` argument. See
+[Polaris API Key and Unique ID](#polaris-api-key-and-unique-id) for details.
+
 #### Generic Serial Receiver Example ####
 
 This example relays incoming corrections data to a receiver over a serial connection. The receiver should be configured
@@ -383,6 +470,9 @@ To run the application, run the following command:
 ```
 bazel run //examples:serial_port_example -- --polaris_api_key=<POLARIS_API_KEY> --device=/dev/ttyACM0
 ```
+where `<POLARIS_API_KEY>` is the API key assigned to you by Point One. The application uses a built-in unique ID by
+default, but you may change the unique ID using the `--polaris_unique_id` argument. See
+[Polaris API Key and Unique ID](#polaris-api-key-and-unique-id) for details.
 
 #### NTRIP Server Example ####
 
@@ -394,6 +484,9 @@ For example, to run an NTRIP server on TCP port 2101 (the standard NTRIP port), 
 ```
 bazel run -c opt examples/ntrip:ntrip_server_example -- --polaris_api_key=<POLARIS_API_KEY> 0.0.0.0 2101 examples/ntrip
 ```
+where `<POLARIS_API_KEY>` is the API key assigned to you by Point One. The application uses a built-in unique ID by
+default, but you may change the unique ID using the `--polaris_unique_id` argument. See
+[Polaris API Key and Unique ID](#polaris-api-key-and-unique-id) for details.
 
 Any GNSS receiver that supports an NTRIP connection can then connect to the computer running this application to receive
 corrections, connecting to the NTRIP endpoint `/Polaris`. The receiver should be configured to send NMEA `$GPGGA`
