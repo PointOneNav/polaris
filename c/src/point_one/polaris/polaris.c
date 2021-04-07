@@ -177,15 +177,15 @@ int Polaris_Authenticate(PolarisContext_t* context, const char* api_key,
   }
 
   if (strlen(unique_id) > POLARIS_MAX_UNIQUE_ID_SIZE) {
-    P1_Print("Unique ID must be a maximum of %d characters.\n",
-             POLARIS_MAX_UNIQUE_ID_SIZE);
+    P1_Print("Unique ID must be a maximum of %d characters. [id='%s']\n",
+             POLARIS_MAX_UNIQUE_ID_SIZE, unique_id);
     return POLARIS_ERROR;
   } else {
     for (const char* ptr = unique_id; *ptr != '\0'; ++ptr) {
       char c = *ptr;
       if (c != '-' && c != '_' && (c < 'A' || c > 'Z') &&
           (c < 'a' || c > 'z') && (c < '0' || c > '9')) {
-        P1_Print("Invalid unique ID specified.\n");
+        P1_Print("Invalid unique ID specified. [id='%s']\n", unique_id);
         return POLARIS_ERROR;
       }
     }
