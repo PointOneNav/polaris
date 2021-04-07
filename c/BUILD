@@ -1,12 +1,35 @@
 package(default_visibility = ["//visibility:public"])
 
-# Polaris client C library - all messages and supporting code -  with TLS
-# enabled.
+load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
+
+# Option to enable/disable TLS support (enabled by default):
+#   --//:polaris_enable_tls       [enabled; default]
+#   --//:polaris_enable_tls=True  [enabled; default]
+#   --//:polaris_enable_tls=False [disabled]
+#   --no//:polaris_enable_tls     [disabled]
+bool_flag(
+    name = "polaris_enable_tls",
+    build_setting_default = True,
+)
+
+config_setting(
+    name = "tls_enabled",
+    flag_values = {
+        ":polaris_enable_tls": "True",
+    },
+)
+
+# Polaris client C library - all messages and supporting code.
 #
-# This is a convenience alias for the `polaris_client_tls` target.
+# TLS support is enabled by default, but may be disabled with the following
+# command-line argument:
+#   --//:polaris_enable_tls=False
 cc_library(
     name = "polaris_client",
-    deps = [":polaris_client_tls"],
+    deps = select({
+        ":tls_enabled": [":polaris_client_tls"],
+        "//conditions:default": [":polaris_client_no_tls"],
+    }),
 )
 
 # Polaris client C library - all messages and supporting code -  with TLS
@@ -17,9 +40,7 @@ cc_library(
     hdrs = glob(["src/**/*.h"]),
     copts = ["-DPOLARIS_USE_TLS=1"],
     includes = ["src"],
-    deps = [
-        "@boringssl//:ssl",
-    ],
+    deps = ["@boringssl//:ssl"],
 )
 
 # Polaris client C library - all messages and supporting code - _without_ TLS

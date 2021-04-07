@@ -15,7 +15,12 @@ namespace point_one {
 namespace polaris {
 
 extern const std::string DEFAULT_ENDPOINT_URL;
-static constexpr int DEFAULT_ENDPOINT_PORT = POLARIS_ENDPOINT_TLS_PORT;
+static constexpr int DEFAULT_ENDPOINT_PORT =
+#ifdef POLARIS_USE_TLS
+  POLARIS_ENDPOINT_TLS_PORT;
+#else
+  POLARIS_ENDPOINT_PORT;
+#endif
 
 /**
  * @brief C++ wrapper class for the Polaris Client C library.
