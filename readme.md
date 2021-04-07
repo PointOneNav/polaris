@@ -74,7 +74,7 @@ Unique IDs have the following requirements:
 - [Bazel](https://bazel.build/) 3.3+, or [CMake](https://cmake.org/) 3.3+ and
   [GNU Make](https://www.gnu.org/software/make/)
 - [OpenSSL](https://www.openssl.org/) or [BoringSSL](https://boringssl.googlesource.com/boringssl/) (optional; required
-  for TLS support (recommended))
+  for TLS support (strongly recommended))
 
 ### Building From Source ###
 
@@ -95,16 +95,19 @@ http_archive(
 )
 ```
 
-Then you can add `@p1_polaris//c:polaris_client` to the `deps` section of a `cc_binary()` or `cc_library()` rule in your
-project, and add `#include <point_one/polaris/polaris.h>` to your source code. For example:
+Then you can add `@p1_polaris//c:polaris_client_tls` to the `deps` section of a `cc_binary()` or `cc_library()` rule in
+your project, and add `#include <point_one/polaris/polaris.h>` to your source code. For example:
 
 ```bazel
 cc_binary(
     name = "my_application",
     srcs = ["main.c"],
-    deps = ["@p1_polaris//c:polaris_client"],
+    deps = ["@p1_polaris//c:polaris_client_tls"],
 )
 ```
+
+The `polaris_client_tls` target enables TLS support, which is strongly recommended. If necessary, you can use the
+`polaris_client` target to connect without TLS.
 
 > Note that you do not need to clone the Polaris repository when using Bazel. Bazel will clone it automatically when you
 build your application.
@@ -136,20 +139,24 @@ See [Simple Polaris Client](#simple-polaris-client) for more details.
 
 #### CMake ####
 
-> Note: The C client does not currently have any external dependencies.
-
-1. Clone the Polaris source code and navigate to the `c/` source directory:
+1. Install all required libraries:
+   ```bash
+   sudo apt install libssl-dev
+   ```
+   - OpenSSL is required by default and strongly recommended, but may be disabled by specifying
+     `-DPOLARIS_ENABLE_TLS=OFF` to the `cmake` command below.
+2. Clone the Polaris source code and navigate to the `c/` source directory:
    ```bash
    git clone https://github.com/PointOneNav/polaris.git
    cd polaris/c
    ```
-2. Create a `build/` directory and run CMake to configure the build tree:
+3. Create a `build/` directory and run CMake to configure the build tree:
    ```bash
    mkdir build
    cd build
    cmake ..
    ```
-3. Compile the Polaris source code and example applications:
+4. Compile the Polaris source code and example applications:
    ```bash
    make
    ```
@@ -279,7 +286,7 @@ choosing. If the second argument is omitted, the application will use a built-in
 - [Google glog 0.4.0+](https://github.com/google/glog)
 - [Boost 1.58+](https://www.boost.org/) (for building example applications only)
 - [OpenSSL](https://www.openssl.org/) or [BoringSSL](https://boringssl.googlesource.com/boringssl/) (optional; required
-  for TLS support (recommended))
+  for TLS support (strongly recommended))
 
 ### Building From Source ###
 
