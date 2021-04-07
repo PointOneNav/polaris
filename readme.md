@@ -95,22 +95,22 @@ http_archive(
 )
 ```
 
-Then you can add `@p1_polaris//c:polaris_client_tls` to the `deps` section of a `cc_binary()` or `cc_library()` rule in
+Then you can add `@p1_polaris//c:polaris_client` to the `deps` section of a `cc_binary()` or `cc_library()` rule in
 your project, and add `#include <point_one/polaris/polaris.h>` to your source code. For example:
 
 ```bazel
 cc_binary(
     name = "my_application",
     srcs = ["main.c"],
-    deps = ["@p1_polaris//c:polaris_client_tls"],
+    deps = ["@p1_polaris//c:polaris_client"],
 )
 ```
 
-The `polaris_client_tls` target enables TLS support, which is strongly recommended. If necessary, you can use the
-`polaris_client` target to connect without TLS.
+The `polaris_client` target enables TLS support, which is strongly recommended. If necessary, you can use the
+`polaris_client_no_tls` target to connect without TLS.
 
-> Note that you do not need to clone the Polaris repository when using Bazel. Bazel will clone it automatically when you
-build your application.
+> Note that you do not need to clone the Polaris repository when including it in your Bazel application. Bazel will
+clone it automatically when you build your application.
 
 ##### Compiling Example Applications With Bazel ####
 
@@ -324,8 +324,8 @@ cc_binary(
 )
 ```
 
-> Note that you do not need to clone the Polaris repository when using Bazel. Bazel will clone it automatically when you
-build your application.
+> Note that you do not need to clone the Polaris repository when including it in your Bazel application. Bazel will
+clone it automatically when you build your application.
 
 ##### Compiling Example Applications With Bazel ####
 
