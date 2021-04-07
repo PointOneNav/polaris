@@ -30,7 +30,7 @@ DEFINE_string(
     polaris_host, POLARIS_ENDPOINT_URL,
     "The Polaris corrections endpoint URL to be used.");
 
-DEFINE_int32(polaris_port, POLARIS_ENDPOINT_PORT,
+DEFINE_int32(polaris_port, POLARIS_ENDPOINT_TLS_PORT,
              "The TCP port of the Polaris corrections endpoint.");
 
 DEFINE_string(polaris_api_key, "",
