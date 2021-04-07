@@ -361,7 +361,7 @@ they are more commonly run using the `bazel run` command. For example, to run th
 [Simple Polaris Client](#simple-polaris-client-1) example application, run the following:
 
 ```bash
-bazel run -c opt //examples:simple_polaris_client -- --polaris_api_key=<POLARIS_API_KEY>
+bazel run -c opt //examples:simple_polaris_cpp_client -- --polaris_api_key=<POLARIS_API_KEY>
 ```
 
 See [Simple Polaris Client](#simple-polaris-client-1) for more details.
@@ -375,7 +375,7 @@ specify the `--config` argument to Bazel with one of the following values:
 
 For example:
 ```
-bazel build --config=aarch64 //examples:simple_polaris_client
+bazel build --config=aarch64 //examples:simple_polaris_cpp_client
 ```
 
 #### CMake ####
@@ -407,7 +407,7 @@ example, to run the [Simple Polaris Client](#simple-polaris-client-1) example ap
 run the following:
 
 ```bash
-./examples/simple_polaris_client --polaris_api_key=<POLARIS_API_KEY>
+./examples/simple_polaris_cpp_client --polaris_api_key=<POLARIS_API_KEY>
 ```
 
 See [Simple Polaris Client](#simple-polaris-client-1) for more details.
@@ -477,7 +477,7 @@ A small example of establishing a Polaris connection and receiving RTCM correcti
 
 To run the application, run the following command:
 ```
-bazel run //examples:simple_polaris_client -- --polaris_api_key=<POLARIS_API_KEY>
+bazel run //examples:simple_polaris_cpp_client -- --polaris_api_key=<POLARIS_API_KEY>
 ```
 where `<POLARIS_API_KEY>` is the API key assigned to you by Point One. The application uses a built-in unique ID by
 default, but you may change the unique ID using the `--polaris_unique_id` argument. See

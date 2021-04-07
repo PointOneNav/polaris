@@ -3,4 +3,4 @@
 set -e
 
 echo "Testing simple_polaris_client..."
-python3 test/test_simple_polaris_client.py $*
+python3 test/test_simple_polaris_cpp_client.py $*
