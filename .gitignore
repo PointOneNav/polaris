@@ -4,6 +4,9 @@ bazel-*
 # CMake
 build/
 
+# Python
+*.pyc
+
 # Visual Studio Code
 .vscode
 # Clion
