@@ -20,6 +20,7 @@ class Test(TestApplication):
         if re.match(r'Application received \d+ bytes.', line):
             print('Corrections data detected.')
             self.data_received = True
+            self.stop()
 
 test = Test()
 test.parse_args()

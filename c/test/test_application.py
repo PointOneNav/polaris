@@ -4,6 +4,7 @@ import os
 import signal
 import subprocess
 import sys
+import threading
 
 
 class TestApplication(object):
@@ -27,17 +28,22 @@ class TestApplication(object):
             '--polaris-api-key', metavar='KEY',
             help="The Polaris API key to be used. Ignored if the POLARIS_API_KEY environment variable is specified.")
         self.parser.add_argument(
-            '--unique-id', metavar='ID', default='test_' + application_name,
-            help="The unique ID to assign to this instance.")
+            '-t', '--timeout', metavar='SEC', type=float, default=30.0,
+            help="The maximum test duration (in seconds).")
         self.parser.add_argument(
             '--tool', metavar='TOOL', default='bazel',
             help="The tool used to compile the application (bazel, cmake, make), used to determine the default "
             "application path. Ignored if --path is specified.")
+        self.parser.add_argument(
+            '--unique-id', metavar='ID', default='test_' + application_name,
+            help="The unique ID to assign to this instance.")
 
         self.options = None
 
         self.default_command = ['%(path)s', '%(polaris_api_key)s', '%(unique_id)s']
         self.program_args = []
+
+        self.proc = None
 
     def parse_args(self):
         self.options = self.parser.parse_args()
@@ -90,28 +96,34 @@ class TestApplication(object):
             # application under test).
             os.setpgrp()
 
-        p = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf-8',
-                             preexec_fn=preexec_function)
+        self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf-8',
+                                     preexec_fn=preexec_function)
 
         # Capture SIGINT and SIGTERM and shutdown the application gracefully.
         def request_shutdown(sig, frame):
-            print('Sending shutdown request to the application.')
-            p.terminate()
+            self.stop()
             signal.signal(sig, signal.SIG_DFL)
 
         signal.signal(signal.SIGINT, request_shutdown)
         signal.signal(signal.SIGTERM, request_shutdown)
 
+        # Stop the test after a max duration.
+        def timeout_elapsed():
+            print('Maximum test duration (%.1f sec) elapsed.' % self.options.timeout)
+            self.stop()
+
+        watchdog = threading.Timer(self.options.timeout, timeout_elapsed)
+        watchdog.start()
+
         # Check for a pass/fail condition and forward output to the console.
-        exit_code = None
         while True:
             try:
-                line = p.stdout.readline().rstrip('\n')
+                line = self.proc.stdout.readline().rstrip('\n')
                 if line != '':
                     print(line.rstrip('\n'))
                     self.on_stdout(line)
-                elif p.poll() is not None:
-                    exit_code = p.poll()
+                elif self.proc.poll() is not None:
+                    exit_code = self.proc.poll()
                     break
             except KeyboardInterrupt:
                 print('Execution interrupted unexpectedly.')
@@ -119,6 +131,9 @@ class TestApplication(object):
                     return self.EXECUTION_ERROR
                 else:
                     sys.exit(self.EXECUTION_ERROR)
+
+        watchdog.cancel()
+        self.proc = None
 
         result = self.check_pass_fail(exit_code)
         if result == self.TEST_PASSED:
@@ -130,6 +145,11 @@ class TestApplication(object):
             return result
         else:
             sys.exit(result)
+
+    def stop(self):
+        if self.proc is not None:
+            print('Sending shutdown request to the application.')
+            self.proc.terminate()
 
     def check_pass_fail(self, exit_code):
         if exit_code != 0:
