@@ -34,7 +34,8 @@ class TestApplicationBase(object):
             help="The path to the application to be run.")
         self.parser.add_argument(
             '--polaris-api-key', metavar='KEY',
-            help="The Polaris API key to be used. Ignored if the POLARIS_API_KEY environment variable is specified.")
+            help="The Polaris API key to be used. If not set, defaults to the POLARIS_API_KEY environment variable if "
+            "specified.")
         self.parser.add_argument(
             '-t', '--timeout', metavar='SEC', type=float, default=30.0,
             help="The maximum test duration (in seconds).")
@@ -59,10 +60,9 @@ class TestApplicationBase(object):
     def parse_args(self):
         self.options = self.parser.parse_args()
 
-        api_key_env = os.getenv('POLARIS_API_KEY')
-        if api_key_env is not None:
-            self.options.polaris_api_key = api_key_env
-        elif self.options.polaris_api_key is None:
+        if self.options.polaris_api_key is None:
+            self.options.polaris_api_key = os.getenv('POLARIS_API_KEY')
+        if self.options.polaris_api_key is None:
             print('Error: Polaris API key not specified.')
             sys.exit(self.ARGUMENT_ERROR)
 
