@@ -25,13 +25,13 @@ void HandleSignal(int sig) {
 }
 
 int main(int argc, const char* argv[]) {
-  if (argc != 3) {
-    P1_fprintf(stderr, "Usage: %s API_KEY UNIQUE_ID\n", argv[0]);
+  if (argc < 2 || argc > 3) {
+    P1_fprintf(stderr, "Usage: %s API_KEY [UNIQUE_ID]\n", argv[0]);
     return 1;
   }
 
   const char* api_key = argv[1];
-  const char* unique_id = argv[2];
+  const char* unique_id = argc > 2 ? argv[2] : "device12345";
 
   // Retrieve an access token using the specified API key.
   if (Polaris_Init(&context) != POLARIS_SUCCESS) {

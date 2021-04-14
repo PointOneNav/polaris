@@ -5,7 +5,7 @@ cc_binary(
     name = "simple_polaris_client",
     srcs = ["simple_polaris_client.c"],
     deps = [
-        "//:polaris_client",
+        "//:polaris_client_tls",
     ],
 )
 
@@ -14,6 +14,6 @@ cc_binary(
     name = "connection_retry",
     srcs = ["connection_retry.c"],
     deps = [
-        "//:polaris_client",
+        "//:polaris_client_tls",
     ],
 )

@@ -20,6 +20,7 @@ Documentation on the protocol used by the Polaris Service can be found at https:
 
 ### Table Of Contents ###
 
+* [Polaris API Key and Unique ID](#polaris-api-key-and-unique-id)
 * [Polaris C Client](#polaris-c-client)
   * [Requirements](#requirements)
   * [Building From Source](#building-from-source)
@@ -28,6 +29,9 @@ Documentation on the protocol used by the Polaris Service can be found at https:
     * [CMake](#cmake)
     * [GNU Make](#gnu-make)
   * [Using Polaris C Client](#using-polaris-c-client)
+  * [Example Applications](#example-applications)
+    * [Simple Polaris Client](#simple-polaris-client)
+    * [Connection Retry](#connection-retry)
 * [Polaris C++ Client](#polaris-c-client-1)
   * [Requirements](#requirements-1)
   * [Building From Source](#building-from-source-1)
@@ -38,7 +42,7 @@ Documentation on the protocol used by the Polaris Service can be found at https:
     * [Building On Mac OS](#building-on-mac-os)
   * [Using Polaris C++ Client](#using-polaris-c-client-1)
   * [Example Applications](#example-applications)
-    * [Simple Polaris Client](#simple-polaris-client)
+    * [Simple Polaris Client](#simple-polaris-client-1)
     * [Generic Serial Receiver Example](#generic-serial-receiver-example)
     * [NTRIP Server Example](#ntrip-server-example)
     * [Septentrio Example](#septentrio-example)
@@ -48,10 +52,20 @@ Documentation on the protocol used by the Polaris Service can be found at https:
       * [Running the example](#running-the-example)
       * [Verifying Corrections](#verifying-corrections)
 
-### Polaris API Key ###
+## Polaris API Key and Unique ID ##
 
 To establish a connection, you must provide a valid Polaris API key. Please contact the administrator of your Point One
 Navigation contract or sales@pointonenav.com if you do not have one.
+
+Each time you connect to Polaris, you must provide both your assigned API key and a unique ID - a string used to
+identify the connection. Unique IDs must be unique across all Polaris sessions using your API key.
+
+**Important: if two connections use the same unique ID, they will conflict and will not work correctly.**
+
+Unique IDs have the following requirements:
+- Maximum of 36 characters long
+- A mixture of uppercase and lowercase letters and numbers
+- May include the following special characters: `-` and `_`
 
 ## Polaris C Client ##
 
@@ -60,7 +74,7 @@ Navigation contract or sales@pointonenav.com if you do not have one.
 - [Bazel](https://bazel.build/) 3.3+, or [CMake](https://cmake.org/) 3.3+ and
   [GNU Make](https://www.gnu.org/software/make/)
 - [OpenSSL](https://www.openssl.org/) or [BoringSSL](https://boringssl.googlesource.com/boringssl/) (optional; required
-  for TLS support (recommended))
+  for TLS support (strongly recommended))
 
 ### Building From Source ###
 
@@ -76,13 +90,21 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 http_archive(
     name = "p1_polaris",
-    strip_prefix = "polaris-1.0.0",
-    urls = ["https://github.com/PointOneNav/polaris/archive/v1.0.0.tar.gz"],
+    strip_prefix = "polaris-1.0.1",
+    urls = ["https://github.com/PointOneNav/polaris/archive/v1.0.1.tar.gz"],
 )
+
+load("@p1_polaris//c/bazel:repositories.bzl", polaris_dependencies = "dependencies")
+
+polaris_dependencies()
 ```
 
-Then you can add `@p1_polaris//c:polaris_client` to the `deps` section of a `cc_binary()` or `cc_library()` rule in your
-project, and add `#include <point_one/polaris/polaris.h>` to your source code. For example:
+replacing `1.0.1` with the latest version of Polaris Client.
+
+This will automatically download and import all requirements for the Polaris C Client.
+
+Then you can add `@p1_polaris//c:polaris_client` to the `deps` section of a `cc_binary()` or `cc_library()` rule in
+your project, and add `#include <point_one/polaris/polaris.h>` to your source code. For example:
 
 ```bazel
 cc_binary(
@@ -92,8 +114,11 @@ cc_binary(
 )
 ```
 
-> Note that you do not need to clone the Polaris repository when using Bazel. Bazel will clone it automatically when you
-build your application.
+The `polaris_client` target enables TLS support, which is strongly recommended. If necessary, you can use the
+`polaris_client_no_tls` target to connect without TLS.
+
+> Note that you do not need to clone the Polaris repository when including it in your Bazel application. Bazel will
+clone it automatically when you build your application.
 
 ##### Compiling Example Applications With Bazel ####
 
@@ -109,27 +134,50 @@ To compile and run the included example applications using Bazel, follow these s
    bazel build -c opt //c/examples:*
    ```
 
+The generated example applications will be stored within the Bazel cache directory
+(`bazel-bin/examples/<APPLICATION_NAME>`). You may run them directly from the `bazel-bin/` directory if you wish, but
+they are more commonly run using the `bazel run` command. For example, to run the
+[Simple Polaris Client](#simple-polaris-client) example application, run the following:
+
+```bash
+bazel run -c opt //c/examples:simple_polaris_client -- <POLARIS_API_KEY> [<UNIQUE_ID>]
+```
+
+See [Simple Polaris Client](#simple-polaris-client) for more details.
+
 #### CMake ####
 
-> Note: The C client does not currently have any external dependencies.
-
-1. Clone the Polaris source code and navigate to the `c/` source directory:
+1. Install all required libraries:
+   ```bash
+   sudo apt install libssl-dev
+   ```
+   - OpenSSL is required by default and strongly recommended, but may be disabled by specifying
+     `-DPOLARIS_ENABLE_TLS=OFF` to the `cmake` command below.
+2. Clone the Polaris source code and navigate to the `c/` source directory:
    ```bash
    git clone https://github.com/PointOneNav/polaris.git
    cd polaris/c
    ```
-2. Create a `build/` directory and run CMake to configure the build tree:
+3. Create a `build/` directory and run CMake to configure the build tree:
    ```bash
    mkdir build
    cd build
    cmake ..
    ```
-3. Compile the Polaris source code and example applications:
+4. Compile the Polaris source code and example applications:
    ```bash
    make
    ```
 
-The generated example applications will be located in `build/examples/<APPLICATION NAME>`.
+The generated example applications will be located at `examples/<APPLICATION NAME>` in the `build/` directory. For
+example, to run the [Simple Polaris Client](#simple-polaris-client) example application from the `build/` directory,
+run the following:
+
+```bash
+./examples/simple_polaris_client <POLARIS_API_KEY> [<UNIQUE_ID>]
+```
+
+See [Simple Polaris Client](#simple-polaris-client) for more details.
 
 #### GNU Make ###
 
@@ -145,7 +193,15 @@ The generated example applications will be located in `build/examples/<APPLICATI
    make
    ```
 
-The generated example applications will be located in `examples/<APPLICATION NAME>`.
+The generated example applications will be located at `examples/<APPLICATION NAME>` in the current directory
+(`polaris/c/`). For example, to run the [Simple Polaris Client](#simple-polaris-client) example application, run the
+following:
+
+```bash
+./examples/simple_polaris_client <POLARIS_API_KEY> [<UNIQUE_ID>]
+```
+
+See [Simple Polaris Client](#simple-polaris-client) for more details.
 
 ### Using Polaris C Client ###
 
@@ -193,10 +249,40 @@ The generated example applications will be located in `examples/<APPLICATION NAM
    ```c
    Polaris_Disconnect(&context);
    ```
-9. Finally, call `Polaris_Free()` to free the context.
+9. Finally, call `Polaris_Free()` to free memory held by the context.
+   ```c
+   Polaris_Free(&context);
+   ```
 
 If desired, you can use the `Polaris_Work()` function instead of `Polaris_Run()` to perform non-blocking data receive
 operations.
+
+### Example Applications ###
+
+#### Simple Polaris Client ####
+
+A small example of establishing a Polaris connection and receiving RTCM corrections data.
+
+To run the application, run the following command:
+```
+bazel run //c/examples:simple_polaris_client -- <POLARIS_API_KEY> [<UNIQUE_ID>]
+```
+where `<POLARIS_API_KEY>` is the API key assigned to you by Point One, and `<UNIQUE_ID>` is a unique ID string of your
+choosing. If the second argument is omitted, the application will use a built-in unique ID for test purposes. See
+[Polaris API Key and Unique ID](#polaris-api-key-and-unique-id) for details.
+
+#### Connection Retry ####
+
+An extension of the simple example, adding error detection and connection retry logic consistent with how Polaris might
+be used in a real-time application.
+
+To run the application, run the following command:
+```
+bazel run //c/examples:connection_retry -- <POLARIS_API_KEY> [<UNIQUE_ID>]
+```
+where `<POLARIS_API_KEY>` is the API key assigned to you by Point One, and `<UNIQUE_ID>` is a unique ID string of your
+choosing. If the second argument is omitted, the application will use a built-in unique ID for test purposes. See
+[Polaris API Key and Unique ID](#polaris-api-key-and-unique-id) for details.
 
 ## Polaris C++ Client ##
 
@@ -208,7 +294,7 @@ operations.
 - [Google glog 0.4.0+](https://github.com/google/glog)
 - [Boost 1.58+](https://www.boost.org/) (for building example applications only)
 - [OpenSSL](https://www.openssl.org/) or [BoringSSL](https://boringssl.googlesource.com/boringssl/) (optional; required
-  for TLS support (recommended))
+  for TLS support (strongly recommended))
 
 ### Building From Source ###
 
@@ -224,14 +310,16 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 http_archive(
     name = "p1_polaris",
-    strip_prefix = "polaris-1.0.0",
-    urls = ["https://github.com/PointOneNav/polaris/archive/v1.0.0.tar.gz"],
+    strip_prefix = "polaris-1.0.1",
+    urls = ["https://github.com/PointOneNav/polaris/archive/v1.0.1.tar.gz"],
 )
 
 load("@p1_polaris//bazel:repositories.bzl", polaris_dependencies = "dependencies")
 
 polaris_dependencies()
 ```
+
+replacing `1.0.1` with the latest version of Polaris Client.
 
 This will automatically download and import all requirements for the Polaris C++ Client.
 
@@ -246,8 +334,8 @@ cc_binary(
 )
 ```
 
-> Note that you do not need to clone the Polaris repository when using Bazel. Bazel will clone it automatically when you
-build your application.
+> Note that you do not need to clone the Polaris repository when including it in your Bazel application. Bazel will
+clone it automatically when you build your application.
 
 ##### Compiling Example Applications With Bazel ####
 
@@ -262,6 +350,17 @@ To compile and run the included example applications using Bazel, follow these s
    ```bash
    bazel build -c opt //examples:*
    ```
+
+The generated example applications will be stored within the Bazel cache directory
+(`bazel-bin/examples/<APPLICATION_NAME>`). You may run them directly from the `bazel-bin/` directory if you wish, but
+they are more commonly run using the `bazel run` command. For example, to run the
+[Simple Polaris Client](#simple-polaris-client-1) example application, run the following:
+
+```bash
+bazel run -c opt //examples:simple_polaris_client -- --polaris_api_key=<POLARIS_API_KEY>
+```
+
+See [Simple Polaris Client](#simple-polaris-client-1) for more details.
 
 ##### Cross-Compiling With Bazel #####
 
@@ -297,7 +396,15 @@ bazel build --config=aarch64 //examples:simple_polaris_client
    make
    ```
 
-The generated example applications will be located in `build/examples/<APPLICATION NAME>`.
+The generated example applications will be located at `examples/<APPLICATION NAME>` in the `build/` directory. For
+example, to run the [Simple Polaris Client](#simple-polaris-client-1) example application from the `build/` directory,
+run the following:
+
+```bash
+./examples/simple_polaris_client --polaris_api_key=<POLARIS_API_KEY>
+```
+
+See [Simple Polaris Client](#simple-polaris-client-1) for more details.
 
 #### Building On Mac OS ####
 
@@ -362,6 +469,14 @@ function immediately.
 
 A small example of establishing a Polaris connection and receiving RTCM corrections data.
 
+To run the application, run the following command:
+```
+bazel run //examples:simple_polaris_client -- --polaris_api_key=<POLARIS_API_KEY>
+```
+where `<POLARIS_API_KEY>` is the API key assigned to you by Point One. The application uses a built-in unique ID by
+default, but you may change the unique ID using the `--polaris_unique_id` argument. See
+[Polaris API Key and Unique ID](#polaris-api-key-and-unique-id) for details.
+
 #### Generic Serial Receiver Example ####
 
 This example relays incoming corrections data to a receiver over a serial connection. The receiver should be configured
@@ -372,6 +487,9 @@ To run the application, run the following command:
 ```
 bazel run //examples:serial_port_example -- --polaris_api_key=<POLARIS_API_KEY> --device=/dev/ttyACM0
 ```
+where `<POLARIS_API_KEY>` is the API key assigned to you by Point One. The application uses a built-in unique ID by
+default, but you may change the unique ID using the `--polaris_unique_id` argument. See
+[Polaris API Key and Unique ID](#polaris-api-key-and-unique-id) for details.
 
 #### NTRIP Server Example ####
 
@@ -381,8 +499,11 @@ associate the receiver with an appropriate corrections stream.
 
 For example, to run an NTRIP server on TCP port 2101 (the standard NTRIP port), run the following command:
 ```
-bazel run -c opt examples/ntrip:ntrip_example -- --polaris_api_key=<POLARIS_API_KEY> 0.0.0.0 2101 examples/ntrip
+bazel run -c opt examples/ntrip:ntrip_server_example -- --polaris_api_key=<POLARIS_API_KEY> 0.0.0.0 2101 examples/ntrip
 ```
+where `<POLARIS_API_KEY>` is the API key assigned to you by Point One. The application uses a built-in unique ID by
+default, but you may change the unique ID using the `--polaris_unique_id` argument. See
+[Polaris API Key and Unique ID](#polaris-api-key-and-unique-id) for details.
 
 Any GNSS receiver that supports an NTRIP connection can then connect to the computer running this application to receive
 corrections, connecting to the NTRIP endpoint `/Polaris`. The receiver should be configured to send NMEA `$GPGGA`
