@@ -135,6 +135,14 @@ jobs:
         bazel build -c opt --config=${{ matrix.arch }} //:polaris_client
         bazel build -c opt --config=${{ matrix.arch }} //examples:*
 
+    # Run unit tests.
+    - name: Run Unit Tests
+      if: matrix.arch == 'x64'
+      env:
+        POLARIS_API_KEY: ${{ secrets.POLARIS_API_KEY }}
+      run: |
+        ./test/run_unit_tests.sh --tool=${{ matrix.tool }} --unique-id-prefix=${{ matrix.tool }}_cpp
+
     # Package artifacts (Bazel only -- no need to do this for multiple build
     # tools).
     - name: Create artifact
@@ -241,16 +249,25 @@ jobs:
         bazel build -c opt --config=${{ matrix.arch }} //:polaris_client
         bazel build -c opt --config=${{ matrix.arch }} //examples:*
 
-    # Package artifacts (GNU Make only -- no need to do this for multiple build
+    # Run unit tests.
+    - name: Run Unit Tests
+      if: matrix.arch == 'x64'
+      env:
+        POLARIS_API_KEY: ${{ secrets.POLARIS_API_KEY }}
+      run: |
+        ./test/run_unit_tests.sh --tool=${{ matrix.tool }} --unique-id-prefix=${{ matrix.tool }}_c_
+
+    # Package artifacts (Bazel only -- no need to do this for multiple build
     # tools).
     - name: Create artifact
-      if: matrix.tool == 'make'
+      if: matrix.tool == 'bazel'
       run: |
-        make print_applications |
-        xargs tar czfv polaris_examples.tar.gz --transform 's|^|polaris/c/|'
+        bazel query 'kind("cc_binary", //examples:*)' 2>/dev/null |
+        sed -e 's|//examples:|bazel-bin/examples/|' |
+        xargs tar czf polaris_examples.tar.gz --transform 's|^bazel-bin|polaris/c|'
 
     - name: Upload artifact
-      if: matrix.tool == 'make'
+      if: matrix.tool == 'bazel'
       uses: actions/upload-artifact@v1
       with:
         path: c/polaris_examples.tar.gz

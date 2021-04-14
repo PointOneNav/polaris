@@ -36,7 +36,7 @@ PolarisClient* polaris_client = nullptr;
 // Process receiver incoming messages.  This example code expects received data
 // to be ascii nmea messages.
 void ReceivedData(const uint8_t* data, size_t length) {
-  LOG(INFO) << "Received " << length << " bytes.";
+  LOG(INFO) << "Application received " << length << " bytes.";
 }
 
 void HandleSignal(int sig) {

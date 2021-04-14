@@ -2,7 +2,7 @@ package(default_visibility = ["//visibility:public"])
 
 # Simple example of connecting to the Polaris service.
 cc_binary(
-    name = "simple_polaris_client",
+    name = "simple_polaris_cpp_client",
     srcs = ["simple_polaris_client.cc"],
     deps = [
         "//:polaris_client",
