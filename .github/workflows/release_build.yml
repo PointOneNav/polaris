@@ -100,21 +100,21 @@ jobs:
     - name: Setup Build (CMake)
       if: matrix.tool == 'cmake'
       run: |
-        mkdir build
-        cd build
+        mkdir cmake_build
+        cd cmake_build
         cmake -DCMAKE_INSTALL_PREFIX=install ..
 
     - name: Build Library And Examples (CMake, Linux)
       if: matrix.tool == 'cmake' && matrix.os == 'ubuntu-latest'
       run: |
-        cd build
+        cd cmake_build
         make
         make install
 
     - name: Build Library And Examples (CMake, Windows)
       if: matrix.tool == 'cmake' && matrix.os == 'windows-latest'
       run: |
-        cd build
+        cd cmake_build
         MSBuild.exe p1_polaris_client.sln
 
     # Bazel build support.
@@ -214,21 +214,21 @@ jobs:
     - name: Setup Build (CMake)
       if: matrix.tool == 'cmake'
       run: |
-        mkdir build
-        cd build
+        mkdir cmake_build
+        cd cmake_build
         cmake -DCMAKE_INSTALL_PREFIX=install ..
 
     - name: Build Library And Examples (CMake, Linux)
       if: matrix.tool == 'cmake' && matrix.os == 'ubuntu-latest'
       run: |
-        cd build
+        cd cmake_build
         make -j
         make install
 
     - name: Build Library And Examples (CMake, Windows)
       if: matrix.tool == 'cmake' && matrix.os == 'windows-latest'
       run: |
-        cd build
+        cd cmake_build
         MSBuild.exe p1_polaris_c_client.sln
 
     # Bazel build support.

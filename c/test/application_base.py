@@ -70,7 +70,14 @@ class TestApplicationBase(object):
             if self.options.tool == 'bazel':
                 self.options.path = os.path.join(self.root_dir, 'bazel-bin/examples', self.application_name)
             elif self.options.tool == 'cmake':
-                self.options.path = os.path.join(self.root_dir, 'build/examples', self.application_name)
+                for build_dir in ('build', 'cmake_build'):
+                    path = os.path.join(self.root_dir, build_dir, 'examples', self.application_name)
+                    if os.path.exists(path):
+                        self.options.path = path
+                        break
+                if self.options.path is None:
+                    print('Error: Unable to locate CMake build directory.')
+                    sys.exit(self.ARGUMENT_ERROR)
             elif self.options.tool == 'make':
                 self.options.path = os.path.join(self.root_dir, 'examples', self.application_name)
             else:
