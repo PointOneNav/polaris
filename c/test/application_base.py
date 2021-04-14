@@ -96,11 +96,13 @@ class TestApplicationBase(object):
         # Setup the command to be run.
         command = copy.deepcopy(self.DEFAULT_COMMAND)
         command.extend(self.program_args)
+        api_key_standin = '%s...' % self.options.polaris_api_key[:4]
         for i in range(len(command)):
             if command[i].endswith('%(polaris_api_key)s'):
-                # We temporarily replace the API key placeholder with <POLARIS_API_KEY> before printing to the console
-                # to avoid printing the actual key to the console. It will be swapped with the real key below.
-                command[i] = command[i].replace('%(polaris_api_key)s', '<POLARIS_API_KEY>')
+                # We temporarily replace the API key placeholder with the first 4 chars of the key before printing to
+                # the console to avoid printing the actual key to the console. It will be swapped with the real key
+                # below.
+                command[i] = command[i].replace('%(polaris_api_key)s', api_key_standin)
             else:
                 command[i] = command[i] % self.options.__dict__
 
@@ -109,8 +111,8 @@ class TestApplicationBase(object):
         command.insert(0, 'stdbuf')
         command.insert(1, '-o0')
         for i in range(len(command)):
-            if command[i].endswith('<POLARIS_API_KEY>'):
-                command[i] = command[i].replace('<POLARIS_API_KEY>', self.options.polaris_api_key)
+            if command[i].endswith(api_key_standin):
+                command[i] = command[i].replace(api_key_standin, self.options.polaris_api_key)
 
         # Run the command.
         def preexec_function():
