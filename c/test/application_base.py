@@ -115,10 +115,15 @@ class TestApplicationBase(object):
                 command[i] = command[i].replace(api_key_standin, self.options.polaris_api_key)
 
         # Run the command.
+        def ignore_signal(sig, frame):
+            signal.signal(sig, signal.SIG_DFL)
+
         def preexec_function():
             # Disable forwarding of SIGINT/SIGTERM from the parent process (this script) to the child process (the
             # application under test).
             os.setpgrp()
+            signal.signal(signal.SIGINT, ignore_signal)
+            signal.signal(signal.SIGTERM, ignore_signal)
 
         self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf-8',
                                      preexec_fn=preexec_function)
