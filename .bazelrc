@@ -8,3 +8,11 @@ build:aarch64 --crosstool_top=//compilers:toolchain
 build:aarch64 --host_crosstool_top=@bazel_tools//tools/cpp:toolchain
 build:aarch64 --cpu=aarch64-linux-gnu --compiler=gcc
 build:aarch64 --spawn_strategy=local
+
+# Command-line argument aliases (requires Bazel 3.7.0 or newer).
+#
+# For example, you may specify:
+#    bazel build -c opt --polaris_enable_tls=False //:polaris_client
+# instead of:
+#    bazel build -c opt --//c:polaris_enable_tls=False //:polaris_client
+#build --flag_alias=polaris_enable_tls=//c:polaris_enable_tls

@@ -114,8 +114,9 @@ cc_binary(
 )
 ```
 
-The `polaris_client` target enables TLS support, which is strongly recommended. If necessary, you can use the
-`polaris_client_no_tls` target to connect without TLS.
+The `polaris_client` target enables TLS support by default, which is strongly recommended. If necessary, you can use the
+`polaris_client_no_tls` target to connect without TLS, or specify `--//:polaris_enable_tls=False` to Bazel on the
+command line.
 
 > Note that you do not need to clone the Polaris repository when including it in your Bazel application. Bazel will
 clone it automatically when you build your application.
@@ -334,6 +335,9 @@ cc_binary(
 )
 ```
 
+The `polaris_client` target enables TLS support by default, which is strongly recommended. If necessary, you can use the
+disable TLS by specifying `--//c:polaris_enable_tls=False` to Bazel on the command line.
+
 > Note that you do not need to clone the Polaris repository when including it in your Bazel application. Bazel will
 clone it automatically when you build your application.
 
@@ -378,8 +382,10 @@ bazel build --config=aarch64 //examples:simple_polaris_client
 
 1. Install all required libraries:
    ```bash
-   sudo apt install libgflags-dev libgoogle-glog-dev libboost-all-dev
+   sudo apt install libssl-dev libgflags-dev libgoogle-glog-dev libboost-all-dev
    ```
+   - OpenSSL is required by default and strongly recommended, but may be disabled by specifying
+     `-DPOLARIS_ENABLE_TLS=OFF` to the `cmake` command below.
 2. Clone the Polaris source code:
    ```bash
    git clone https://github.com/PointOneNav/polaris.git
