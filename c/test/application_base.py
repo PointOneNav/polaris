@@ -207,9 +207,16 @@ class StandardApplication(TestApplicationBase):
         self.data_received = False
 
     def check_pass_fail(self, exit_code):
-        if exit_code == 0 and not self.data_received:
-            print('No corrections data received.')
-            return self.TEST_FAILED
+        # Note: There is currently a race condition when the subprocess is shutdown (SIGTERM) where either the
+        # application itself exits cleanly with code 0 as expected, or the Python fork running it exits first with
+        # -SIGTERM before the application gets a chance to exit. The preexec stuff above doesn't seem to be enough to
+        # fix it. For now, we simply treat the combination of -SIGTERM + data received as a pass.
+        if exit_code == 0 or exit_code == -signal.SIGTERM:
+            if self.data_received:
+                return self.TEST_PASSED
+            else:
+                print('No corrections data received.')
+                return self.TEST_FAILED
         else:
             return super().check_pass_fail(exit_code)
 
