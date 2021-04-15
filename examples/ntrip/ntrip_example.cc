@@ -27,11 +27,12 @@ using namespace point_one::polaris;
 
 // Options for connecting to Polaris Server:
 DEFINE_string(
-    polaris_host, DEFAULT_ENDPOINT_URL,
-    "The Polaris corrections endpoint URL to be used.");
+    polaris_host, "",
+    "Specify an alternate Polaris corrections endpoint URL to be used.");
 
-DEFINE_int32(polaris_port, DEFAULT_ENDPOINT_PORT,
-             "The TCP port of the Polaris corrections endpoint.");
+DEFINE_int32(polaris_port, 0,
+             "Specify an alternate TCP port for the Polaris corrections "
+             "endpoint.");
 
 DEFINE_string(polaris_api_key, "",
               "The service API key. Contact account administrator or "
