@@ -60,6 +60,8 @@ PolarisClient::PolarisClient(const std::string& api_key,
     : max_reconnect_attempts_(max_reconnect_attempts),
       api_key_(api_key),
       unique_id_(unique_id) {
+  SetPolarisEndpoint();
+
   polaris_.SetRTCMCallback([&](const uint8_t* buffer, size_t size_bytes) {
     std::unique_lock<std::recursive_mutex> lock(mutex_);
     VLOG(2) << "Received " << size_bytes << " bytes.";
@@ -98,8 +100,22 @@ void PolarisClient::SetAuthToken(const std::string& auth_token) {
 void PolarisClient::SetPolarisEndpoint(const std::string& endpoint_url,
                                        int endpoint_port) {
   std::unique_lock<std::recursive_mutex> lock(mutex_);
-  endpoint_url_ = endpoint_url;
-  endpoint_port_ = endpoint_port;
+  if (endpoint_url.empty()) {
+    endpoint_url_ = POLARIS_ENDPOINT_URL;
+  } else {
+    endpoint_url_ = endpoint_url;
+  }
+
+  if (endpoint_port == 0) {
+    endpoint_port_ =
+#ifdef POLARIS_USE_TLS
+        POLARIS_ENDPOINT_TLS_PORT;
+#else
+        POLARIS_ENDPOINT_PORT;
+#endif
+  } else {
+    endpoint_port_ = endpoint_port;
+  }
 }
 
 /******************************************************************************/

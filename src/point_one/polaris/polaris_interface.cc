@@ -8,9 +8,6 @@
 
 using namespace point_one::polaris;
 
-const std::string point_one::polaris::DEFAULT_ENDPOINT_URL =
-    POLARIS_ENDPOINT_URL;
-
 /******************************************************************************/
 PolarisInterface::PolarisInterface() {
   Polaris_Init(&context_);

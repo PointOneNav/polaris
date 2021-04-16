@@ -34,8 +34,8 @@ class PolarisClient {
 
   void SetAuthToken(const std::string& auth_token);
 
-  void SetPolarisEndpoint(const std::string& endpoint_url,
-                          int endpoint_port = DEFAULT_ENDPOINT_PORT);
+  void SetPolarisEndpoint(const std::string& endpoint_url = "",
+                          int endpoint_port = 0);
 
   void SetMaxReconnects(int max_reconnect_attempts);
 
@@ -65,8 +65,8 @@ class PolarisClient {
 
   std::function<void(const uint8_t* buffer, size_t size_bytes)> callback_;
 
-  std::string endpoint_url_ = POLARIS_ENDPOINT_URL;
-  int endpoint_port_ = POLARIS_ENDPOINT_TLS_PORT;
+  std::string endpoint_url_;
+  int endpoint_port_ = 0;
 
   bool auth_valid_ = false;
   bool connected_ = false;
