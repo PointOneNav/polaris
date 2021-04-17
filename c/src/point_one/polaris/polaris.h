@@ -69,6 +69,10 @@
 # define POLARIS_SEND_TIMEOUT_MS 1000
 #endif
 
+/**
+ * @name Polaris Return Codes
+ * @{
+ */
 #define POLARIS_SUCCESS 0
 #define POLARIS_ERROR -1
 #define POLARIS_NOT_ENOUGH_SPACE -2
@@ -78,6 +82,16 @@
 #define POLARIS_FORBIDDEN -6
 #define POLARIS_CONNECTION_CLOSED -7
 #define POLARIS_TIMED_OUT -8
+/** @} */
+
+/**
+ * @name Polaris Logging Verbosity Levels
+ * @{
+ */
+#define POLARIS_LOG_LEVEL_INFO 0
+#define POLARIS_LOG_LEVEL_DEBUG 1
+#define POLARIS_LOG_LEVEL_TRACE 2
+/** @} */
 
 struct PolarisContext_s;
 typedef struct PolarisContext_s PolarisContext_t;
@@ -130,6 +144,13 @@ int Polaris_Init(PolarisContext_t* context);
  * @param context The Polaris context to be freed.
  */
 void Polaris_Free(PolarisContext_t* context);
+
+/**
+ * @brief Set the Polaris library print verbosity level.
+ *
+ * @param log_level The desired verbosity level.
+ */
+void Polaris_SetLogLevel(int log_level);
 
 /**
  * @brief Authenticate with Polaris.

@@ -22,12 +22,39 @@
 #define MAKE_STR(x) #x
 #define STR(x) MAKE_STR(x)
 
-#define P1_Print(x, ...) \
-  P1_fprintf(stderr, "polaris.c:" STR(__LINE__) "] " x, ##__VA_ARGS__)
-#define P1_PrintError(x, ...) \
-  P1_perror("polaris.c:" STR(__LINE__) "] " x, ##__VA_ARGS__)
+#if defined(P1_NO_PRINT)
+# define P1_Print(x, ...) do {} while(0)
+# define P1_PrintError(x, ...) do {} while(0)
+# define P1_DebugPrint(x, ...) do {} while(0)
+# define PrintData(buffer, length) do {} while(0)
+# if defined(POLARIS_USE_TLS)
+#  define ShowCerts(ssl) do {} while(0)
+# endif
+#else
+static int __log_level = POLARIS_LOG_LEVEL_INFO;
 
-#if defined(POLARIS_USE_TLS)
+# define P1_Print(x, ...) \
+  P1_fprintf(stderr, "polaris.c:" STR(__LINE__) "] " x, ##__VA_ARGS__)
+# define P1_PrintError(x, ...) \
+  P1_perror("polaris.c:" STR(__LINE__) "] " x, ##__VA_ARGS__)
+# define P1_DebugPrint(x, ...)              \
+  if (__log_level >= POLARIS_LOG_LEVEL_DEBUG) {  \
+    P1_Print(x, ##__VA_ARGS__);             \
+  }
+# define P1_TracePrint(x, ...)              \
+  if (__log_level >= POLARIS_LOG_LEVEL_TRACE) {  \
+    P1_Print(x, ##__VA_ARGS__);             \
+  }
+
+static void P1_PrintData(const uint8_t* buffer, size_t length);
+# if defined(POLARIS_USE_TLS)
+static void ShowCerts(SSL* ssl);
+# endif
+#endif
+
+#if defined(POLARIS_NO_PRINT)
+# define P1_PrintWriteError(context, x, ret) do {} while(0)
+#elif defined(POLARIS_USE_TLS)
 static void __P1_PrintWriteError(int line, PolarisContext_t* context,
                                  const char* message, int ret) {
   SSL_load_error_strings();
@@ -80,40 +107,10 @@ static void __P1_PrintWriteError(int line, PolarisContext_t* context,
   }
 }
 
-#define P1_PrintWriteError(context, x, ret) \
+# define P1_PrintWriteError(context, x, ret) \
   __P1_PrintWriteError(__LINE__, context, x, ret)
 #else
-#define P1_PrintWriteError(context, x, ret) P1_PrintError(x, ret)
-#endif
-
-
-#if defined(POLARIS_TRACE) && !defined(POLARIS_DEBUG)
-# define POLARIS_DEBUG 1
-#endif
-
-#if defined(POLARIS_DEBUG) || defined(POLARIS_TRACE)
-# define P1_DebugPrint(x, ...) P1_Print(x, ##__VA_ARGS__)
-#else
-# define P1_DebugPrint(x, ...) do {} while(0)
-#endif
-
-#if defined(POLARIS_TRACE)
-void PrintData(const uint8_t* buffer, size_t length) {
-  for (size_t i = 0; i < length; ++i) {
-    if (i % 16 != 0) {
-      P1_fprintf(stderr, " ");
-    }
-
-    P1_fprintf(stderr, "%02x", buffer[i]);
-
-    if (i % 16 == 15) {
-      P1_fprintf(stderr, "\n");
-    }
-  }
-  P1_fprintf(stderr, "\n");
-}
-#else
-# define PrintData(buffer, length) do {} while(0)
+# define P1_PrintWriteError(context, x, ret) P1_PrintError(x, ret)
 #endif
 
 static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
@@ -126,10 +123,6 @@ static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
 static int GetHTTPResponse(PolarisContext_t* context);
 
 static void CloseSocket(PolarisContext_t* context, int destroy_context);
-
-#ifdef POLARIS_USE_TLS
-static void ShowCerts(SSL* ssl);
-#endif
 
 /******************************************************************************/
 int Polaris_Init(PolarisContext_t* context) {
@@ -165,6 +158,13 @@ int Polaris_Init(PolarisContext_t* context) {
 /******************************************************************************/
 void Polaris_Free(PolarisContext_t* context) {
   CloseSocket(context, 1);
+}
+
+/******************************************************************************/
+void Polaris_SetLogLevel(int log_level) {
+#if !defined(POLARIS_NO_PRINT)
+  __log_level = log_level;
+#endif
 }
 
 /******************************************************************************/
@@ -380,7 +380,7 @@ int Polaris_SendECEFPosition(PolarisContext_t* context, double x_m, double y_m,
       "Sending ECEF position. [size=%u B, position=[%.2f, %.2f, %.2f]]\n",
       (unsigned)message_size, x_m, y_m, z_m);
 #endif
-  PrintData(context->send_buffer, message_size);
+  P1_PrintData(context->send_buffer, message_size);
 
 #ifdef POLARIS_USE_TLS
   int ret = SSL_write(context->ssl, context->send_buffer, message_size);
@@ -423,7 +423,7 @@ int Polaris_SendLLAPosition(PolarisContext_t* context, double latitude_deg,
       "Sending LLA position. [size=%u B, position=[%.6f, %.6f, %.2f]]\n",
       (unsigned)message_size, latitude_deg, longitude_deg, altitude_m);
 #endif
-  PrintData(context->send_buffer, message_size);
+  P1_PrintData(context->send_buffer, message_size);
 
 #ifdef POLARIS_USE_TLS
   int ret = SSL_write(context->ssl, context->send_buffer, message_size);
@@ -454,7 +454,7 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id) {
 
   P1_DebugPrint("Sending beacon request. [size=%u B, beacon='%s']\n",
               (unsigned)message_size, beacon_id);
-  PrintData(context->send_buffer, message_size);
+  P1_PrintData(context->send_buffer, message_size);
 
 #ifdef POLARIS_USE_TLS
   int ret = SSL_write(context->ssl, context->send_buffer, message_size);
@@ -860,9 +860,34 @@ static int GetHTTPResponse(PolarisContext_t* context) {
 }
 
 /******************************************************************************/
-#ifdef POLARIS_USE_TLS
+#if !defined(P1_NO_PRINT)
+void P1_PrintData(const uint8_t* buffer, size_t length) {
+  if (__log_level < POLARIS_LOG_LEVEL_TRACE) {
+    return;
+  }
+
+  for (size_t i = 0; i < length; ++i) {
+    if (i % 16 != 0) {
+      P1_fprintf(stderr, " ");
+    }
+
+    P1_fprintf(stderr, "%02x", buffer[i]);
+
+    if (i % 16 == 15) {
+      P1_fprintf(stderr, "\n");
+    }
+  }
+  P1_fprintf(stderr, "\n");
+}
+#endif
+
+/******************************************************************************/
+#if !defined(P1_NO_PRINT) && defined(POLARIS_USE_TLS)
 void ShowCerts(SSL* ssl) {
-  #if defined(POLARIS_DEBUG) || defined(POLARIS_TRACE)
+  if (__log_level >= POLARIS_LOG_LEVEL_DEBUG) {
+    return;
+  }
+
   X509* cert = SSL_get_peer_certificate(ssl);
   if (cert != NULL) {
     char* line;
@@ -874,6 +899,5 @@ void ShowCerts(SSL* ssl) {
   } else {
     P1_DebugPrint("No client certificates configured.\n");
   }
-  #endif
 }
 #endif

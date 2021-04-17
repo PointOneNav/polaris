@@ -2,6 +2,23 @@ package(default_visibility = ["//visibility:public"])
 
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
 
+# Option to disable _all_ print messages:
+#   --//:polaris_enable_print       [enabled; default]
+#   --//:polaris_enable_print=True  [enabled; default]
+#   --//:polaris_enable_print=False [disabled]
+#   --no//:polaris_enable_print     [disabled]
+bool_flag(
+    name = "polaris_enable_print",
+    build_setting_default = True,
+)
+
+config_setting(
+    name = "print_enabled",
+    flag_values = {
+        ":polaris_enable_print": "True",
+    },
+)
+
 # Option to enable/disable TLS support (enabled by default):
 #   --//:polaris_enable_tls       [enabled; default]
 #   --//:polaris_enable_tls=True  [enabled; default]
@@ -38,7 +55,11 @@ cc_library(
     name = "polaris_client_tls",
     srcs = glob(["src/**/*.c"]),
     hdrs = glob(["src/**/*.h"]),
-    copts = ["-DPOLARIS_USE_TLS=1"],
+    copts = ["-DPOLARIS_USE_TLS=1"] +
+            select({
+                ":print_enabled": [],
+                "//conditions:default": ["-DPOLARIS_NO_PRINT"],
+            }),
     includes = ["src"],
     deps = ["@boringssl//:ssl"],
 )
@@ -49,5 +70,9 @@ cc_library(
     name = "polaris_client_no_tls",
     srcs = glob(["src/**/*.c"]),
     hdrs = glob(["src/**/*.h"]),
+    copts = select({
+        ":print_enabled": [],
+        "//conditions:default": ["-DPOLARIS_NO_PRINT"],
+    }),
     includes = ["src"],
 )
