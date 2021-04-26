@@ -49,9 +49,9 @@ class PolarisClient {
 
   void RequestBeacon(const std::string& beacon_id);
 
-  void Run(double timeout_sec = 15.0);
+  void Run(double timeout_sec = 30.0);
 
-  void RunAsync(double timeout_sec = 15.0);
+  void RunAsync(double timeout_sec = 30.0);
 
   void Disconnect();
 
