@@ -490,21 +490,41 @@ int Polaris_Work(PolarisContext_t* context) {
       recv(context->socket, context->recv_buffer, POLARIS_RECV_BUFFER_SIZE, 0);
 #endif
 
+#ifdef P1_FREERTOS
+  // FreeRTOS does not use errno for recv() errors, but instead returns the
+  // equivalent error value. On a socket timeout, it returns 0 instead of
+  // ETIMEDOUT.
+  //
+  // We try to mimick the actual POSIX behavior to simplify the code below.
+  if (bytes_read == 0) {
+    bytes_read = -1;
+    errno = ETIMEDOUT;
+  } else if (bytes_read < 0) {
+    errno = (int)bytes_read;
+  }
+#endif
+
   if (bytes_read < 0) {
     if (errno == EAGAIN || errno == ETIMEDOUT) {
       P1_DebugPrint("Socket timed out.\n");
       return 0;
     } else {
-      P1_DebugPrint(
-          "Connection terminated. [ret=%d, errno=%d, "
-          "disconnected=%d]\n",
-          (int)bytes_read, errno, context->disconnected);
-      CloseSocket(context, 1);
+      // Typically ENOTCONN, but could be another error condition.
+      int ret;
       if (context->disconnected) {
-        return 0;
+        P1_DebugPrint(
+            "Connection terminated by user request. [ret=%d, errno=%d]\n",
+            (int)bytes_read, errno);
+        ret = 0;
       } else {
-        return POLARIS_CONNECTION_CLOSED;
+        P1_DebugPrint(
+            "Connection terminated upstream. [ret=%d, errno=%d]\n",
+            (int)bytes_read, errno);
+        ret = POLARIS_CONNECTION_CLOSED;
       }
+
+      CloseSocket(context, 1);
+      return ret;
     }
   } else if (bytes_read == 0) {
     // If recv() times out before we've gotten anything, the socket was probably
@@ -516,11 +536,17 @@ int Polaris_Work(PolarisContext_t* context) {
       CloseSocket(context, 1);
       return POLARIS_FORBIDDEN;
     }
-    // Otherwise, there may just not be new data available (e.g., user hasn't
-    // sent a position yet, network connection temporarily broken, etc.).
+    // A 0 return means the socket had an "orderly shutdown", i.e., it was
+    // either closed by user request or disconnected upstream by the Polaris
+    // service.
     else {
-      P1_DebugPrint("Received 0 bytes/socket timed out.\n");
-      return 0;
+      if (context->disconnected) {
+        P1_DebugPrint("Connection terminated by user request.\n");
+      } else {
+        P1_DebugPrint("Connection terminated upstream.\n");
+      }
+      CloseSocket(context, 1);
+      return POLARIS_CONNECTION_CLOSED;
     }
   } else {
     P1_DebugPrint("Received %u bytes.\n", (unsigned)bytes_read);
