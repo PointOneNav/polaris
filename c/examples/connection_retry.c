@@ -5,6 +5,7 @@
  ******************************************************************************/
 
 #include <signal.h>
+#include <stdlib.h> // For atoi()
 
 #include "point_one/polaris/polaris.h"
 #include "point_one/polaris/portability.h"
@@ -26,12 +27,15 @@ void HandleSignal(int sig) {
 
 int main(int argc, const char* argv[]) {
   if (argc < 2 || argc > 3) {
-    P1_fprintf(stderr, "Usage: %s API_KEY [UNIQUE_ID]\n", argv[0]);
+    P1_fprintf(stderr, "Usage: %s API_KEY [UNIQUE_ID] [LOG_LEVEL]\n", argv[0]);
     return 1;
   }
 
   const char* api_key = argv[1];
   const char* unique_id = argc > 2 ? argv[2] : "device12345";
+
+  int log_level = argc > 3 ? atoi(argv[3]) : POLARIS_LOG_LEVEL_INFO;
+  Polaris_SetLogLevel(log_level);
 
   const int MAX_RECONNECTS = 2;
   int auth_valid = 0;
