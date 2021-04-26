@@ -58,7 +58,7 @@
  *        single receive call (@ref Polaris_Work()).
  */
 #ifndef POLARIS_RECV_TIMEOUT_MS
-# define POLARIS_RECV_TIMEOUT_MS 1000
+# define POLARIS_RECV_TIMEOUT_MS 5000
 #endif
 
 /**
