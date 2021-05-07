@@ -70,9 +70,9 @@ class PolarisClient {
    * Run() is called.
    *
    * @param api_key The Polaris API key to be used.
-   * @param unique_id A unique ID used to represent this individual instance.
-   *        Unique IDs must be a maximum of 36 characters, and may include only
-   *        letters, numbers, hyphens, and underscores (`^[\w*\d*-]*$`).
+   * @param unique_id An optional unique ID used to represent this individual
+   *        instance, or or empty string if unspecified. See @ref
+   *        polaris_cpp_unique_id for details and requirements.
    * @param max_reconnect_attempts The maximum number times to attempt a
    *        reconnection before reauthenticating.
    */
@@ -94,9 +94,9 @@ class PolarisClient {
    * See also @ref PolarisInterface::Authenticate().
    *
    * @param api_key The Polaris API key to be used.
-   * @param unique_id A unique ID used to represent this individual instance.
-   *        Unique IDs must be a maximum of 36 characters, and may include only
-   *        letters, numbers, hyphens, and underscores (`^[\w*\d*-]*$`).
+   * @param unique_id An optional unique ID used to represent this individual
+   *        instance, or or empty string if unspecified. See @ref
+   *        polaris_cpp_unique_id for details and requirements.
    */
   void SetAPIKey(const std::string& api_key, const std::string& unique_id);
 
@@ -118,9 +118,9 @@ class PolarisClient {
    * secure connection to Polaris is already established by other means. See
    * @ref PolarisInterface::ConnectWithoutAuth() for details.
    *
-   * @param unique_id A unique ID used to represent this individual instance.
-   *        Unique IDs must be a maximum of 36 characters, and may include only
-   *        letters, numbers, hyphens, and underscores (`^[\w*\d*-]*$`).
+   * @param unique_id An optional unique ID used to represent this individual
+   *        instance, or or empty string if unspecified. See @ref
+   *        polaris_cpp_unique_id for details and requirements.
    */
   void SetNoAuthID(const std::string& unique_id);
 

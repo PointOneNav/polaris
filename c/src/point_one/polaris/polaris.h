@@ -165,16 +165,30 @@ void Polaris_SetLogLevel(int log_level);
  * @post
  * On success, `context.auth_token` will be populated with the generated token.
  *
+ * @section polaris_unique_id Connection Unique IDs
+ * Polaris uses ID strings to uniquely identify client connections made using a
+ * particular API key. Unique IDs allow diagnostic information to be associated
+ * with a specific incoming connection when analyzing connectivity or other
+ * issues.
+ *
+ * Unique IDs must be a maximum of 36 characters, and may include only letters,
+ * numbers, hyphens, and underscores (`^[\w\d-]+$`).
+ *
  * @warning
- * `unique_id` must be unique across _all_ Polaris connections for the specified
- * API key. If two Polaris clients connect at the same time using the same key
- * and ID, they will conflict with each other and will not work correctly.
+ * When specified, unique IDs must be unique across _all_ Polaris connections
+ * for a given API key. If two Polaris clients connect at the same time using
+ * the same API key and ID, they will conflict with each other and will not work
+ * correctly.
+ *
+ * Unique IDs are optional, but strongly encouraged for development purposes. If
+ * omitted, (empty string or `NULL`), it will not be possible to associate
+ * diagnostic information with an individual client.
  *
  * @param context The Polaris context to be used.
  * @param api_key The Polaris API key to be used.
- * @param unique_id A unique ID used to represent this individual instance.
- *        Unique IDs must be a maximum of 36 characters, and may include only
- *        letters, numbers, hyphens, and underscores (`^[\w*\d*-]*$`).
+ * @param unique_id An optional unique ID used to represent this individual
+ *        instance, or `NULL` or empty string if unspecified. See @ref
+ *        polaris_unique_id for details and requirements.
  *
  * @return @ref POLARIS_SUCCESS on success.
  * @return @ref POLARIS_ERROR if the inputs are invalid.
@@ -240,19 +254,12 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
  * This function is intended to be used for custom edge connections where a
  * secure connection to Polaris is already established by other means.
  *
- * @warning
- * When connecting directly without authentication, you must still provide a
- * unique ID for the connection. `unique_id` must be unique across _all_ Polaris
- * connections using the API key in use by the secure connection. If two
- * Polaris clients connect at the same time using the same key and ID, they will
- * conflict with each other and will not work correctly.
- *
  * @param context The Polaris context to be used.
  * @param endpoint_url The desired endpoint URL.
  * @param endpoint_port The desired endpoint port.
- * @param unique_id A unique ID used to represent this individual instance.
- *        Unique IDs must be a maximum of 36 characters, and may include only
- *        letters, numbers, hyphens, and underscores (`^[\w*\d*-]*$`).
+ * @param unique_id An optional unique ID used to represent this individual
+ *        instance, or `NULL` or empty string if unspecified. See @ref
+ *        polaris_unique_id for details and requirements.
  *
  * @return @ref POLARIS_SUCCESS on success.
  * @return @ref POLARIS_ERROR if the unique ID is not valid.
