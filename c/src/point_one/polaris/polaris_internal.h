@@ -21,6 +21,7 @@
 #define POLARIS_ID_ECEF 0x03
 #define POLARIS_ID_LLA 0x04
 #define POLARIS_ID_BEACON 0x05
+#define POLARIS_ID_UNIQUE_ID 0x06
 
 #define POLARIS_API_URL "api.pointonenav.com"
 

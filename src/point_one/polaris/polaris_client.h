@@ -111,6 +111,20 @@ class PolarisClient {
   void SetAuthToken(const std::string& auth_token);
 
   /**
+   * @brief Specify the unique ID to use when connecting to the Polaris
+   *        corrections service without authentication.
+   *
+   * This function is intended to be used for custom edge connections where a
+   * secure connection to Polaris is already established by other means. See
+   * @ref PolarisInterface::ConnectWithoutAuth() for details.
+   *
+   * @param unique_id A unique ID used to represent this individual instance.
+   *        Unique IDs must be a maximum of 36 characters, and may include only
+   *        letters, numbers, hyphens, and underscores (`^[\w*\d*-]*$`).
+   */
+  void SetNoAuthID(const std::string& unique_id);
+
+  /**
    * @brief Specify an alternate URL to use when connecting to the Polaris
    *        corrections endpoint.
    *
@@ -242,6 +256,7 @@ class PolarisClient {
   int endpoint_port_ = 0;
 
   bool auth_valid_ = false;
+  bool no_auth_ = false;
   bool connected_ = false;
   int max_reconnect_attempts_ = -1;
   int connect_count_ = 0;

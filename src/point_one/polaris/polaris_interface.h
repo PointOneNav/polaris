@@ -108,6 +108,36 @@ class PolarisInterface {
   int ConnectTo(const std::string& endpoint_url, int endpoint_port);
 
   /**
+   * @brief Connect to the corrections service without providing an
+   *        authentication token.
+   *
+   * This function is intended to be used for custom edge connections where a
+   * secure connection to Polaris is already established by other means.
+   *
+   * @warning
+   * When connecting directly without authentication, you must still provide a
+   * unique ID for the connection. `unique_id` must be unique across _all_
+   * Polaris connections using the API key in use by the secure connection. If
+   * two Polaris clients connect at the same time using the same key and ID,
+   * they will conflict with each other and will not work correctly.
+   *
+   * @param endpoint_url The desired endpoint URL.
+   * @param endpoint_port The desired endpoint port.
+   * @param unique_id A unique ID used to represent this individual instance.
+   *        Unique IDs must be a maximum of 36 characters, and may include only
+   *        letters, numbers, hyphens, and underscores (`^[\w*\d*-]*$`).
+   *
+   * @return @ref POLARIS_SUCCESS on success.
+   * @return @ref POLARIS_ERROR if the unique ID is not valid.
+   * @return @ref POLARIS_SOCKET_ERROR if a connection could not be established
+   *         with the Polaris corrections server.
+   * @return @ref POLARIS_SEND_ERROR if an error occurred while sending the
+   *         unique ID.
+   */
+  int ConnectWithoutAuth(const std::string& endpoint_url, int endpoint_port,
+                         const std::string& unique_id);
+
+  /**
    * @brief Disconnect from the corrections stream.
    *
    * See also @ref Polaris_Disconnect().

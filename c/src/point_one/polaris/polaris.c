@@ -321,6 +321,49 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
 }
 
 /******************************************************************************/
+int Polaris_ConnectWithoutAuth(PolarisContext_t* context,
+                               const char* endpoint_url, int endpoint_port,
+                               const char* unique_id) {
+  // Sanity check the inputs.
+  int ret = ValidateUniqueID(unique_id);
+  if (ret != POLARIS_SUCCESS) {
+    // ValidateUniqueID() will print an error.
+    return ret;
+  }
+
+  // Connect to the corrections endpoint.
+  context->disconnected = 0;
+  ret = OpenSocket(context, endpoint_url, endpoint_port);
+  if (ret != POLARIS_SUCCESS) {
+    P1_Print("Error connecting to corrections endpoint: tcp://%s:%d.\n",
+             endpoint_url, endpoint_port);
+    return ret;
+  }
+
+  // Send the unique ID.
+  size_t id_length = strlen(unique_id);
+  PolarisHeader_t* header = Polaris_PopulateHeader(
+      context->send_buffer, POLARIS_ID_UNIQUE_ID, id_length);
+  memmove(header + 1, unique_id, id_length);
+  size_t message_size = Polaris_PopulateChecksum(context->send_buffer);
+
+  P1_DebugPrint("Sending unique ID message. [size=%u B]\n",
+              (unsigned)message_size);
+#ifdef POLARIS_USE_TLS
+  ret = SSL_write(context->ssl, context->send_buffer, message_size);
+#else
+  ret = send(context->socket, context->send_buffer, message_size, 0);
+#endif
+  if (ret != message_size) {
+    P1_PrintWriteError(context, "Error sending unique ID", ret);
+    CloseSocket(context, 1);
+    return POLARIS_SEND_ERROR;
+  }
+
+  return POLARIS_SUCCESS;
+}
+
+/******************************************************************************/
 void Polaris_Disconnect(PolarisContext_t* context) {
   if (context->socket != P1_INVALID_SOCKET) {
     P1_DebugPrint("Closing Polaris connection.\n");
