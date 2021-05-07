@@ -37,15 +37,19 @@ class PolarisInterface {
    *
    * @warning
    * `unique_id` must be unique across _all_ Polaris connections for the
-   * specified API key. If two instances connect at the same time using the same
-   * key and ID, they will conflict with each other and will not work correctly.
+   * specified API key. If two Polaris clients connect at the same time using
+   * the same key and ID, they will conflict with each other and will not work
+   * correctly.
    *
    * See also @ref Polaris_Authenticate().
    *
    * @param api_key The Polaris API key to be used.
    * @param unique_id A unique ID used to represent this individual instance.
+   *        Unique IDs must be a maximum of 36 characters, and may include only
+   *        letters, numbers, hyphens, and underscores (`^[\w*\d*-]*$`).
    *
    * @return @ref POLARIS_SUCCESS on success.
+   * @return @ref POLARIS_ERROR if the inputs are invalid.
    * @return @ref POLARIS_NOT_ENOUGH_SPACE if there is not enough storage to
    *         store the authentication request or response.
    * @return @ref POLARIS_FORBIDDEN if the API key was rejected.
@@ -86,6 +90,8 @@ class PolarisInterface {
    *         with the Polaris corrections server.
    * @return @ref POLARIS_AUTH_ERROR if an authentication token was not
    *         provided.
+   * @return @ref POLARIS_SEND_ERROR if an error occurred while sending the
+   *         authentication token.
    */
   int Connect();
 
@@ -122,6 +128,10 @@ class PolarisInterface {
   /**
    * @brief Send a position update to the corrections service.
    *
+   * @note
+   * You must send a position at least once to associate with a corrections
+   * stream before Polaris will return any corrections data.
+   *
    * See also @ref Polaris_SendECEFPosition().
    *
    * @param x_m The receiver ECEF X position (in meters).
@@ -136,6 +146,10 @@ class PolarisInterface {
 
   /**
    * @brief Send a position update to the corrections service.
+   *
+   * @note
+   * You must send a position at least once to associate with a corrections
+   * stream before Polaris will return any corrections data.
    *
    * See also @ref Polaris_SendLLAPosition().
    *

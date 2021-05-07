@@ -25,7 +25,7 @@
  *
  * @note
  * The receive buffer must be large enough to store the entire HTTP
- * authentication reponse.
+ * authentication response.
  *
  * The default buffer size can store up to one complete, maximum sized RTCM
  * message (6 bytes header/CRC + 1023 bytes payload). We don't align to RTCM
@@ -167,8 +167,8 @@ void Polaris_SetLogLevel(int log_level);
  *
  * @warning
  * `unique_id` must be unique across _all_ Polaris connections for the specified
- * API key. If two instances connect at the same time using the same key and ID,
- * they will conflict with each other and will not work correctly.
+ * API key. If two Polaris clients connect at the same time using the same key
+ * and ID, they will conflict with each other and will not work correctly.
  *
  * @param context The Polaris context to be used.
  * @param api_key The Polaris API key to be used.
@@ -217,6 +217,8 @@ int Polaris_SetAuthToken(PolarisContext_t* context, const char* auth_token);
  * @return @ref POLARIS_SOCKET_ERROR if a connection could not be established
  *         with the Polaris corrections server.
  * @return @ref POLARIS_AUTH_ERROR if an authentication token was not provided.
+ * @return @ref POLARIS_SEND_ERROR if an error occurred while sending the
+ *         authentication token.
  */
 int Polaris_Connect(PolarisContext_t* context);
 
@@ -261,6 +263,10 @@ void Polaris_SetRTCMCallback(PolarisContext_t* context,
 /**
  * @brief Send a position update to the corrections service.
  *
+ * @note
+ * You must send a position at least once to associate with a corrections
+ * stream before Polaris will return any corrections data.
+ *
  * @param context The Polaris context to be used.
  * @param x_m The receiver ECEF X position (in meters).
  * @param y_m The receiver ECEF Y position (in meters).
@@ -275,6 +281,10 @@ int Polaris_SendECEFPosition(PolarisContext_t* context, double x_m, double y_m,
 
 /**
  * @brief Send a position update to the corrections service.
+ *
+ * @note
+ * You must send a position at least once to associate with a corrections
+ * stream before Polaris will return any corrections data.
  *
  * @param context The Polaris context to be used.
  * @param latitude_deg The receiver WGS-84 latitude (in degrees).
