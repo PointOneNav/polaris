@@ -113,6 +113,8 @@ static void __P1_PrintWriteError(int line, PolarisContext_t* context,
 # define P1_PrintWriteError(context, x, ret) P1_PrintError(x, ret)
 #endif
 
+static int ValidateUniqueID(const char* unique_id);
+
 static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
                       int endpoint_port);
 
@@ -176,19 +178,10 @@ int Polaris_Authenticate(PolarisContext_t* context, const char* api_key,
     return POLARIS_ERROR;
   }
 
-  if (strlen(unique_id) > POLARIS_MAX_UNIQUE_ID_SIZE) {
-    P1_Print("Unique ID must be a maximum of %d characters. [id='%s']\n",
-             POLARIS_MAX_UNIQUE_ID_SIZE, unique_id);
-    return POLARIS_ERROR;
-  } else {
-    for (const char* ptr = unique_id; *ptr != '\0'; ++ptr) {
-      char c = *ptr;
-      if (c != '-' && c != '_' && (c < 'A' || c > 'Z') &&
-          (c < 'a' || c > 'z') && (c < '0' || c > '9')) {
-        P1_Print("Invalid unique ID specified. [id='%s']\n", unique_id);
-        return POLARIS_ERROR;
-      }
-    }
+  int ret = ValidateUniqueID(unique_id);
+  if (ret != POLARIS_SUCCESS) {
+    // ValidateUniqueID() will print an error.
+    return ret;
   }
 
   // Send an auth request, then wait for the response containing the access
@@ -622,6 +615,30 @@ int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
 
   P1_DebugPrint("Received %u total bytes.\n", (unsigned)total_bytes);
   return context->disconnected ? POLARIS_SUCCESS : ret;
+}
+
+/******************************************************************************/
+static int ValidateUniqueID(const char* unique_id) {
+  size_t length = strlen(unique_id);
+  if (length == 0) {
+    P1_Print("Unique ID must not be empty.\n");
+    return POLARIS_ERROR;
+  } else if (length > POLARIS_MAX_UNIQUE_ID_SIZE) {
+    P1_Print("Unique ID must be a maximum of %d characters. [id='%s']\n",
+             POLARIS_MAX_UNIQUE_ID_SIZE, unique_id);
+    return POLARIS_ERROR;
+  } else {
+    for (const char* ptr = unique_id; *ptr != '\0'; ++ptr) {
+      char c = *ptr;
+      if (c != '-' && c != '_' && (c < 'A' || c > 'Z') &&
+          (c < 'a' || c > 'z') && (c < '0' || c > '9')) {
+        P1_Print("Invalid unique ID specified. [id='%s']\n", unique_id);
+        return POLARIS_ERROR;
+      }
+    }
+
+    return POLARIS_SUCCESS;
+  }
 }
 
 /******************************************************************************/
