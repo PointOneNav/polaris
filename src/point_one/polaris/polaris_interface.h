@@ -16,6 +16,25 @@ namespace polaris {
 
 /**
  * @brief C++ wrapper class for the Polaris Client C library.
+ *
+ * @section polaris_cpp_unique_id Connection Unique IDs
+ * Polaris uses ID strings to uniquely identify client connections made using a
+ * particular API key. Unique IDs allow diagnostic information to be associated
+ * with a specific incoming connection when analyzing connectivity or other
+ * issues.
+ *
+ * Unique IDs must be a maximum of 36 characters, and may include only letters,
+ * numbers, hyphens, and underscores (`^[\w\d-]+$`).
+ *
+ * @warning
+ * When specified, unique IDs must be unique across _all_ Polaris connections
+ * for a given API key. If two Polaris clients connect at the same time using
+ * the same API key and ID, they will conflict with each other and will not work
+ * correctly.
+ *
+ * Unique IDs are optional, but strongly encouraged for development purposes. If
+ * omitted, (empty string), it will not be possible to associate diagnostic
+ * information with an individual client.
  */
 class PolarisInterface {
  public:
@@ -35,17 +54,15 @@ class PolarisInterface {
    * Authentication uses the provided API key to generate an authentication
    * token that can be used to receive corrections.
    *
-   * @warning
-   * `unique_id` must be unique across _all_ Polaris connections for the
-   * specified API key. If two instances connect at the same time using the same
-   * key and ID, they will conflict with each other and will not work correctly.
-   *
    * See also @ref Polaris_Authenticate().
    *
    * @param api_key The Polaris API key to be used.
-   * @param unique_id A unique ID used to represent this individual instance.
+   * @param unique_id An optional unique ID used to represent this individual
+   *        instance, or or empty string if unspecified. See @ref
+   *        polaris_cpp_unique_id for details and requirements.
    *
    * @return @ref POLARIS_SUCCESS on success.
+   * @return @ref POLARIS_ERROR if the inputs are invalid.
    * @return @ref POLARIS_NOT_ENOUGH_SPACE if there is not enough storage to
    *         store the authentication request or response.
    * @return @ref POLARIS_FORBIDDEN if the API key was rejected.
@@ -86,6 +103,8 @@ class PolarisInterface {
    *         with the Polaris corrections server.
    * @return @ref POLARIS_AUTH_ERROR if an authentication token was not
    *         provided.
+   * @return @ref POLARIS_SEND_ERROR if an error occurred while sending the
+   *         authentication token.
    */
   int Connect();
 
@@ -100,6 +119,29 @@ class PolarisInterface {
    * @param endpoint_port The desired endpoint port.
    */
   int ConnectTo(const std::string& endpoint_url, int endpoint_port);
+
+  /**
+   * @brief Connect to the corrections service without providing an
+   *        authentication token.
+   *
+   * This function is intended to be used for custom edge connections where a
+   * secure connection to Polaris is already established by other means.
+   *
+   * @param endpoint_url The desired endpoint URL.
+   * @param endpoint_port The desired endpoint port.
+   * @param unique_id An optional unique ID used to represent this individual
+   *        instance, or or empty string if unspecified. See @ref
+   *        polaris_cpp_unique_id for details and requirements.
+   *
+   * @return @ref POLARIS_SUCCESS on success.
+   * @return @ref POLARIS_ERROR if the unique ID is not valid.
+   * @return @ref POLARIS_SOCKET_ERROR if a connection could not be established
+   *         with the Polaris corrections server.
+   * @return @ref POLARIS_SEND_ERROR if an error occurred while sending the
+   *         unique ID.
+   */
+  int ConnectWithoutAuth(const std::string& endpoint_url, int endpoint_port,
+                         const std::string& unique_id);
 
   /**
    * @brief Disconnect from the corrections stream.
@@ -122,6 +164,10 @@ class PolarisInterface {
   /**
    * @brief Send a position update to the corrections service.
    *
+   * @note
+   * You must send a position at least once to associate with a corrections
+   * stream before Polaris will return any corrections data.
+   *
    * See also @ref Polaris_SendECEFPosition().
    *
    * @param x_m The receiver ECEF X position (in meters).
@@ -136,6 +182,10 @@ class PolarisInterface {
 
   /**
    * @brief Send a position update to the corrections service.
+   *
+   * @note
+   * You must send a position at least once to associate with a corrections
+   * stream before Polaris will return any corrections data.
    *
    * See also @ref Polaris_SendLLAPosition().
    *

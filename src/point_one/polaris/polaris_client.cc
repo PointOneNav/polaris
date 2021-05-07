@@ -90,6 +90,7 @@ void PolarisClient::SetAPIKey(const std::string& api_key,
   std::unique_lock<std::recursive_mutex> lock(mutex_);
   api_key_ = api_key;
   unique_id_ = unique_id;
+  no_auth_ = false;
 }
 
 /******************************************************************************/
@@ -97,11 +98,20 @@ void PolarisClient::SetAuthToken(const std::string& auth_token) {
   std::unique_lock<std::recursive_mutex> lock(mutex_);
   api_key_ = "";
   unique_id_ = "";
+  no_auth_ = false;
   if (polaris_.SetAuthToken(auth_token) == POLARIS_SUCCESS) {
     auth_valid_ = true;
   } else {
     LOG(ERROR) << "Unable to set authentication token.";
   }
+}
+
+/******************************************************************************/
+void PolarisClient::SetNoAuthID(const std::string& unique_id) {
+  std::unique_lock<std::recursive_mutex> lock(mutex_);
+  api_key_ = "";
+  unique_id_ = unique_id;
+  no_auth_ = true;
 }
 
 /******************************************************************************/
@@ -188,9 +198,9 @@ void PolarisClient::Run(double timeout_sec) {
     std::unique_lock<std::recursive_mutex> lock(mutex_);
 
     // Retrieve an access token using the specified API key.
-    if (!auth_valid_) {
+    if (!auth_valid_ && !no_auth_) {
       VLOG(1) << "Authenticating with Polaris service. [unique_id="
-              << unique_id_ << "]";
+              << (unique_id_.empty() ? "<not specified>" : unique_id_) << "]";
       int ret = polaris_.Authenticate(api_key_, unique_id_);
       if (ret == POLARIS_FORBIDDEN) {
         LOG(ERROR) << "Authentication rejected. Is your API key valid?";
@@ -216,7 +226,11 @@ void PolarisClient::Run(double timeout_sec) {
     VLOG(1) << "Authenticated. Connecting to Polaris... [" << endpoint_url_
             << ":" << endpoint_port_ << "]";
 
-    if (polaris_.ConnectTo(endpoint_url_, endpoint_port_) != POLARIS_SUCCESS) {
+    if ((!no_auth_ && polaris_.ConnectTo(endpoint_url_, endpoint_port_) !=
+                          POLARIS_SUCCESS) ||
+        (no_auth_ &&
+         polaris_.ConnectWithoutAuth(endpoint_url_, endpoint_port_,
+                                     unique_id_) != POLARIS_SUCCESS)) {
       LOG(ERROR) << "Error connecting to Polaris corrections stream. Retrying.";
       IncrementRetryCount();
       continue;

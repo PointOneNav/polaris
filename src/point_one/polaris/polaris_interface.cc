@@ -43,6 +43,14 @@ int PolarisInterface::ConnectTo(const std::string& endpoint_url,
 }
 
 /******************************************************************************/
+int PolarisInterface::ConnectWithoutAuth(
+    const std::string& endpoint_url, int endpoint_port,
+    const std::string& unique_id) {
+  return Polaris_ConnectWithoutAuth(&context_, endpoint_url.c_str(),
+                                    endpoint_port, unique_id.c_str());
+}
+
+/******************************************************************************/
 void PolarisInterface::Disconnect() {
   Polaris_Disconnect(&context_);
 }
