@@ -26,7 +26,7 @@ void HandleSignal(int sig) {
 }
 
 int main(int argc, const char* argv[]) {
-  if (argc < 2 || argc > 3) {
+  if (argc < 2 || argc > 4) {
     P1_fprintf(stderr, "Usage: %s API_KEY [UNIQUE_ID] [LOG_LEVEL]\n", argv[0]);
     return 1;
   }
