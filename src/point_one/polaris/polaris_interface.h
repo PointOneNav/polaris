@@ -268,6 +268,11 @@ class PolarisInterface {
    *
    * If the specified timeout has elapsed since the last time data was received,
    * the connection will be considered lost and the function will return.
+ *
+   * @post
+   * Unlike @ref Polaris_Work(), a value of @ref POLARIS_TIMED_OUT here
+   * indicates the connection has been lost, and the socket will be closed on
+   * return.
    *
    * See also @ref Polaris_Run().
    *
