@@ -511,8 +511,8 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id) {
 /******************************************************************************/
 int Polaris_Work(PolarisContext_t* context) {
   if (context->disconnected) {
-    P1_DebugPrint("Connection terminated.\n");
-    return 0;
+    P1_DebugPrint("Connection terminated by user request.\n");
+    return POLARIS_CONNECTION_CLOSED;
   } else if (context->socket == P1_INVALID_SOCKET) {
     P1_Print("Error: Polaris connection not currently open.\n");
     return POLARIS_SOCKET_ERROR;
@@ -543,26 +543,27 @@ int Polaris_Work(PolarisContext_t* context) {
 #endif
 
   if (bytes_read < 0) {
+    // Did we hit a read timeout? This is normal behavior (e.g., brief loss of
+    // cell service) and is not considered an error. Most receivers can handle
+    // small gaps in corrections data. We do not close the socket here.
     if (errno == EAGAIN || errno == ETIMEDOUT) {
       P1_DebugPrint("Socket timed out.\n");
       return 0;
-    } else {
-      // Typically ENOTCONN, but could be another error condition.
-      int ret;
+    }
+    // Otherwise, we hit some other error condition. Typically ENOTCONN (i.e.,
+    // socket closed) or EINTR, but could be another error condition.
+    else {
       if (context->disconnected) {
         P1_DebugPrint(
             "Connection terminated by user request. [ret=%d, errno=%d]\n",
             (int)bytes_read, errno);
-        ret = 0;
       } else {
         P1_DebugPrint(
             "Connection terminated upstream. [ret=%d, errno=%d]\n",
             (int)bytes_read, errno);
-        ret = POLARIS_CONNECTION_CLOSED;
       }
-
       CloseSocket(context, 1);
-      return ret;
+      return POLARIS_CONNECTION_CLOSED;
     }
   } else if (bytes_read == 0) {
     // If recv() times out before we've gotten anything, the socket was probably
@@ -619,34 +620,29 @@ int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
     // Read the next data block.
     ret = Polaris_Work(context);
 
+    // If an error occurred or the connection was terminated, break. The socket
+    // will have already been closed and a debug message printed by
+    // Polaris_Work().
     if (ret < 0) {
-      // Connection closed remotely or another error occurred.
-      P1_DebugPrint("Connection terminated. [ret=%d]\n", ret);
-      CloseSocket(context, 1);
       break;
-    } else if (ret == 0) {
-      // Did the user call disconnect?
-      if (context->disconnected) {
-        ret = POLARIS_SUCCESS;
-        P1_DebugPrint("Connection terminated.\n");
+    }
+    // If we get 0 bytes, that means the read timed out. This can happen if the
+    // client briefly loses cell coverage, etc., so we do not consider short
+    // gaps an error. See if we've hit the longer connection timeout and, if so,
+    // close the connection. Otherwise, try again.
+    else if (ret == 0) {
+      P1_TimeValue_t current_time;
+      P1_GetCurrentTime(&current_time);
+      int elapsed_ms = P1_GetElapsedMS(&last_read_time, &current_time);
+      if (elapsed_ms >= connection_timeout_ms) {
+        P1_Print("Warning: Connection timed out after %d ms.\n", elapsed_ms);
         CloseSocket(context, 1);
+        ret = POLARIS_TIMED_OUT;
         break;
       }
-      // Read timed out - see if we've hit the connection timeout. Otherwise,
-      // try again.
-      else {
-        P1_TimeValue_t current_time;
-        P1_GetCurrentTime(&current_time);
-        int elapsed_ms = P1_GetElapsedMS(&last_read_time, &current_time);
-        if (elapsed_ms >= connection_timeout_ms) {
-          P1_Print("Warning: Connection timed out after %d ms.\n", elapsed_ms);
-          CloseSocket(context, 1);
-          ret = POLARIS_TIMED_OUT;
-          break;
-        }
-      }
-    } else {
-      // Data received and dispatched to the callback.
+    }
+    // Data received and dispatched to the callback.
+    else {
       total_bytes += (size_t)ret;
       P1_GetCurrentTime(&last_read_time);
 
@@ -659,7 +655,11 @@ int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
   }
 
   P1_DebugPrint("Received %u total bytes.\n", (unsigned)total_bytes);
-  return context->disconnected ? POLARIS_SUCCESS : ret;
+  if (ret == POLARIS_CONNECTION_CLOSED && context->disconnected) {
+    return POLARIS_SUCCESS;
+  } else {
+    return ret;
+  }
 }
 
 /******************************************************************************/

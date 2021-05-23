@@ -370,9 +370,9 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id);
  *
  * @param context The Polaris context to be used.
  *
- * @return The number of received bytes, or 0 if the timeout elapsed or @ref
- *         Polaris_Disconnect() was called without receiving data.
- * @return @ref POLARIS_CONNECTION_CLOSED if the connection was closed remotely.
+ * @return The number of received bytes, or 0 if the timeout elapsed.
+ * @return @ref POLARIS_CONNECTION_CLOSED if the connection was closed remotely
+ *         or by calling @ref Polaris_Disconnect().
  * @return @ref POLARIS_FORBIDDEN if the connection is closed before any data
  *         is received, indicating an authentication failure (invalid or expired
  *         access token).
@@ -395,7 +395,9 @@ int Polaris_Work(PolarisContext_t* context);
  *        after which the connection is considered lost.
  *
  * @return @ref POLARIS_SUCCESS if the connection was closed by a call to @ref
- *         Polaris_Disconnect().
+ *         Polaris_Disconnect(). Note that this differs from @ref
+ *         Polaris_Work(), which returns @ref POLARIS_CONNECTION_CLOSED for
+ *         both remote and local connection termination.
  * @return @ref POLARIS_CONNECTION_CLOSED if the connection was closed remotely.
  * @return @ref POLARIS_TIMED_OUT if no data was received for the specified
  *         timeout.
