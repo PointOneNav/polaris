@@ -564,7 +564,7 @@ int Polaris_Work(PolarisContext_t* context) {
     if (errno == EAGAIN || errno == ETIMEDOUT) {
 #endif
       P1_DebugPrint("Socket timed out.\n");
-      return 0;
+      return POLARIS_TIMED_OUT;
     }
     // Otherwise, we hit some other error condition. Typically ENOTCONN (i.e.,
     // socket closed) or EINTR, but could be another error condition.
@@ -652,17 +652,15 @@ int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
     // Read the next data block.
     ret = Polaris_Work(context);
 
-    // If an error occurred or the connection was terminated, break. The socket
-    // will have already been closed and a debug message printed by
-    // Polaris_Work().
-    if (ret < 0) {
-      break;
-    }
-    // If we get 0 bytes, that means the read timed out. This can happen if the
-    // client briefly loses cell coverage, etc., so we do not consider short
-    // gaps an error. See if we've hit the longer connection timeout and, if so,
-    // close the connection. Otherwise, try again.
-    else if (ret == 0) {
+    // Check if the read timed out. This can happen if the client briefly loses
+    // cell coverage, etc., so we do not consider short gaps an error. See if
+    // we've hit the longer connection timeout and, if so, close the connection.
+    // Otherwise, try again.
+    //
+    // We treat 0 bytes as a read timeout condition just to be safe, but in
+    // practice Polaris_Work() should handle all timeout, error, and connection
+    // closed conditions and this should not happen.
+    if (ret == POLARIS_TIMED_OUT || ret == 0) {
       P1_TimeValue_t current_time;
       P1_GetCurrentTime(&current_time);
       int elapsed_ms = P1_GetElapsedMS(&last_read_time, &current_time);
@@ -672,6 +670,12 @@ int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
         ret = POLARIS_TIMED_OUT;
         break;
       }
+    }
+    // If an error occurred or the connection was terminated, break. The socket
+    // will have already been closed and a debug message printed by
+    // Polaris_Work().
+    else if (ret < 0) {
+      break;
     }
     // Data received and dispatched to the callback.
     else {

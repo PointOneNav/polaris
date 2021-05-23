@@ -359,14 +359,18 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id);
  * POLARIS_RECV_TIMEOUT_MS elapses. If @ref Polaris_Disconnect() is called, this
  * function will return immediately.
  *
+ * If an error occurs and this function returns <0 (with the exception of @ref
+ * POLARIS_TIMED_OUT -- see below), the socket will be closed before the
+ * function returns.
+ *
  * @warning
  * Important: A read timeout is a normal occurrence and is not considered an
  * error condition. Read timeouts can happen occasionally due to intermittent
  * internet connections (e.g., client vehicle losing cell coverage briefly).
  * Most GNSS receivers can tolerate small gaps in corrections data. The socket
- * will _not_ be closed on a read timeout (return 0). The calling code must
- * call `Polaris_Disconnect()` to close the socket before attempting to
- * reconnect or reauthenticate.
+ * will _not_ be closed on a read timeout (@ref POLARIS_TIMED_OUT). The calling
+ * code must call `Polaris_Disconnect()` to close the socket before attempting
+ * to reconnect or reauthenticate.
  *
  * @note
  * There is no guarantee that a data block contains a complete RTCM message, or
@@ -379,9 +383,10 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id);
  *
  * @param context The Polaris context to be used.
  *
- * @return The number of received bytes, or 0 if the timeout elapsed.
+ * @return The number of received bytes.
  * @return @ref POLARIS_CONNECTION_CLOSED if the connection was closed remotely
  *         or by calling @ref Polaris_Disconnect().
+ * @return @ref POLARIS_TIMED_OUT if the socket receive timeout elapsed.
  * @return @ref POLARIS_FORBIDDEN if the connection is closed before any data
  *         is received, indicating an authentication failure (invalid or expired
  *         access token).
