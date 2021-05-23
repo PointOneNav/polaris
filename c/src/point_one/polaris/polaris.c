@@ -733,7 +733,7 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
                       int endpoint_port) {
   // Is the connection already open?
   if (context->socket != P1_INVALID_SOCKET) {
-    P1_Print("Error socket already open.\n");
+    P1_Print("Error: socket already open.\n");
     return POLARIS_ERROR;
   }
 
@@ -750,7 +750,7 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
   SSL_CTX_set_options(context->ssl_ctx, SSL_OP_NO_TLSv1);
 
   if (context->ssl_ctx == NULL) {
-    P1_Print("SSL Context Failed to Initialize.\n");
+    P1_Print("SSL context failed to initialize.\n");
     return POLARIS_ERROR;
   }
 #endif
