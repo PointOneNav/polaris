@@ -944,6 +944,33 @@ static int GetHTTPResponse(PolarisContext_t* context) {
   }
 
   CloseSocket(context, 1);
+
+#ifdef P1_FREERTOS
+  // Unlike POSIX recv(), which returns <0 and sets ETIMEDOUT on a socket read
+  // timeout, FreeRTOS returns 0.
+  if (bytes_read == 0) {
+    P1_Print("Socket timed out waiting for HTTP response.\n");
+    return POLARIS_SEND_ERROR;
+  }
+  // Similarly, FreeRTOS returns -pdFREERTOS_ERRNO_ENOTCONN on an orderly socket
+  // shutdown rather than 0. Any other <0 return is considered an error.
+  else if (bytes_read != -pdFREERTOS_ERRNO_ENOTCONN) {
+    P1_PrintReadWriteError(
+        context, "Unexpected error while waiting for HTTP response",
+        bytes_read);
+    return POLARIS_SEND_ERROR;
+  }
+#else
+  // Check for socket read errors. Under normal circumstances, recv() should
+  // return 0 when finished, indicating the HTTP server closed the connection.
+  if (bytes_read < 0) {
+    P1_PrintReadWriteError(
+        context, "Unexpected error while waiting for HTTP response",
+        bytes_read);
+    return POLARIS_SEND_ERROR;
+  }
+#endif
+
   P1_DebugPrint("Received HTTP request. [size=%u B]\n", (unsigned)total_bytes);
 
   // Append a null terminator to the response.
