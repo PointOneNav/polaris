@@ -557,7 +557,12 @@ int Polaris_Work(PolarisContext_t* context) {
     // Did we hit a read timeout? This is normal behavior (e.g., brief loss of
     // cell service) and is not considered an error. Most receivers can handle
     // small gaps in corrections data. We do not close the socket here.
+#ifdef POLARIS_USE_TLS
+    int ssl_error = SSL_get_error(context->ssl, bytes_read);
+    if (ssl_error == SSL_ERROR_WANT_READ || ssl_error == SSL_ERROR_WANT_WRITE) {
+#else
     if (errno == EAGAIN || errno == ETIMEDOUT) {
+#endif
       P1_DebugPrint("Socket timed out.\n");
       return 0;
     }
