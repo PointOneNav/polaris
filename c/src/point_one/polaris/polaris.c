@@ -563,15 +563,23 @@ int Polaris_Work(PolarisContext_t* context) {
     // Otherwise, we hit some other error condition. Typically ENOTCONN (i.e.,
     // socket closed) or EINTR, but could be another error condition.
     else {
+#ifdef P1_FREERTOS
+      // For FreeRTOS, we moved the return value into errno above. Now we need
+      // to move it back before calling P1_DebugPrintReadWriteError() -- that
+      // function expects to be provided the returned error value. We can't
+      // simply pass errno, however, because it also expects the return value
+      // for TLS connections (outside of FreeRTOS).
+      bytes_read = errno;
+#endif
+
       if (context->disconnected) {
-        P1_DebugPrint(
-            "Connection terminated by user request. [ret=%d, errno=%d]\n",
-            (int)bytes_read, errno);
+        P1_DebugPrintReadWriteError(
+            context, "Connection terminated by user request", bytes_read);
       } else {
-        P1_DebugPrint(
-            "Connection terminated upstream. [ret=%d, errno=%d]\n",
-            (int)bytes_read, errno);
+        P1_DebugPrintReadWriteError(context, "Connection terminated upstream",
+                                    bytes_read);
       }
+
       CloseSocket(context, 1);
       return POLARIS_CONNECTION_CLOSED;
     }
