@@ -53,10 +53,10 @@ static void ShowCerts(SSL* ssl);
 #endif
 
 #if defined(POLARIS_NO_PRINT)
-# define P1_PrintWriteError(context, x, ret) do {} while(0)
+# define P1_PrintReadWriteError(context, x, ret) do {} while(0)
 #elif defined(POLARIS_USE_TLS)
-static void __P1_PrintWriteError(int line, PolarisContext_t* context,
-                                 const char* message, int ret) {
+static void __P1_PrintReadWriteError(int line, PolarisContext_t* context,
+                                     const char* message, int ret) {
   SSL_load_error_strings();
   int ssl_error = SSL_get_error(context->ssl, ret);
   if (ssl_error == SSL_ERROR_SYSCALL) {
@@ -107,11 +107,16 @@ static void __P1_PrintWriteError(int line, PolarisContext_t* context,
   }
 }
 
-# define P1_PrintWriteError(context, x, ret) \
-  __P1_PrintWriteError(__LINE__, context, x, ret)
+# define P1_PrintReadWriteError(context, x, ret) \
+  __P1_PrintReadWriteError(__LINE__, context, x, ret)
 #else
-# define P1_PrintWriteError(context, x, ret) P1_PrintError(x, ret)
+# define P1_PrintReadWriteError(context, x, ret) P1_PrintError(x, ret)
 #endif
+
+#define P1_DebugPrintReadWriteError(context, x, ret) \
+  if (__log_level >= POLARIS_LOG_LEVEL_DEBUG) {      \
+    P1_PrintReadWriteError(context, x, ret);         \
+  }
 
 static int ValidateUniqueID(const char* unique_id);
 
@@ -312,7 +317,7 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
   ret = send(context->socket, context->recv_buffer, message_size, 0);
 #endif
   if (ret != message_size) {
-    P1_PrintWriteError(context, "Error sending authentication token", ret);
+    P1_PrintReadWriteError(context, "Error sending authentication token", ret);
     CloseSocket(context, 1);
     return POLARIS_SEND_ERROR;
   }
@@ -356,7 +361,7 @@ int Polaris_ConnectWithoutAuth(PolarisContext_t* context,
     ret = send(context->socket, context->send_buffer, message_size, 0);
 #endif
     if (ret != message_size) {
-      P1_PrintWriteError(context, "Error sending unique ID", ret);
+      P1_PrintReadWriteError(context, "Error sending unique ID", ret);
       CloseSocket(context, 1);
       return POLARIS_SEND_ERROR;
     }
@@ -427,7 +432,7 @@ int Polaris_SendECEFPosition(PolarisContext_t* context, double x_m, double y_m,
 #endif
 
   if (ret != message_size) {
-    P1_PrintWriteError(context, "Error sending ECEF position", ret);
+    P1_PrintReadWriteError(context, "Error sending ECEF position", ret);
     return POLARIS_SEND_ERROR;
   } else {
     return POLARIS_SUCCESS;
@@ -470,7 +475,7 @@ int Polaris_SendLLAPosition(PolarisContext_t* context, double latitude_deg,
 #endif
 
   if (ret != message_size) {
-    P1_PrintWriteError(context, "Error sending LLA position", ret);
+    P1_PrintReadWriteError(context, "Error sending LLA position", ret);
     return POLARIS_SEND_ERROR;
   } else {
     return POLARIS_SUCCESS;
@@ -501,7 +506,7 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id) {
 #endif
 
   if (ret != message_size) {
-    P1_PrintWriteError(context, "Error sending beacon request", ret);
+    P1_PrintReadWriteError(context, "Error sending beacon request", ret);
     return POLARIS_SEND_ERROR;
   } else {
     return POLARIS_SUCCESS;
@@ -900,7 +905,7 @@ static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
 #endif
 
   if (ret != message_size) {
-    P1_PrintWriteError(context, "Error sending POST request", ret);
+    P1_PrintReadWriteError(context, "Error sending POST request", ret);
     CloseSocket(context, 1);
     return POLARIS_SEND_ERROR;
   }
