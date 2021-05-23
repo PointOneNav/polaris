@@ -359,6 +359,15 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id);
  * POLARIS_RECV_TIMEOUT_MS elapses. If @ref Polaris_Disconnect() is called, this
  * function will return immediately.
  *
+ * @warning
+ * Important: A read timeout is a normal occurrence and is not considered an
+ * error condition. Read timeouts can happen occasionally due to intermittent
+ * internet connections (e.g., client vehicle losing cell coverage briefly).
+ * Most GNSS receivers can tolerate small gaps in corrections data. The socket
+ * will _not_ be closed on a read timeout (return 0). The calling code must
+ * call `Polaris_Disconnect()` to close the socket before attempting to
+ * reconnect or reauthenticate.
+ *
  * @note
  * There is no guarantee that a data block contains a complete RTCM message, or
  * starts on an RTCM message boundary.
