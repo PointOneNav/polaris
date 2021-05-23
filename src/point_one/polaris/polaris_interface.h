@@ -223,22 +223,35 @@ class PolarisInterface {
    * POLARIS_RECV_TIMEOUT_MS elapses. If @ref Disconnect() is called, this
    * function will return immediately.
    *
+   * If an error occurs and this function returns <0 (with the exception of @ref
+   * POLARIS_TIMED_OUT -- see below), the socket will be closed before the
+   * function returns.
+   *
+   * @warning
+   * Important: A read timeout is a normal occurrence and is not considered an
+   * error condition. Read timeouts can happen occasionally due to intermittent
+   * internet connections (e.g., client vehicle losing cell coverage briefly).
+   * Most GNSS receivers can tolerate small gaps in corrections data. The socket
+   * will _not_ be closed on a read timeout (@ref POLARIS_TIMED_OUT). The
+   * calling code must call `Disconnect()` to close the socket before attempting
+   * to reconnect or reauthenticate.
+   *
    * @note
    * There is no guarantee that a data block contains a complete RTCM message,
    * or starts on an RTCM message boundary.
    *
    * @post
    * The received data will be stored in the data buffer on return (@ref
-   *  GetRecvBuffer()). If a callback function is registered (@ref
-   *  SetRTCMCallback()), it will be called he the received data before this
-   *  function returns.
+   * GetRecvBuffer()). If a callback function is registered (@ref
+   * SetRTCMCallback()), it will be called he the received data before this
+   * function returns.
    *
    * See also @ref Polaris_Work().
    *
-   * @return The number of received bytes, or 0 if the timeout elapsed or @ref
-   *         Disconnect() was called without receiving data.
+   * @return The number of received bytes.
    * @return @ref POLARIS_CONNECTION_CLOSED if the connection was closed
-   *         remotely.
+   *         remotely or by calling @ref Disconnect().
+   * @return @ref POLARIS_TIMED_OUT if the socket receive timeout elapsed.
    * @return @ref POLARIS_FORBIDDEN if the connection is closed before any data
    *         is received, indicating an authentication failure (invalid or
    *         expired access token).
@@ -262,7 +275,9 @@ class PolarisInterface {
    *        reads, after which the connection is considered lost.
    *
    * @return @ref POLARIS_SUCCESS if the connection was closed by a call to @ref
-   *         Disconnect().
+   *         Disconnect(). Note that this differs from @ref Work(), which
+   *         returns @ref POLARIS_CONNECTION_CLOSED for both remote and local
+   *         connection termination.
    * @return @ref POLARIS_CONNECTION_CLOSED if the connection was closed
    *         remotely.
    * @return @ref POLARIS_TIMED_OUT if no data was received for the specified
