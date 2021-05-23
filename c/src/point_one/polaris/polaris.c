@@ -736,6 +736,12 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
     P1_Print("Error: socket already open.\n");
     return POLARIS_ERROR;
   }
+#ifdef POLARIS_USE_TLS
+  else if (context->ssl_ctx != NULL || context->ssl != NULL) {
+    P1_Print("Error: SSL context not freed.\n");
+    return POLARIS_ERROR;
+  }
+#endif
 
 #ifdef POLARIS_USE_TLS
   // Configure TLS.
