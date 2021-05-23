@@ -510,11 +510,16 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id) {
 
 /******************************************************************************/
 int Polaris_Work(PolarisContext_t* context) {
+  // The following should be unlikely to happen, but we call CloseSocket() just
+  // in case this function is called after Polaris_Disconnect() to clean up the
+  // SSL session.
   if (context->disconnected) {
     P1_DebugPrint("Connection terminated by user request.\n");
+    CloseSocket(context, 1);
     return POLARIS_CONNECTION_CLOSED;
   } else if (context->socket == P1_INVALID_SOCKET) {
     P1_Print("Error: Polaris connection not currently open.\n");
+    CloseSocket(context, 1);
     return POLARIS_SOCKET_ERROR;
   }
 
@@ -604,8 +609,16 @@ int Polaris_Work(PolarisContext_t* context) {
 
 /******************************************************************************/
 int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
-  if (context->socket == P1_INVALID_SOCKET) {
+  // The following should be unlikely to happen, but we call CloseSocket() just
+  // in case this function is called after Polaris_Disconnect() to clean up the
+  // SSL session.
+  if (context->disconnected) {
+    P1_DebugPrint("Connection terminated by user request.\n");
+    CloseSocket(context, 1);
+    return POLARIS_SUCCESS;
+  } else if (context->socket == P1_INVALID_SOCKET) {
     P1_Print("Error: Polaris connection not currently open.\n");
+    CloseSocket(context, 1);
     return POLARIS_SOCKET_ERROR;
   }
 
