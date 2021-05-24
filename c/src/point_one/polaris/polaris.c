@@ -292,6 +292,7 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
 
   // Connect to the corrections endpoint.
   context->disconnected = 0;
+  context->authenticated = 0;
   int ret = OpenSocket(context, endpoint_url, endpoint_port);
   if (ret != POLARIS_SUCCESS) {
     P1_Print("Error connecting to corrections endpoint: tcp://%s:%d.\n",
@@ -339,6 +340,7 @@ int Polaris_ConnectWithoutAuth(PolarisContext_t* context,
 
   // Connect to the corrections endpoint.
   context->disconnected = 0;
+  context->authenticated = 0;
   ret = OpenSocket(context, endpoint_url, endpoint_port);
   if (ret != POLARIS_SUCCESS) {
     P1_Print("Error connecting to corrections endpoint: tcp://%s:%d.\n",
@@ -855,6 +857,12 @@ void CloseSocket(PolarisContext_t* context, int destroy_context) {
     context->ssl_ctx = NULL;
   }
 #endif
+
+  context->authenticated = 0;
+
+  // Note: We do not clear disconnected here since it is used to determine
+  // the return value in Polaris_Run() _after_ Polaris_Work() has returned and
+  // may have closed the socket.
 }
 
 /******************************************************************************/
