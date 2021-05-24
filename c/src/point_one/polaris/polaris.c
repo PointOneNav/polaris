@@ -368,6 +368,8 @@ int Polaris_ConnectWithoutAuth(PolarisContext_t* context,
     }
   }
 
+  context->authenticated = 1;
+
   return POLARIS_SUCCESS;
 }
 
