@@ -359,6 +359,19 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id);
  * POLARIS_RECV_TIMEOUT_MS elapses. If @ref Polaris_Disconnect() is called, this
  * function will return immediately.
  *
+ * If an error occurs and this function returns <0 (with the exception of @ref
+ * POLARIS_TIMED_OUT -- see below), the socket will be closed before the
+ * function returns.
+ *
+ * @warning
+ * Important: A read timeout is a normal occurrence and is not considered an
+ * error condition. Read timeouts can happen occasionally due to intermittent
+ * internet connections (e.g., client vehicle losing cell coverage briefly).
+ * Most GNSS receivers can tolerate small gaps in corrections data. The socket
+ * will _not_ be closed on a read timeout (@ref POLARIS_TIMED_OUT). The calling
+ * code must call `Polaris_Disconnect()` to close the socket before attempting
+ * to reconnect or reauthenticate.
+ *
  * @note
  * There is no guarantee that a data block contains a complete RTCM message, or
  * starts on an RTCM message boundary.
@@ -370,9 +383,10 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id);
  *
  * @param context The Polaris context to be used.
  *
- * @return The number of received bytes, or 0 if the timeout elapsed or @ref
- *         Polaris_Disconnect() was called without receiving data.
- * @return @ref POLARIS_CONNECTION_CLOSED if the connection was closed remotely.
+ * @return The number of received bytes.
+ * @return @ref POLARIS_CONNECTION_CLOSED if the connection was closed remotely
+ *         or by calling @ref Polaris_Disconnect().
+ * @return @ref POLARIS_TIMED_OUT if the socket receive timeout elapsed.
  * @return @ref POLARIS_FORBIDDEN if the connection is closed before any data
  *         is received, indicating an authentication failure (invalid or expired
  *         access token).
@@ -390,12 +404,18 @@ int Polaris_Work(PolarisContext_t* context);
  * If the specified timeout has elapsed since the last time data was received,
  * the connection will be considered lost and the function will return.
  *
+ * @post
+ * Unlike @ref Polaris_Work(), a value of @ref POLARIS_TIMED_OUT here indicates
+ * the connection has been lost, and the socket will be closed on return.
+ *
  * @param context The Polaris context to be used.
  * @param connection_timeout_ms The maximum elapsed time (in ms) between reads,
  *        after which the connection is considered lost.
  *
  * @return @ref POLARIS_SUCCESS if the connection was closed by a call to @ref
- *         Polaris_Disconnect().
+ *         Polaris_Disconnect(). Note that this differs from @ref
+ *         Polaris_Work(), which returns @ref POLARIS_CONNECTION_CLOSED for
+ *         both remote and local connection termination.
  * @return @ref POLARIS_CONNECTION_CLOSED if the connection was closed remotely.
  * @return @ref POLARIS_TIMED_OUT if no data was received for the specified
  *         timeout.
