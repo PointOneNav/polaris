@@ -74,6 +74,18 @@ class PolarisInterface {
   int Authenticate(const std::string& api_key, const std::string& unique_id);
 
   /**
+    * @brief Authenticate with the specified Polaris API server.
+   *
+   * @copydetails Authenticate()
+   *
+   * See also @ref Polaris_AuthenticateTo().
+   *
+   * @param api_url The URL of the desired API authentication server.
+   */
+  int AuthenticateTo(const std::string& api_key, const std::string& unique_id,
+                     const std::string& api_url);
+
+  /**
    * @brief Use an existing authentication token to connect to Polaris.
    *
    * See also @ref Polaris_SetAuthToken().

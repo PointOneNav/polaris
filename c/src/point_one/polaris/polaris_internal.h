@@ -23,8 +23,6 @@
 #define POLARIS_ID_BEACON 0x05
 #define POLARIS_ID_UNIQUE_ID 0x06
 
-#define POLARIS_API_URL "api.pointonenav.com"
-
 // Enforce 4-byte alignment and packing of all data structures and values so
 // that values larger than 1 B are aligned on platforms that require it.
 #pragma pack(push, 4)

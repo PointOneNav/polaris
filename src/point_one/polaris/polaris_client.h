@@ -125,6 +125,14 @@ class PolarisClient {
   void SetNoAuthID(const std::string& unique_id);
 
   /**
+   * @brief Specify an alternate URL to use when authenticating with the Polaris
+   *        corrections service.
+   *
+   * @param api_url The desired endpoint URL.
+   */
+  void SetPolarisAuthenticationServer(const std::string& api_url = "");
+
+  /**
    * @brief Specify an alternate URL to use when connecting to the Polaris
    *        corrections endpoint.
    *
@@ -251,6 +259,8 @@ class PolarisClient {
   std::unique_ptr<std::thread> run_thread_;
 
   std::function<void(const uint8_t* buffer, size_t size_bytes)> callback_;
+
+  std::string api_url_;
 
   std::string endpoint_url_;
   int endpoint_port_ = 0;
