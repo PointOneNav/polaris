@@ -27,6 +27,14 @@ int PolarisInterface::Authenticate(const std::string& api_key,
 }
 
 /******************************************************************************/
+int PolarisInterface::AuthenticateTo(const std::string& api_key,
+                                     const std::string& unique_id,
+                                     const std::string& api_url) {
+  return Polaris_AuthenticateTo(&context_, api_key.c_str(), unique_id.c_str(),
+                                api_url.c_str());
+}
+
+/******************************************************************************/
 int PolarisInterface::SetAuthToken(const std::string& auth_token) {
   return Polaris_SetAuthToken(&context_, auth_token.c_str());
 }

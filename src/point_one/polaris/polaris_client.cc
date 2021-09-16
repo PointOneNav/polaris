@@ -68,6 +68,7 @@ PolarisClient::PolarisClient(const std::string& api_key,
     Polaris_SetLogLevel(POLARIS_LOG_LEVEL_TRACE);
   }
 
+  SetPolarisAuthenticationServer();
   SetPolarisEndpoint();
 
   polaris_.SetRTCMCallback([&](const uint8_t* buffer, size_t size_bytes) {
@@ -112,6 +113,17 @@ void PolarisClient::SetNoAuthID(const std::string& unique_id) {
   api_key_ = "";
   unique_id_ = unique_id;
   no_auth_ = true;
+}
+
+/******************************************************************************/
+void PolarisClient::SetPolarisAuthenticationServer(const std::string& api_url) {
+  std::unique_lock<std::recursive_mutex> lock(mutex_);
+  if (api_url.empty()) {
+    api_url_ = POLARIS_API_URL;
+  }
+  else {
+    api_url_ = api_url;
+  }
 }
 
 /******************************************************************************/
@@ -200,8 +212,9 @@ void PolarisClient::Run(double timeout_sec) {
     // Retrieve an access token using the specified API key.
     if (!auth_valid_ && !no_auth_) {
       VLOG(1) << "Authenticating with Polaris service. [unique_id="
-              << (unique_id_.empty() ? "<not specified>" : unique_id_) << "]";
-      int ret = polaris_.Authenticate(api_key_, unique_id_);
+              << (unique_id_.empty() ? "<not specified>" : unique_id_)
+              << ", api_url=" << api_url_ << "]";
+      int ret = polaris_.AuthenticateTo(api_key_, unique_id_, api_url_);
       if (ret == POLARIS_FORBIDDEN) {
         LOG(ERROR) << "Authentication rejected. Is your API key valid?";
         running_ = false;
