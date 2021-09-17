@@ -10,6 +10,8 @@
 
 #include "point_one/polaris/socket.h"
 
+#define POLARIS_API_URL "api.pointonenav.com"
+
 #define POLARIS_ENDPOINT_URL "polaris.pointonenav.com"
 #define POLARIS_ENDPOINT_PORT 8088
 #define POLARIS_ENDPOINT_TLS_PORT 8090
@@ -202,6 +204,16 @@ void Polaris_SetLogLevel(int log_level);
  */
 int Polaris_Authenticate(PolarisContext_t* context, const char* api_key,
                          const char* unique_id);
+
+/**
+ * @brief Authenticate with the specified Polaris API server.
+ *
+ * @copydetails Polaris_Authenticate()
+ *
+ * @param api_url The URL of the desired API authentication server.
+ */
+int Polaris_AuthenticateTo(PolarisContext_t* context, const char* api_key,
+                           const char* unique_id, const char* api_url);
 
 /**
  * @brief Use an existing authentication token to connect to Polaris.

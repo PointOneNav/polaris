@@ -177,6 +177,12 @@ void Polaris_SetLogLevel(int log_level) {
 /******************************************************************************/
 int Polaris_Authenticate(PolarisContext_t* context, const char* api_key,
                          const char* unique_id) {
+  return Polaris_AuthenticateTo(context, api_key, unique_id, POLARIS_API_URL);
+}
+
+/******************************************************************************/
+int Polaris_AuthenticateTo(PolarisContext_t* context, const char* api_key,
+                           const char* unique_id, const char* api_url) {
   // Sanity check the inputs.
   if (strlen(api_key) == 0) {
     P1_Print("API key must not be empty.\n");
@@ -210,16 +216,16 @@ int Polaris_Authenticate(PolarisContext_t* context, const char* api_key,
     return POLARIS_NOT_ENOUGH_SPACE;
   }
 
-  P1_DebugPrint("Sending auth request. [api_key=%s, unique_id=%s]\n", api_key,
-             unique_id);
+  P1_DebugPrint("Sending auth request. [api_key=%s, unique_id=%s, url=%s]\n",
+                api_key, unique_id, api_url);
   context->auth_token[0] = '\0';
 #ifdef POLARIS_USE_TLS
   int status_code =
-      SendPOSTRequest(context, POLARIS_API_URL, 443, "/api/v1/auth/token",
+      SendPOSTRequest(context, api_url, 443, "/api/v1/auth/token",
                       context->recv_buffer, (size_t)content_size);
 #else
   int status_code =
-      SendPOSTRequest(context, POLARIS_API_URL, 80, "/api/v1/auth/token",
+      SendPOSTRequest(context, api_url, 80, "/api/v1/auth/token",
                       context->recv_buffer, (size_t)content_size);
 #endif
   if (status_code < 0) {
