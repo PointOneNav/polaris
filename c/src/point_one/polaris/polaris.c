@@ -1182,7 +1182,7 @@ static int GetHTTPResponse(PolarisContext_t* context) {
   }
 #endif
 
-  P1_DebugPrint("Received HTTP request. [size=%u B]\n", (unsigned)total_bytes);
+  P1_DebugPrint("Received HTTP response. [size=%u B]\n", (unsigned)total_bytes);
 
   // Append a null terminator to the response.
   context->recv_buffer[total_bytes++] = '\0';
