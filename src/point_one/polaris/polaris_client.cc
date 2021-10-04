@@ -397,7 +397,8 @@ void PolarisClient::IncrementRetryCount() {
   // we can't perform authentication so we'll just keep retrying.
   if (!api_key_.empty() && max_reconnect_attempts_ > 0 &&
       ++connect_count_ > max_reconnect_attempts_) {
-    LOG(WARNING) << "Max reconnects exceeded. Clearing access token and "
+    LOG(WARNING) << "Max reconnects exceeded (" << max_reconnect_attempts_
+                 << "). Clearing access token and "
                     "retrying authentication.";
     auth_valid_ = false;
     connect_count_ = 0;
