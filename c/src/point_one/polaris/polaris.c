@@ -1051,6 +1051,7 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
 void CloseSocket(PolarisContext_t* context, int destroy_context) {
 #ifdef POLARIS_USE_TLS
   if (destroy_context && context->ssl != NULL) {
+    P1_DebugPrint("Shutting down TLS context.\n");
     if (SSL_get_shutdown(context->ssl) == 0) {
       SSL_shutdown(context->ssl);
     }
@@ -1061,12 +1062,14 @@ void CloseSocket(PolarisContext_t* context, int destroy_context) {
 #endif
 
   if (context->socket != P1_INVALID_SOCKET) {
+    P1_DebugPrint("Closing socket.\n");
     close(context->socket);
     context->socket = P1_INVALID_SOCKET;
   }
 
 #ifdef POLARIS_USE_TLS
   if (destroy_context && context->ssl_ctx != NULL) {
+    P1_DebugPrint("Freeing TLS context.\n");
     SSL_CTX_free(context->ssl_ctx);
     context->ssl_ctx = NULL;
   }
