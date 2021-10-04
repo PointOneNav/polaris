@@ -916,6 +916,7 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
 
 #ifdef POLARIS_USE_TLS
   // Configure TLS.
+  P1_DebugPrint("Configuring TLS context.\n");
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
   context->ssl_ctx = SSL_CTX_new(TLSv1_2_client_method());
 #else
@@ -935,10 +936,15 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
   // Open a socket.
   context->socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   if (context->socket < 0) {
-    P1_Print("Error opening socket.\n");
+    P1_PrintError("Error creating socket", context->socket);
     CloseSocket(context, 1);
     return POLARIS_SOCKET_ERROR;
   }
+
+  P1_DebugPrint(
+      "Configuring socket. [socket=%d, read_timeout=%d ms, send_timeout=%d "
+      "ms]\n",
+      context->socket, POLARIS_RECV_TIMEOUT_MS, POLARIS_SEND_TIMEOUT_MS);
 
   // Set send/receive timeouts.
   P1_TimeValue_t timeout;
@@ -955,15 +961,29 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
 #endif  // P1_FREERTOS
 
   // Lookup the IP of the endpoint used for auth requests.
+  P1_DebugPrint("Performing DNS lookup for '%s'.\n", endpoint_url);
   P1_SocketAddrV4_t address;
   if (P1_SetAddress(endpoint_url, endpoint_port, &address) < 0) {
+#ifdef P1_FREERTOS
     P1_Print("Error locating address '%s'.\n", endpoint_url);
+#else
+    P1_Print("Error locating address '%s'. [error=%s (%d)]\n", endpoint_url,
+             hstrerror(h_errno), h_errno);
+#endif
     CloseSocket(context, 1);
     return POLARIS_SOCKET_ERROR;
   }
 
   // Connect to the server.
-  P1_DebugPrint("Connecting to 'tcp://%s:%d'.\n", endpoint_url, endpoint_port);
+#ifdef P1_FREERTOS
+  uint32_t ip_host_endian = ntohl(address.sin_addr);
+#else
+  uint32_t ip_host_endian = ntohl(address.sin_addr.s_addr);
+#endif
+  P1_DebugPrint("Connecting to 'tcp://%d.%d.%d.%d:%d'.\n",
+                (ip_host_endian >> 24) & 0xFF, (ip_host_endian >> 16) & 0xFF,
+                (ip_host_endian >> 8) & 0xFF, ip_host_endian & 0xFF,
+                endpoint_port);
   int ret =
       connect(context->socket, (P1_SocketAddr_t*)&address, sizeof(address));
   if (ret < 0) {
@@ -971,9 +991,11 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
     CloseSocket(context, 1);
     return POLARIS_SOCKET_ERROR;
   }
+  P1_DebugPrint("Connected successfully.\n");
 
 #ifdef POLARIS_USE_TLS
   // Create new SSL connection state and attach the socket.
+  P1_DebugPrint("Establishing TLS connection.\n");
   context->ssl = SSL_new(context->ssl_ctx);
   SSL_set_fd(context->ssl, context->socket);
 
@@ -985,11 +1007,11 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
   ret = SSL_connect(context->ssl);
   if (ret != 1) {
     int err = SSL_get_error(context->ssl, ret);
-    P1_Print("SSL handshake failed to tcp://%s:%d, ssl_error=%d.\n",
+    P1_Print("TLS handshake failed for tcp://%s:%d, ssl_error=%d.\n",
              endpoint_url, endpoint_port, err);
 #ifndef P1_FREERTOS
     if (err == SSL_ERROR_SYSCALL) {
-      P1_PrintError("syscall error: ", errno);
+      P1_PrintError("Syscall error: ", errno);
     }
 #endif
     CloseSocket(context, 1);
