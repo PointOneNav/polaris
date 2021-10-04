@@ -890,6 +890,17 @@ static inline int P1_SetAddress(const char* hostname, int port,
   if (host_info == NULL) {
     P1_Print("Unable to resolve \"%s\": %s\n", hostname, hstrerror(h_errno));
     return -1;
+  }
+  // IPv6 not currently supported by the API.
+  else if (host_info->h_addrtype != AF_INET) {
+    P1_Print(
+        "Warning: DNS lookup for \"%s\" returned an IPv6 address (not "
+        "supported).\n",
+        hostname);
+    // Explicitly set h_errno to _something_ (gethostbyname() doesn't touch
+    // h_errno on success).
+    h_errno = NO_RECOVERY;
+    return -2;
   } else {
     result->sin_family = AF_INET;
     result->sin_port = htons(port);
