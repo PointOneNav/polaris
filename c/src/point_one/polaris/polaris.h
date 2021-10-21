@@ -118,10 +118,12 @@ struct PolarisContext_s {
   PolarisCallback_t rtcm_callback;
   void* rtcm_callback_info;
 
+#ifdef POLARIS_USE_TLS
   // Note: We're using void* to avoid needing the inclusion of SSL libs in the
   // header file.
   void* ssl_ctx;
   void* ssl;
+#endif // POLARIS_USE_TLS
 };
 
 #ifdef __cplusplus
