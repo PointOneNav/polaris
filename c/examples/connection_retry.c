@@ -21,7 +21,7 @@ void HandleSignal(int sig) {
   signal(sig, SIG_DFL);
 
   P1_printf("Caught signal %s (%d). Closing Polaris connection.\n",
-            sys_siglist[sig], sig);
+            strsignal(sig), sig);
   Polaris_Disconnect(&context);
 }
 
