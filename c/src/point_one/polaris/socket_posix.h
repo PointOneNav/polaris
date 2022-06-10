@@ -24,25 +24,3 @@ typedef struct sockaddr_in P1_SocketAddrV4_t;
 typedef struct sockaddr P1_SocketAddr_t;
 
 typedef ssize_t P1_RecvSize_t;
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-static inline int P1_SetAddress(const char* hostname, int port,
-                                P1_SocketAddrV4_t* result) {
-  struct hostent* host_info = gethostbyname(hostname);
-  if (host_info == NULL) {
-    return -1;
-  }
-  else {
-    result->sin_family = AF_INET;
-    result->sin_port = htons(port);
-    memcpy(&result->sin_addr, host_info->h_addr_list[0], host_info->h_length);
-    return 0;
-  }
-}
-
-#ifdef __cplusplus
-} // extern "C"
-#endif

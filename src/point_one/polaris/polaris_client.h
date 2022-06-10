@@ -253,6 +253,10 @@ class PolarisClient {
  private:
   enum class RequestType { NONE, ECEF, LLA, BEACON };
 
+  /**
+   * This mutex_ locks members of this class, except for the position-related
+   * fields below.
+   */
   std::recursive_mutex mutex_;
   PolarisInterface polaris_;
   std::atomic<bool> running_;
@@ -274,6 +278,12 @@ class PolarisClient {
   std::string api_key_;
   std::string unique_id_;
 
+  /**
+   * position_mutex_ protects access to the four position-related members below.
+   * When locking both mutex_ and position_mutex_, in order to prevent possible
+   * deadlock, always lock mutex_ first.
+   */
+  std::mutex position_mutex_;
   RequestType current_request_type_ = RequestType::NONE;
   double ecef_position_m_[3] = {NAN, NAN, NAN};
   double lla_position_deg_[3] = {NAN, NAN, NAN};

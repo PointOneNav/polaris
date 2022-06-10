@@ -739,6 +739,38 @@ static int ValidateUniqueID(const char* unique_id) {
 }
 
 /******************************************************************************/
+#ifdef P1_FREERTOS
+static inline int P1_SetAddress(const char* hostname, int port,
+                                P1_SocketAddrV4_t* result) {
+  uint32_t ip = FreeRTOS_gethostbyname(hostname);
+  if (ip == 0) {
+    return -1;
+  }
+  else {
+    result->sin_family = AF_INET;
+    result->sin_port = FreeRTOS_htons(port);
+    result->sin_addr = ip;
+    return 0;
+  }
+}
+#else
+static inline int P1_SetAddress(const char* hostname, int port,
+                                P1_SocketAddrV4_t* result) {
+  struct hostent* host_info = gethostbyname(hostname);
+  if (host_info == NULL) {
+    P1_Print("Unable to resolve \"%s\": %s\n", hostname, hstrerror(h_errno));
+    return -1;
+  }
+  else {
+    result->sin_family = AF_INET;
+    result->sin_port = htons(port);
+    memcpy(&result->sin_addr, host_info->h_addr_list[0], host_info->h_length);
+    return 0;
+  }
+}
+#endif
+
+/******************************************************************************/
 static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
                       int endpoint_port) {
   // Is the connection already open?
@@ -814,11 +846,18 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
   SSL_set_tlsext_host_name(context->ssl, endpoint_url);
 
   // Perform SSL handhshake.
-  if (SSL_connect(context->ssl) == -1) {
-    P1_Print("SSL handshake failed to tcp://%s:%d.\n", endpoint_url,
-             endpoint_port);
+  ret = SSL_connect(context->ssl);
+  if (ret != 1) {
+    int err = SSL_get_error(context->ssl, ret);
+    P1_Print("SSL handshake failed to tcp://%s:%d, ssl_error=%d.\n",
+             endpoint_url, endpoint_port, err);
+#ifndef P1_FREERTOS
+    if (err == SSL_ERROR_SYSCALL) {
+      P1_PrintError("syscall error: ", errno);
+    }
+#endif
     CloseSocket(context, 1);
-    return POLARIS_ERROR;
+    return POLARIS_SOCKET_ERROR;
   }
 
   const SSL_CIPHER* c = SSL_get_current_cipher(context->ssl);
