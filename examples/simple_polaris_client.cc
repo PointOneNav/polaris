@@ -42,7 +42,7 @@ void ReceivedData(const uint8_t* data, size_t length) {
 void HandleSignal(int sig) {
   signal(sig, SIG_DFL);
 
-  LOG(INFO) << "Caught signal " << sys_siglist[sig] << " (" << sig
+  LOG(INFO) << "Caught signal " << strsignal(sig) << " (" << sig
             << "). Closing Polaris connection.";
   polaris_client->Disconnect();
 }
