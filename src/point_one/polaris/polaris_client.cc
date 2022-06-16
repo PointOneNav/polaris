@@ -165,13 +165,21 @@ void PolarisClient::SetRTCMCallback(
 void PolarisClient::SendECEFPosition(double x_m, double y_m, double z_m) {
   VLOG(1) << "Setting current ECEF position: [" << std::fixed
           << std::setprecision(2) << x_m << ", " << y_m << ", " << z_m << "]";
-  std::unique_lock<std::recursive_mutex> lock(mutex_);
-  current_request_type_ = RequestType::ECEF;
-  ecef_position_m_[0] = x_m;
-  ecef_position_m_[1] = y_m;
-  ecef_position_m_[2] = z_m;
-  if (connected_) {
-    polaris_.SendECEFPosition(x_m, y_m, z_m);
+  {
+    std::unique_lock<std::mutex> position_lock(position_mutex_);
+    current_request_type_ = RequestType::ECEF;
+    ecef_position_m_[0] = x_m;
+    ecef_position_m_[1] = y_m;
+    ecef_position_m_[2] = z_m;
+  }
+
+  // If mutex_ is locked, it's probably because PolarisClient::Run() is
+  // reconnecting.  It will send the position once connected.
+  std::unique_lock<std::recursive_mutex> lock(mutex_, std::defer_lock);
+  if (lock.try_lock()) {
+    if (connected_) {
+      polaris_.SendECEFPosition(x_m, y_m, z_m);
+    }
   }
 }
 
@@ -181,32 +189,59 @@ void PolarisClient::SendLLAPosition(double latitude_deg, double longitude_deg,
   VLOG(1) << "Setting current LLA position: [" << std::fixed
           << std::setprecision(6) << latitude_deg << ", " << longitude_deg
           << ", " << std::setprecision(2) << altitude_m << "]";
-  std::unique_lock<std::recursive_mutex> lock(mutex_);
-  current_request_type_ = RequestType::LLA;
-  lla_position_deg_[0] = latitude_deg;
-  lla_position_deg_[1] = longitude_deg;
-  lla_position_deg_[2] = altitude_m;
-  if (connected_) {
-    polaris_.SendLLAPosition(latitude_deg, longitude_deg, altitude_m);
+  {
+    std::unique_lock<std::mutex> position_lock(position_mutex_);
+    current_request_type_ = RequestType::LLA;
+    lla_position_deg_[0] = latitude_deg;
+    lla_position_deg_[1] = longitude_deg;
+    lla_position_deg_[2] = altitude_m;
+  }
+
+  // If mutex_ is locked, it's probably because PolarisClient::Run() is
+  // reconnecting.  It will send the position once connected.
+  std::unique_lock<std::recursive_mutex> lock(mutex_, std::defer_lock);
+  if (lock.try_lock()) {
+    if (connected_) {
+      polaris_.SendLLAPosition(latitude_deg, longitude_deg, altitude_m);
+    }
   }
 }
 
 /******************************************************************************/
 void PolarisClient::RequestBeacon(const std::string& beacon_id) {
   VLOG(1) << "Requesting beacon '" << beacon_id << "'.";
-  std::unique_lock<std::recursive_mutex> lock(mutex_);
-  current_request_type_ = RequestType::BEACON;
-  beacon_id_ = beacon_id;
-  if (connected_) {
-    polaris_.RequestBeacon(beacon_id.c_str());
+  {
+    std::unique_lock<std::mutex> position_lock(position_mutex_);
+    current_request_type_ = RequestType::BEACON;
+    beacon_id_ = beacon_id;
+  }
+
+  // If mutex_ is locked, it's probably because PolarisClient::Run() is
+  // reconnecting.  It will send the position once connected.
+  std::unique_lock<std::recursive_mutex> lock(mutex_, std::defer_lock);
+  if (lock.try_lock()) {
+    if (connected_) {
+      polaris_.RequestBeacon(beacon_id.c_str());
+    }
   }
 }
 
 /******************************************************************************/
 void PolarisClient::Run(double timeout_sec) {
   const int timeout_ms = std::lround(timeout_sec * 1e3);
+  int ret = POLARIS_SUCCESS;
   running_ = true;
+  bool previous_connect_failed = false;
   while (running_) {
+    // Pause briefly after a failed reconnect attempt.
+    if (previous_connect_failed) {
+      sleep(2);
+      if (!running_) {
+        break;
+      }
+    }
+    previous_connect_failed = true;
+
     std::unique_lock<std::recursive_mutex> lock(mutex_);
 
     // Retrieve an access token using the specified API key.
@@ -214,7 +249,7 @@ void PolarisClient::Run(double timeout_sec) {
       VLOG(1) << "Authenticating with Polaris service. [unique_id="
               << (unique_id_.empty() ? "<not specified>" : unique_id_)
               << ", api_url=" << api_url_ << "]";
-      int ret = polaris_.AuthenticateTo(api_key_, unique_id_, api_url_);
+      ret = polaris_.AuthenticateTo(api_key_, unique_id_, api_url_);
       if (ret == POLARIS_FORBIDDEN) {
         LOG(ERROR) << "Authentication rejected. Is your API key valid?";
         running_ = false;
@@ -224,7 +259,8 @@ void PolarisClient::Run(double timeout_sec) {
         running_ = false;
         break;
       } else if (ret != POLARIS_SUCCESS) {
-        LOG(WARNING) << "Authentication failed. Retrying.";
+        LOG(WARNING) << "Authentication failed. Retrying. [error=" << ret
+                     << "]";
         continue;
       } else {
         auth_valid_ = true;
@@ -263,6 +299,7 @@ void PolarisClient::Run(double timeout_sec) {
       IncrementRetryCount();
       continue;
     }
+    previous_connect_failed = false;
 
     // Now release the mutex and start processing data.
     lock.unlock();
@@ -284,7 +321,7 @@ void PolarisClient::Run(double timeout_sec) {
     } else if (ret == POLARIS_SOCKET_ERROR) {
       LOG(WARNING) << "Socket closed unexpectedly. Reconnecting.";
     } else {
-      LOG(ERROR) << "Unexpected error (" << ret << "). Reconnecting.";
+      LOG(ERROR) << "Unexpected error. Reconnecting. [error=" << ret << "]";
     }
 
     // Connection closed due to an error. Reconnect.
@@ -294,6 +331,10 @@ void PolarisClient::Run(double timeout_sec) {
   // Finished running - clear any pending send requests for next time.
   current_request_type_ = RequestType::NONE;
   connect_count_ = 0;
+  if (ret != POLARIS_SUCCESS) {
+    LOG(WARNING) << "PolarisRun() exiting on fatal error. [error=" << ret
+                 << "]";
+  }
 }
 
 /******************************************************************************/
@@ -337,6 +378,7 @@ void PolarisClient::IncrementRetryCount() {
 
 /******************************************************************************/
 int PolarisClient::ResendRequest() {
+  std::unique_lock<std::mutex> position_lock(position_mutex_);
   if (current_request_type_ == RequestType::ECEF) {
     VLOG(1) << "Resending ECEF position update. [" << ecef_position_m_[0]
             << ", " << ecef_position_m_[1] << ", " << ecef_position_m_[2]
