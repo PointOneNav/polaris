@@ -71,7 +71,7 @@ Unique IDs have the following requirements:
 
 ### Requirements ###
 
-- [Bazel](https://bazel.build/) 3.3+, or [CMake](https://cmake.org/) 3.3+ and
+- [Bazel](https://bazel.build/) 3.6+, or [CMake](https://cmake.org/) 3.3+ and
   [GNU Make](https://www.gnu.org/software/make/)
 - [OpenSSL](https://www.openssl.org/) or [BoringSSL](https://boringssl.googlesource.com/boringssl/) (optional; required
   for TLS support (strongly recommended))
@@ -289,7 +289,7 @@ choosing. If the second argument is omitted, the application will use a built-in
 
 ### Requirements ###
 
-- [Bazel](https://bazel.build/) 3.3+, or [CMake](https://cmake.org/) 3.3+ and
+- [Bazel](https://bazel.build/) 3.6+, or [CMake](https://cmake.org/) 3.3+ and
   [GNU Make](https://www.gnu.org/software/make/)
 - [Google gflags 2.2.2+](https://github.com/gflags/gflags)
 - [Google glog 0.4.0+](https://github.com/google/glog)
