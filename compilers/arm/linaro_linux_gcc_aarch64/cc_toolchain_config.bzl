@@ -357,45 +357,45 @@ def _impl(ctx):
     tool_paths = [
         tool_path(
             name = "ar",
-            path = "arm/linaro_linux_gcc_aarch64/aarch64-linux-gnu-ar",
+            path = "aarch64-linux-gnu-ar",
         ),
         tool_path(
             name = "compat-ld",
-            path = "arm/linaro_linux_gcc_aarch64/aarch64-linux-gnu-ld",
+            path = "aarch64-linux-gnu-ld",
         ),
         tool_path(
             name = "cpp",
-            path = "arm/linaro_linux_gcc_aarch64/aarch64-linux-gnu-gcc",
+            path = "aarch64-linux-gnu-gcc",
         ),
         tool_path(
             name = "gcc",
-            path = "arm/linaro_linux_gcc_aarch64/aarch64-linux-gnu-gcc",
+            path = "aarch64-linux-gnu-gcc",
         ),
         tool_path(
             name = "ld",
-            path = "arm/linaro_linux_gcc_aarch64/aarch64-linux-gnu-ld",
+            path = "aarch64-linux-gnu-ld",
         ),
         tool_path(
             name = "nm",
-            path = "arm/linaro_linux_gcc_aarch64/aarch64-linux-gnu-nm",
+            path = "aarch64-linux-gnu-nm",
         ),
         tool_path(
             name = "objcopy",
-            path = "arm/linaro_linux_gcc_aarch64/aarch64-linux-gnu-objcopy",
+            path = "aarch64-linux-gnu-objcopy",
         ),
         tool_path(
             name = "objdump",
-            path = "arm/linaro_linux_gcc_aarch64/aarch64-linux-gnu-objdump",
+            path = "aarch64-linux-gnu-objdump",
         ),
         tool_path(
             name = "strip",
-            path = "arm/linaro_linux_gcc_aarch64/aarch64-linux-gnu-strip",
+            path = "aarch64-linux-gnu-strip",
         ),
         # Note: These don't actually exist and don't seem to get used, but they
         # are required by cc_binary() anyway.
         tool_path(
             name = "dwp",
-            path = "arm/linaro_linux_gcc_aarch64/aarch64-linux-gnu-dwp",
+            path = "aarch64-linux-gnu-dwp",
         ),
         tool_path(
             name = "gcov",
