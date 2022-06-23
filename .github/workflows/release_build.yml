@@ -118,11 +118,11 @@ jobs:
         MSBuild.exe p1_polaris_client.sln
 
     # Bazel build support.
-    - name: Use Bazel 3.3.0
+    - name: Use Bazel 4.2.2
       if: matrix.tool == 'bazel'
       uses: abhinavsingh/setup-bazel@v3
       with:
-        version: 3.3.0
+        version: 4.2.2
 
     - name: Build Library And Examples (Bazel, Native x64)
       if: matrix.tool == 'bazel' && matrix.arch == 'x64'
@@ -232,11 +232,11 @@ jobs:
         MSBuild.exe p1_polaris_c_client.sln
 
     # Bazel build support.
-    - name: Use Bazel 3.3.0
+    - name: Use Bazel 4.2.2
       if: matrix.tool == 'bazel'
       uses: abhinavsingh/setup-bazel@v3
       with:
-        version: 3.3.0
+        version: 4.2.2
 
     - name: Build Library And Examples (Bazel, Native x64)
       if: matrix.tool == 'bazel' && matrix.arch == 'x64'
