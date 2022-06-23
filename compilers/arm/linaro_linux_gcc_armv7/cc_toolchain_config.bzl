@@ -361,39 +361,39 @@ def _impl(ctx):
     tool_paths = [
         tool_path(
             name = "ar",
-            path = "arm/linaro_linux_gcc_armv7/arm-linux-gnueabihf-ar",
+            path = "arm-linux-gnueabihf-ar",
         ),
         tool_path(
             name = "compat-ld",
-            path = "arm/linaro_linux_gcc_armv7/arm-linux-gnueabihf-ld",
+            path = "arm-linux-gnueabihf-ld",
         ),
         tool_path(
             name = "cpp",
-            path = "arm/linaro_linux_gcc_armv7/arm-linux-gnueabihf-gcc",
+            path = "arm-linux-gnueabihf-gcc",
         ),
         tool_path(
             name = "gcc",
-            path = "arm/linaro_linux_gcc_armv7/arm-linux-gnueabihf-gcc",
+            path = "arm-linux-gnueabihf-gcc",
         ),
         tool_path(
             name = "ld",
-            path = "arm/linaro_linux_gcc_armv7/arm-linux-gnueabihf-ld",
+            path = "arm-linux-gnueabihf-ld",
         ),
         tool_path(
             name = "nm",
-            path = "arm/linaro_linux_gcc_armv7/arm-linux-gnueabihf-nm",
+            path = "arm-linux-gnueabihf-nm",
         ),
         tool_path(
             name = "objcopy",
-            path = "arm/linaro_linux_gcc_armv7/arm-linux-gnueabihf-objcopy",
+            path = "arm-linux-gnueabihf-objcopy",
         ),
         tool_path(
             name = "objdump",
-            path = "arm/linaro_linux_gcc_armv7/arm-linux-gnueabihf-objdump",
+            path = "arm-linux-gnueabihf-objdump",
         ),
         tool_path(
             name = "strip",
-            path = "arm/linaro_linux_gcc_armv7/arm-linux-gnueabihf-strip",
+            path = "arm-linux-gnueabihf-strip",
         ),
         # Note: These don't actually exist and don't seem to get used, but they
         # are required by cc_binary() anyway.
