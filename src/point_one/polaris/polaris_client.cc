@@ -246,7 +246,7 @@ void PolarisClient::RequestBeacon(const std::string& beacon_id) {
 /******************************************************************************/
 void PolarisClient::Run(double timeout_sec) {
   const int timeout_ms = std::lround(timeout_sec * 1e3);
-  int ret = POLARIS_SUCCESS;
+  int auth_ret = POLARIS_SUCCESS;
   running_ = true;
   bool previous_connect_failed = false;
   while (running_) {
@@ -269,18 +269,22 @@ void PolarisClient::Run(double timeout_sec) {
               << api_key_.substr(0, 7) << "..., unique_id="
               << (unique_id_.empty() ? "<not specified>" : unique_id_)
               << ", api_url=" << api_url_ << "]";
-      ret = polaris_.AuthenticateTo(api_key_, unique_id_, api_url_);
-      if (ret == POLARIS_FORBIDDEN) {
+      auth_ret = polaris_.AuthenticateTo(api_key_, unique_id_, api_url_);
+      if (auth_ret == POLARIS_FORBIDDEN) {
         LOG(ERROR) << "Authentication rejected. Is your API key valid?";
         running_ = false;
         break;
-      } else if (ret == POLARIS_ERROR) {
+      } else if (auth_ret == POLARIS_ERROR) {
         LOG(ERROR) << "Invalid API key/unique ID specified.";
         running_ = false;
         break;
-      } else if (ret != POLARIS_SUCCESS) {
-        LOG(WARNING) << "Authentication failed. Retrying. [error=" << ret
+      } else if (auth_ret != POLARIS_SUCCESS) {
+        LOG(WARNING) << "Authentication failed. Retrying. [error=" << auth_ret
                      << "]";
+        // Set auth_ret to success before continuing so we don't print out an
+        // "exited due to error" message below if the user closes the connection
+        // between here and when we call authenticate again.
+        auth_ret = POLARIS_SUCCESS;
         continue;
       } else {
         auth_valid_ = true;
@@ -295,16 +299,17 @@ void PolarisClient::Run(double timeout_sec) {
     VLOG(1) << "Authenticated. Connecting to Polaris... [" << endpoint_url_
             << ":" << endpoint_port_ << "]";
 
+    int connect_ret;
     if (no_auth_) {
-      ret = polaris_.ConnectWithoutAuth(endpoint_url_, endpoint_port_,
-                                        unique_id_);
+      connect_ret = polaris_.ConnectWithoutAuth(endpoint_url_, endpoint_port_,
+                                                unique_id_);
     } else {
-      ret = polaris_.ConnectTo(endpoint_url_, endpoint_port_);
+      connect_ret = polaris_.ConnectTo(endpoint_url_, endpoint_port_);
     }
 
-    if (ret != POLARIS_SUCCESS) {
+    if (connect_ret != POLARIS_SUCCESS) {
       LOG(ERROR) << "Error connecting to Polaris corrections stream. Retrying.";
-      if (ret != POLARIS_SOCKET_ERROR) {
+      if (connect_ret != POLARIS_SOCKET_ERROR) {
         IncrementRetryCount();
       }
       continue;
@@ -316,12 +321,13 @@ void PolarisClient::Run(double timeout_sec) {
     // If there's an outstanding position update/beacon request resend it on
     // reconnect. Requests are cleared on a user-requested disconnect, so this
     // is a no-op on the first connection attempt.
-    if (ResendRequest() != POLARIS_SUCCESS) {
+    int send_ret = ResendRequest();
+    if (send_ret != POLARIS_SUCCESS) {
       VLOG(1)
           << "Error resending position update/beacon request. Reconnecting.";
       connected_ = false;
       polaris_.Disconnect();
-      if (ret != POLARIS_SOCKET_ERROR) {
+      if (send_ret != POLARIS_SOCKET_ERROR) {
         IncrementRetryCount();
       }
       continue;
@@ -330,29 +336,29 @@ void PolarisClient::Run(double timeout_sec) {
 
     // Now release the mutex and start processing data.
     lock.unlock();
-    int ret = polaris_.Run(timeout_ms);
+    int run_ret = polaris_.Run(timeout_ms);
     lock.lock();
 
     connected_ = false;
 
-    if (ret == POLARIS_SUCCESS) {
+    if (run_ret == POLARIS_SUCCESS) {
       // Connection closed by a call to PolarisInterface::Disconnect().
       VLOG(1) << "Connection closed by user.";
       continue;
-    } else if (ret == POLARIS_CONNECTION_CLOSED) {
+    } else if (run_ret == POLARIS_CONNECTION_CLOSED) {
       LOG(WARNING) << "Connection terminated remotely. Reconnecting.";
-    } else if (ret == POLARIS_TIMED_OUT) {
+    } else if (run_ret == POLARIS_TIMED_OUT) {
       LOG(WARNING) << "Connection timed out. Reconnecting.";
-    } else if (ret == POLARIS_FORBIDDEN) {
+    } else if (run_ret == POLARIS_FORBIDDEN) {
       LOG(WARNING) << "Authentication token rejected. Reconnecting.";
-    } else if (ret == POLARIS_SOCKET_ERROR) {
+    } else if (run_ret == POLARIS_SOCKET_ERROR) {
       LOG(WARNING) << "Socket closed unexpectedly. Reconnecting.";
     } else {
-      LOG(ERROR) << "Unexpected error. Reconnecting. [error=" << ret << "]";
+      LOG(ERROR) << "Unexpected error. Reconnecting. [error=" << run_ret << "]";
     }
 
     // Connection closed due to an error. Reconnect.
-    if (ret != POLARIS_SOCKET_ERROR) {
+    if (run_ret != POLARIS_SOCKET_ERROR) {
       IncrementRetryCount();
     }
   }
@@ -360,9 +366,9 @@ void PolarisClient::Run(double timeout_sec) {
   // Finished running - clear any pending send requests for next time.
   current_request_type_ = RequestType::NONE;
   connect_count_ = 0;
-  if (ret != POLARIS_SUCCESS) {
-    LOG(WARNING) << "PolarisRun() exiting on fatal error. [error=" << ret
-                 << "]";
+  if (auth_ret != POLARIS_SUCCESS) {
+    LOG(WARNING) << "PolarisClient::Run() exiting on fatal error. [error="
+                 << auth_ret << "]";
   }
 }
 
