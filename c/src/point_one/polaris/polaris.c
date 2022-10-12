@@ -100,9 +100,12 @@ static void ShowCerts(SSL* ssl);
 #define P1_PrintReadWriteError(context, x, ret) \
   do {                                          \
   } while (0)
+#define P1_PrintSSLError(context, x, ret) \
+  do {                                    \
+  } while (0)
 #elif defined(POLARIS_USE_TLS)
-static void __P1_PrintReadWriteError(int line, PolarisContext_t* context,
-                                     const char* message, int ret) {
+static void __P1_PrintSSLError(int line, PolarisContext_t* context,
+                               const char* message, int ret) {
   SSL_load_error_strings();
   int ssl_error = SSL_get_error(context->ssl, ret);
   if (ssl_error == SSL_ERROR_SYSCALL) {
@@ -156,9 +159,14 @@ static void __P1_PrintReadWriteError(int line, PolarisContext_t* context,
 }
 
 #define P1_PrintReadWriteError(context, x, ret) \
-  __P1_PrintReadWriteError(__LINE__, context, x, ret)
+  __P1_PrintSSLError(__LINE__, context, x, ret)
+#define P1_PrintSSLError(context, x, ret) \
+  __P1_PrintSSLError(__LINE__, context, x, ret)
 #else
 #define P1_PrintReadWriteError(context, x, ret) P1_PrintError(x, ret)
+#define P1_PrintSSLError(context, x, ret) \
+  do {                                    \
+  } while (0)
 #endif
 
 #define P1_DebugPrintReadWriteError(context, x, ret) \
@@ -1017,14 +1025,12 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
   // Perform SSL handhshake.
   ret = SSL_connect(context->ssl);
   if (ret != 1) {
-    int err = SSL_get_error(context->ssl, ret);
-    P1_Print("TLS handshake failed for tcp://%s:%d, ssl_error=%d.\n",
-             endpoint_url, endpoint_port, err);
-#ifndef P1_FREERTOS
-    if (err == SSL_ERROR_SYSCALL) {
-      P1_PrintError("Syscall error: ", errno);
-    }
-#endif
+#if !defined(P1_NO_PRINT)
+    char message[256];
+    snprintf(message, sizeof(message), "TLS handshake failed for tcp://%s:%d",
+             endpoint_url, endpoint_port);
+    P1_PrintSSLError(context, message, ret);
+#endif  // !defined(P1_NO_PRINT)
     CloseSocket(context, 1);
     return POLARIS_SOCKET_ERROR;
   }
