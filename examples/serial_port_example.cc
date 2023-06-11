@@ -30,14 +30,14 @@ DEFINE_string(polaris_api_key, "",
               "The service API key. Contact account administrator or "
               "sales@pointonenav.com if unknown.");
 
-DEFINE_string(polaris_unique_id, "device12345",
+DEFINE_string(polaris_unique_id, "",
               "The unique ID to assign to this Polaris connection.");
 
 // Serial port forwarding options.
-DEFINE_string(receiver_serial_port, "/dev/ttyACM0",
+DEFINE_string(receiver_serial_port, "/dev/ttyUSB0",
               "The path to the serial port for which to forward corrections.");
 
-DEFINE_int32(receiver_serial_baud, 115200, "The baud rate of the serial port.");
+DEFINE_int32(receiver_serial_baud, 460800, "The baud rate of the serial port.");
 
 namespace {
 // Max size of string buffer to hold before clearing NMEA data. Should be larger
@@ -61,11 +61,12 @@ double ConvertGGADegreesToDecimalDegrees(double gga_degrees) {
 void OnNmea(const std::string& nmea_str, PolarisClient* polaris_client) {
   // Some receivers put out INGGA messages as opposed to GPGGA.
   if (!(boost::istarts_with(nmea_str, "$GPGGA") ||
+        boost::istarts_with(nmea_str, "$GNGGA") ||
         boost::istarts_with(nmea_str, "$INGGA"))) {
-    LOG(INFO) << nmea_str;
+    VLOG(2) << nmea_str;
     return;
   }
-  VLOG(4) << "Got GGA: " << nmea_str;
+  LOG(INFO) << "Got GGA: " << nmea_str;
   std::stringstream ss(nmea_str);
   std::vector<std::string> result;
 
@@ -82,7 +83,7 @@ void OnNmea(const std::string& nmea_str, PolarisClient* polaris_client) {
                  (result[3] == "N" ? 1 : -1);
     double lon = ConvertGGADegreesToDecimalDegrees(std::stod(result[4], &sz)) *
                  (result[5] == "E" ? 1 : -1);
-    double alt = std::stod(result[8], &sz);
+    double alt = std::stod(result[9], &sz);
     VLOG(3) << "Setting position: lat: " << lat << " lon: " << lon
               << " alt: " << alt;
     polaris_client->SendLLAPosition(lat, lon, alt);
@@ -108,6 +109,7 @@ void OnSerialData(const void* data, size_t length,
 
   if (nmea_sentence_buffer.size() > MAX_NMEA_SENTENCE_LENGTH) {
     LOG(WARNING) << "Clearing NMEA buffer.  Are you sending NMEA ascii data?";
+    nmea_sentence_buffer.clear();
   }
 }
 

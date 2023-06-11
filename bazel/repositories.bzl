@@ -56,6 +56,11 @@ def dependencies():
         git_repository,
         name = "boringssl",
         commit = "87f3087d6343b89142d1191388a5885d74459df2",
+        # Patch out -Werror to avoid error on GCC 11. The new warning that is
+        # triggering an error is a conversion between `const uint8_t s[32]` and
+        # `const uint8_t *s` in curve25519.c (-Werror=array-parameter=).
+        patch_args = ["-p1"],
+        patches = ["boringssl.patch"],
         # 2020/4/7
         remote = "https://boringssl.googlesource.com/boringssl",
         shallow_since = "1586306564 +0000",
