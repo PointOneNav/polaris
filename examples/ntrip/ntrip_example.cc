@@ -35,8 +35,7 @@ DEFINE_int32(polaris_port, 0,
              "endpoint.");
 
 DEFINE_string(polaris_api_key, "",
-              "The service API key. Contact account administrator or "
-              "sales@pointonenav.com if unknown.");
+              "The polaris API key. Sign up at app.pointonenav.com.");
 
 DEFINE_string(polaris_unique_id, "ntrip-device12345",
               "The unique ID to assign to this Polaris connection.");

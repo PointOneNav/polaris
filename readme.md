@@ -54,11 +54,10 @@ Documentation on the protocol used by the Polaris Service can be found at https:
 
 ## Polaris API Key and Unique ID ##
 
-To establish a connection, you must provide a valid Polaris API key. Please contact the administrator of your Point One
-Navigation contract or sales@pointonenav.com if you do not have one.
+To establish a connection, you must provide a valid Polaris API key. You can easily get one at https://app.pointonenav.com. 
 
-Each time you connect to Polaris, you must provide both your assigned API key and a unique ID - a string used to
-identify the connection. Unique IDs must be unique across all Polaris sessions using your API key.
+Each time you connect to Polaris, you must provide both your assigned API key.  Unique IDs are an _optional_ string used to
+identify the connection and must be unique across all Polaris sessions using your API key.
 
 **Important: if two connections use the same unique ID, they will conflict and will not work correctly.**
 
