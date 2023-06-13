@@ -296,6 +296,10 @@ choosing. If the second argument is omitted, the application will use a built-in
 - [OpenSSL](https://www.openssl.org/) or [BoringSSL](https://boringssl.googlesource.com/boringssl/) (optional; required
   for TLS support (strongly recommended))
 
+   ```bash
+   sudo apt install libgoogle-glog-dev libgflags-dev libboost-all-dev libssl-dev 
+   ```
+
 ### Building From Source ###
 
 The Polaris C++ Client can be built with [Bazel](https://bazel.build/), or [CMake](https://cmake.org/). Follow the
