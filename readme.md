@@ -296,9 +296,6 @@ choosing. If the second argument is omitted, the application will use a built-in
 - [OpenSSL](https://www.openssl.org/) or [BoringSSL](https://boringssl.googlesource.com/boringssl/) (optional; required
   for TLS support (strongly recommended))
 
-   ```bash
-   sudo apt install libgoogle-glog-dev libgflags-dev libboost-all-dev libssl-dev 
-   ```
 
 ### Building From Source ###
 
@@ -500,6 +497,13 @@ bazel run //examples:serial_port_example -- --polaris_api_key=<POLARIS_API_KEY> 
 where `<POLARIS_API_KEY>` is your polaris key
 
 ##### CMake
+
+CMake requires [dependencies](#requirements-1) are installed ahead of time.
+
+On Linux:
+```bash
+sudo apt install libgoogle-glog-dev libgflags-dev libboost-all-dev libssl-dev 
+```
 
 ```
 mkdir build && cd build && cmake .. && make && \
