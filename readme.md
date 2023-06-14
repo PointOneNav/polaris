@@ -296,6 +296,7 @@ choosing. If the second argument is omitted, the application will use a built-in
 - [OpenSSL](https://www.openssl.org/) or [BoringSSL](https://boringssl.googlesource.com/boringssl/) (optional; required
   for TLS support (strongly recommended))
 
+
 ### Building From Source ###
 
 The Polaris C++ Client can be built with [Bazel](https://bazel.build/), or [CMake](https://cmake.org/). Follow the
@@ -488,13 +489,30 @@ This example relays incoming corrections data to a receiver over a serial connec
 to send NMEA `$GPGGA` position updates over the connection. They will then be forwarded to Polaris to associate the
 receiver with an appropriate corrections stream.
 
+##### Bazel
 To run the application, run the following command:
 ```
 bazel run //examples:serial_port_example -- --polaris_api_key=<POLARIS_API_KEY> --device=/dev/ttyACM0
 ```
-where `<POLARIS_API_KEY>` is the API key assigned to you by Point One. The application uses a built-in unique ID by
-default, but you may change the unique ID using the `--polaris_unique_id` argument. See
-[Polaris API Key and Unique ID](#polaris-api-key-and-unique-id) for details.
+where `<POLARIS_API_KEY>` is your polaris key
+
+##### CMake
+
+CMake requires [dependencies](#requirements-1) are installed ahead of time.
+
+On Linux:
+```bash
+sudo apt install libgoogle-glog-dev libgflags-dev libboost-all-dev libssl-dev 
+```
+
+```
+mkdir build && cd build && cmake .. && make && \
+./examples/serial_port_client \
+    --polaris_api_key=<POLARIS_API_KEY> \
+    --receiver_serial_baud 460800 \
+    --receiver_serial_port=/dev/ttyACM0
+```
+where `<POLARIS_API_KEY>` is your polaris key
 
 #### NTRIP Server Example ####
 
