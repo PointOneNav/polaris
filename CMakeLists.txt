@@ -1,7 +1,7 @@
 # Copyright (C) Point One Navigation - All Rights Reserved
 project(p1_polaris_client)
 
-cmake_minimum_required(VERSION 3.3.2)
+cmake_minimum_required(VERSION 3.6)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/")
 
