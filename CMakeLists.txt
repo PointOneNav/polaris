@@ -9,7 +9,13 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
 option(BUILD_SHARED_LIBS "Build shared libraries instead of static libraries."
        ON)
 
-option(BUILD_EXAMPLES "Build example applications." ON)
+option(POLARIS_BUILD_EXAMPLES "Build example applications." ON)
+
+# Backwards compatibility. BUILD_EXAMPLES is deprecated and may be removed in a
+# future release.
+if (DEFINED BUILD_EXAMPLES AND BUILD_EXAMPLES)
+  set(POLARIS_BUILD_EXAMPLES ${BUILD_EXAMPLES})
+endif()
 
 # Set compilation flags.
 if (MSVC)
@@ -66,6 +72,6 @@ install(DIRECTORY src/point_one DESTINATION include
 # Example Applications
 ################################################################################
 
-if (BUILD_EXAMPLES)
+if (POLARIS_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
