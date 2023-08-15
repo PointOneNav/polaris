@@ -39,15 +39,12 @@ include_directories(${GLOG_INCLUDE_DIRS})
 
 # Add the C library, used by the C++ library.
 add_subdirectory(c)
-include_directories(${PROJECT_SOURCE_DIR}/c/src)
-
-# Add the source directory to the include path.
-include_directories(${PROJECT_SOURCE_DIR}/src)
 
 # Polaris client C++ library - all messages and supporting code.
 add_library(polaris_cpp_client
             src/point_one/polaris/polaris_client.cc
             src/point_one/polaris/polaris_interface.cc)
+target_include_directories(polaris_client PUBLIC ${PROJECT_SOURCE_DIR}/src)
 if (MSVC)
     target_compile_definitions(polaris_cpp_client PRIVATE BUILDING_DLL)
 endif()
