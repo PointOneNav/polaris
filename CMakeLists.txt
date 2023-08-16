@@ -1,15 +1,25 @@
 # Copyright (C) Point One Navigation - All Rights Reserved
-project(p1_polaris_client)
+cmake_minimum_required(VERSION 3.6)
 
-cmake_minimum_required(VERSION 3.3.2)
-
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/")
 
 # Option definitions.
 option(BUILD_SHARED_LIBS "Build shared libraries instead of static libraries."
        ON)
 
-option(BUILD_EXAMPLES "Build example applications." ON)
+option(POLARIS_BUILD_EXAMPLES "Build example applications." ON)
+
+# Backwards compatibility. BUILD_EXAMPLES is deprecated and may be removed in a
+# future release.
+if (DEFINED BUILD_EXAMPLES AND BUILD_EXAMPLES)
+  set(POLARIS_BUILD_EXAMPLES ${BUILD_EXAMPLES})
+endif()
+
+# Set toolchain parameters before calling project().
+set(CMAKE_CXX_STANDARD 11)
+
+# Define the project and setup the compiler toolchain.
+project(p1_polaris_client)
 
 # Set compilation flags.
 if (MSVC)
@@ -39,15 +49,12 @@ include_directories(${GLOG_INCLUDE_DIRS})
 
 # Add the C library, used by the C++ library.
 add_subdirectory(c)
-include_directories(${PROJECT_SOURCE_DIR}/c/src)
-
-# Add the source directory to the include path.
-include_directories(${PROJECT_SOURCE_DIR}/src)
 
 # Polaris client C++ library - all messages and supporting code.
 add_library(polaris_cpp_client
             src/point_one/polaris/polaris_client.cc
             src/point_one/polaris/polaris_interface.cc)
+target_include_directories(polaris_client PUBLIC ${PROJECT_SOURCE_DIR}/src)
 if (MSVC)
     target_compile_definitions(polaris_cpp_client PRIVATE BUILDING_DLL)
 endif()
@@ -69,6 +76,6 @@ install(DIRECTORY src/point_one DESTINATION include
 # Example Applications
 ################################################################################
 
-if (BUILD_EXAMPLES)
+if (POLARIS_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()

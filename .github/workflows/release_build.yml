@@ -117,6 +117,14 @@ jobs:
         cd cmake_build
         MSBuild.exe p1_polaris_client.sln
 
+    - name: Build External Project Example (CMake, Linux)
+      if: matrix.tool == 'cmake' && matrix.os == 'ubuntu-latest'
+      run: |
+        mkdir examples/external_cmake_project/build
+        cd examples/external_cmake_project/build
+        cmake ..
+        make
+
     # Bazel build support.
     - name: Use Bazel 4.2.2
       if: matrix.tool == 'bazel'
@@ -205,11 +213,11 @@ jobs:
         make -j
 
     # CMake build support.
-    - name: Install CMake 3.16.x
+    - name: Install CMake 3.18.x
       if: matrix.tool == 'cmake'
       uses: jwlawson/actions-setup-cmake@v1.4
       with:
-        cmake-version: '3.16.x'
+        cmake-version: '3.18.x'
 
     - name: Setup Build (CMake)
       if: matrix.tool == 'cmake'
@@ -230,6 +238,14 @@ jobs:
       run: |
         cd cmake_build
         MSBuild.exe p1_polaris_c_client.sln
+
+    - name: Build External Project Example (CMake, Linux)
+      if: matrix.tool == 'cmake' && matrix.os == 'ubuntu-latest'
+      run: |
+        mkdir examples/external_cmake_project/build
+        cd examples/external_cmake_project/build
+        cmake ..
+        make
 
     # Bazel build support.
     - name: Use Bazel 4.2.2

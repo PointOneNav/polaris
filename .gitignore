@@ -6,6 +6,8 @@ build/
 
 # Python
 *.pyc
+.idea/
+venv/
 
 # Visual Studio Code
 .vscode
