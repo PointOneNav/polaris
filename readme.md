@@ -23,10 +23,13 @@ Documentation on the protocol used by the Polaris Service can be found at https:
 * [Polaris API Key and Unique ID](#polaris-api-key-and-unique-id)
 * [Polaris C Client](#polaris-c-client)
   * [Requirements](#requirements)
-  * [Building From Source](#building-from-source)
-    * [Bazel](#bazel)
-      * [Compiling Example Applications With Bazel](#compiling-example-applications-with-bazel)
+  * [Installation](#installation)
     * [CMake](#cmake)
+      * [Including In Your CMake Project](#including-in-your-cmake-project)
+      * [Compiling From Source](#compiling-from-source)
+    * [Bazel](#bazel)
+      * [Including In Your Bazel Project](#including-in-your-bazel-project)
+      * [Compiling From Source](#compiling-from-source-1)
     * [GNU Make](#gnu-make)
   * [Using Polaris C Client](#using-polaris-c-client)
   * [Example Applications](#example-applications)
@@ -34,11 +37,14 @@ Documentation on the protocol used by the Polaris Service can be found at https:
     * [Connection Retry](#connection-retry)
 * [Polaris C++ Client](#polaris-c-client-1)
   * [Requirements](#requirements-1)
-  * [Building From Source](#building-from-source-1)
-    * [Bazel](#bazel-1)
-      * [Compiling Example Applications With Bazel](#compiling-example-applications-with-bazel-1)
-      * [Cross-Compiling With Bazel](#cross-compiling-with-bazel)
+  * [Installation](#installation-1)
     * [CMake](#cmake-1)
+      * [Including In Your CMake Project](#including-in-your-cmake-project-1)
+      * [Compiling From Source](#compiling-from-source-2)
+    * [Bazel](#bazel-1)
+      * [Including In Your Bazel Project](#including-in-your-bazel-project-1)
+      * [Compiling From Source](#compiling-from-source-3)
+      * [Cross-Compiling With Bazel](#cross-compiling-with-bazel)
     * [Building On Mac OS](#building-on-mac-os)
   * [Using Polaris C++ Client](#using-polaris-c-client-1)
   * [Example Applications](#example-applications)
@@ -54,7 +60,7 @@ Documentation on the protocol used by the Polaris Service can be found at https:
 
 ## Polaris API Key and Unique ID ##
 
-To establish a connection, you must provide a valid Polaris API key. You can easily get one at https://app.pointonenav.com. 
+To establish a connection, you must provide a valid Polaris API key. You can easily get one at https://app.pointonenav.com.
 
 Each time you connect to Polaris, you must provide both your assigned API key.  Unique IDs are an _optional_ string used to
 identify the connection and must be unique across all Polaris sessions using your API key.
@@ -70,69 +76,124 @@ Unique IDs have the following requirements:
 
 ### Requirements ###
 
-- [Bazel](https://bazel.build/) 3.6+, or [CMake](https://cmake.org/) 3.3+ and
+- [Bazel](https://bazel.build/) 3.6+, or [CMake](https://cmake.org/) 3.6+ and
   [GNU Make](https://www.gnu.org/software/make/)
+  - Note: CMake 3.18 or newer required when including the C library using `FetchContent_Declare()`
 - [OpenSSL](https://www.openssl.org/) or [BoringSSL](https://boringssl.googlesource.com/boringssl/) (optional; required
   for TLS support (strongly recommended))
 
-### Building From Source ###
+### Installation
 
 The Polaris C Client can be built with [Bazel](https://bazel.build/), [CMake](https://cmake.org/), or
 [GNU Make](https://www.gnu.org/software/make/). Follow the instructions below for build system of your choice.
 
-#### Bazel ####
+#### CMake
 
-To use the Polaris C Client within a Bazel project, add the following to your `WORKSPACE` file:
+##### Install Requirements
 
-```bazel
-load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+Before building the Polaris C Client library, you must install the following requirements:
 
-http_archive(
-    name = "p1_polaris",
-    strip_prefix = "polaris-1.0.1",
-    urls = ["https://github.com/PointOneNav/polaris/archive/v1.0.1.tar.gz"],
-)
-
-load("@p1_polaris//c/bazel:repositories.bzl", polaris_dependencies = "dependencies")
-
-polaris_dependencies()
+```bash
+sudo apt install libssl-dev
 ```
 
-replacing `1.0.1` with the latest version of Polaris Client.
+OpenSSL (`libssl-dev`) is required by default and strongly recommended, but may be disabled by specifying
+`-DPOLARIS_ENABLE_TLS=OFF` to the `cmake` command below.
 
-This will automatically download and import all requirements for the Polaris C Client.
+##### Including In Your CMake Project
 
-Then you can add `@p1_polaris//c:polaris_client` to the `deps` section of a `cc_binary()` or `cc_library()` rule in
-your project, and add `#include <point_one/polaris/polaris.h>` to your source code. For example:
+To include this library as part of your CMake project, we recommend using the CMake `FetchContent` feature as shown
+below, rather than compiling and installing the library manually as in the sections above:
+```cmake
+# Download the specified version of the FusionEngine client library and make it
+# available.
+include(FetchContent)
+FetchContent_Declare(
+    polaris
+    GIT_REPOSITORY https://github.com/PointOneNav/polaris.git
+    GIT_TAG v1.3.1
+    SOURCE_SUBDIR c
+)
+set(POLARIS_BUILD_EXAMPLES OFF CACHE INTERNAL "")
+FetchContent_MakeAvailable(polaris)
 
-```bazel
+# Define your application and add a dependency for the Polaris client C library.
+add_executable(example_app main.c)
+target_link_libraries(example_app PUBLIC polaris_client)
+```
+
+> Note that the `SOURCE_SUBDIR` argument tells CMake to include only the Polaris client C library. This argument was
+> introduced in CMake 3.18, so you must use CMake 3.18 or newer when building a C-only project.
+
+Note that we strongly recommend using a specific version of the library in your code by specifying a git tag (e.g.,
+`GIT_TAG v1.3.1`), and updating that as new versions are released. That way, you can be sure that your code is always
+built with a known version of Polaris client. If you prefer, however, you can tell CMake to track the latest
+changes by using `GIT_TAG master` instead.
+
+See [c/examples/external_cmake_project/CMakeLists.txt](c/examples/external_cmake_project/CMakeLists.txt) for more
+details.
+
+##### Compiling From Source
+
+Use the following steps to compile and install the Polaris C Client library using CMake:
+
+```
+mkdir c/build
+cd c/build
+cmake ..
+make
+sudo make install
+```
+
+This will generate `libpolaris_client.so`, and install the library and header files on your system. By default,
+this will also build the [example applications](#example-applications). You can disable the example applications by
+specifying `cmake -DPOLARIS_BUILD_EXAMPLES=OFF ..`.
+
+#### Bazel
+
+##### Including In Your Bazel Project
+
+To use this library in an existing Bazel project, add the following to your project's `WORKSPACE` file:
+
+```python
+git_repository(
+    name = "polaris",
+    remote = "git@github.com:PointOneNav/polaris.git",
+    tag = "v1.3.1",
+)
+```
+
+Note that we strongly recommend using a specific version of the library in your code by specifying a git tag (e.g.,
+`tag = "v1.3.1"`), and updating that as new versions are released. That way, you can be sure that your code is always
+built with a known version of fusion-engine-client. If you prefer, however, you can tell Bazel to track the latest
+changes by using `branch = "master"` instead.
+
+After declaring the repository in your `WORKSPACE` file, you can add the following dependency to any `cc_library()` or
+`cc_binary()` definitions in your project's `BAZEL` files:
+
+```python
 cc_binary(
     name = "my_application",
-    srcs = ["main.c"],
-    deps = ["@p1_polaris//c:polaris_client"],
+    srcs = ["main.cc"],
+    deps = ["@_polaris//c:polaris_client"],
 )
 ```
 
 The `polaris_client` target enables TLS support by default, which is strongly recommended. If necessary, you can use the
-`polaris_client_no_tls` target to connect without TLS, or specify `--//:polaris_enable_tls=False` to Bazel on the
+`polaris_client_no_tls` target to connect without TLS, or specify `--//c:polaris_enable_tls=False` to Bazel on the
 command line.
 
-> Note that you do not need to clone the Polaris repository when including it in your Bazel application. Bazel will
-clone it automatically when you build your application.
+> Note that you do not need to manually clone the Polaris repository when including it in your Bazel application. Bazel
+will clone it automatically when you build your application.
 
-##### Compiling Example Applications With Bazel ####
+##### Compiling From Source
 
-To compile and run the included example applications using Bazel, follow these steps:
+In general, it is strongly recommended that you let Bazel import and compile the library using `git_repository()` as
+shown above. However, if you would like to compile the example applications, you can run the following command:
 
-1. Clone the Polaris source code and navigate to the `c/` source directory:
-   ```bash
-   git clone https://github.com/PointOneNav/polaris.git
-   cd polaris
-   ```
-2. Compile the Polaris source code and example applications:
-   ```bash
-   bazel build -c opt //c/examples:*
-   ```
+```
+bazel build -c opt //c/examples:*
+```
 
 The generated example applications will be stored within the Bazel cache directory
 (`bazel-bin/examples/<APPLICATION_NAME>`). You may run them directly from the `bazel-bin/` directory if you wish, but
@@ -145,41 +206,7 @@ bazel run -c opt //c/examples:simple_polaris_client -- <POLARIS_API_KEY> [<UNIQU
 
 See [Simple Polaris Client](#simple-polaris-client) for more details.
 
-#### CMake ####
-
-1. Install all required libraries:
-   ```bash
-   sudo apt install libssl-dev
-   ```
-   - OpenSSL is required by default and strongly recommended, but may be disabled by specifying
-     `-DPOLARIS_ENABLE_TLS=OFF` to the `cmake` command below.
-2. Clone the Polaris source code and navigate to the `c/` source directory:
-   ```bash
-   git clone https://github.com/PointOneNav/polaris.git
-   cd polaris/c
-   ```
-3. Create a `build/` directory and run CMake to configure the build tree:
-   ```bash
-   mkdir build
-   cd build
-   cmake ..
-   ```
-4. Compile the Polaris source code and example applications:
-   ```bash
-   make
-   ```
-
-The generated example applications will be located at `examples/<APPLICATION NAME>` in the `build/` directory. For
-example, to run the [Simple Polaris Client](#simple-polaris-client) example application from the `build/` directory,
-run the following:
-
-```bash
-./examples/simple_polaris_client <POLARIS_API_KEY> [<UNIQUE_ID>]
-```
-
-See [Simple Polaris Client](#simple-polaris-client) for more details.
-
-#### GNU Make ###
+#### GNU Make
 
 > Note: The C client does not currently have any external dependencies.
 
@@ -267,9 +294,7 @@ To run the application, run the following command:
 ```
 bazel run //c/examples:simple_polaris_client -- <POLARIS_API_KEY> [<UNIQUE_ID>]
 ```
-where `<POLARIS_API_KEY>` is the API key assigned to you by Point One, and `<UNIQUE_ID>` is a unique ID string of your
-choosing. If the second argument is omitted, the application will use a built-in unique ID for test purposes. See
-[Polaris API Key and Unique ID](#polaris-api-key-and-unique-id) for details.
+where `<POLARIS_API_KEY>` is the Polaris key assigned to you by Point One.
 
 #### Connection Retry ####
 
@@ -280,15 +305,13 @@ To run the application, run the following command:
 ```
 bazel run //c/examples:connection_retry -- <POLARIS_API_KEY> [<UNIQUE_ID>]
 ```
-where `<POLARIS_API_KEY>` is the API key assigned to you by Point One, and `<UNIQUE_ID>` is a unique ID string of your
-choosing. If the second argument is omitted, the application will use a built-in unique ID for test purposes. See
-[Polaris API Key and Unique ID](#polaris-api-key-and-unique-id) for details.
+where `<POLARIS_API_KEY>` is the Polaris key assigned to you by Point One.
 
 ## Polaris C++ Client ##
 
 ### Requirements ###
 
-- [Bazel](https://bazel.build/) 3.6+, or [CMake](https://cmake.org/) 3.3+ and
+- [Bazel](https://bazel.build/) 3.6+, or [CMake](https://cmake.org/) 3.6+ and
   [GNU Make](https://www.gnu.org/software/make/)
 - [Google gflags 2.2.2+](https://github.com/gflags/gflags)
 - [Google glog 0.4.0+](https://github.com/google/glog)
@@ -296,64 +319,113 @@ choosing. If the second argument is omitted, the application will use a built-in
 - [OpenSSL](https://www.openssl.org/) or [BoringSSL](https://boringssl.googlesource.com/boringssl/) (optional; required
   for TLS support (strongly recommended))
 
-
-### Building From Source ###
+### Installation
 
 The Polaris C++ Client can be built with [Bazel](https://bazel.build/), or [CMake](https://cmake.org/). Follow the
 instructions below for build system of your choice.
 
-#### Bazel ####
+#### CMake
 
-To use the Polaris C++ Client within a Bazel project, add the following to your `WORKSPACE` file:
+##### Install Requirements
 
-```bazel
-load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+Before building the Polaris C++ Client library, you must install the following requirements:
 
-http_archive(
-    name = "p1_polaris",
-    strip_prefix = "polaris-1.0.1",
-    urls = ["https://github.com/PointOneNav/polaris/archive/v1.0.1.tar.gz"],
-)
-
-load("@p1_polaris//bazel:repositories.bzl", polaris_dependencies = "dependencies")
-
-polaris_dependencies()
+```bash
+sudo apt install libssl-dev libgflags-dev libgoogle-glog-dev libboost-all-dev
 ```
 
-replacing `1.0.1` with the latest version of Polaris Client.
+OpenSSL (`libssl-dev`) is required by default and strongly recommended, but may be disabled by specifying
+`-DPOLARIS_ENABLE_TLS=OFF` to the `cmake` command below.
 
-This will automatically download and import all requirements for the Polaris C++ Client.
+##### Including In Your CMake Project
 
-Then you can add `@p1_polaris//:polaris_client` to the `deps` section of a `cc_binary()` or `cc_library()` rule in your
-project, and add `#include <point_one/polaris/polaris_client.h>` to your source code. For example:
+To include this library as part of your CMake project, we recommend using the CMake `FetchContent` feature as shown
+below, rather than compiling and installing the library manually as in the sections above:
+```cmake
+# Download the specified version of the FusionEngine client library and make it
+# available.
+include(FetchContent)
+FetchContent_Declare(
+    polaris
+    GIT_REPOSITORY https://github.com/PointOneNav/polaris.git
+    GIT_TAG v1.3.1
+)
+set(POLARIS_BUILD_EXAMPLES OFF CACHE INTERNAL "")
+FetchContent_MakeAvailable(polaris)
 
-```bazel
+# Define your application and add a dependency for the Polaris client C library.
+add_executable(example_app main.c)
+target_link_libraries(example_app PUBLIC polaris_client)
+```
+
+Note that we strongly recommend using a specific version of the library in your code by specifying a git tag (e.g.,
+`GIT_TAG v1.3.1`), and updating that as new versions are released. That way, you can be sure that your code is always
+built with a known version of Polaris client. If you prefer, however, you can tell CMake to track the latest
+changes by using `GIT_TAG master` instead.
+
+See [examples/external_cmake_project/CMakeLists.txt](examples/external_cmake_project/CMakeLists.txt) for more details.
+
+##### Compiling From Source
+
+Use the following steps to compile and install the Polaris C Client library using CMake:
+
+```
+mkdir build
+cd build
+cmake ..
+make
+sudo make install
+```
+
+This will generate `libpolaris_cpp_client.so`, and install the library and header files on your system. By default,
+this will also build the [example applications](#example-applications). You can disable the example applications by
+specifying `cmake -DPOLARIS_BUILD_EXAMPLES=OFF ..`.
+
+#### Bazel
+
+##### Including In Your Bazel Project
+
+To use this library in an existing Bazel project, add the following to your project's `WORKSPACE` file:
+
+```python
+git_repository(
+    name = "polaris",
+    remote = "git@github.com:PointOneNav/polaris.git",
+    tag = "v1.3.1",
+)
+```
+
+Note that we strongly recommend using a specific version of the library in your code by specifying a git tag (e.g.,
+`tag = "v1.3.1"`), and updating that as new versions are released. That way, you can be sure that your code is always
+built with a known version of fusion-engine-client. If you prefer, however, you can tell Bazel to track the latest
+changes by using `branch = "master"` instead.
+
+After declaring the repository in your `WORKSPACE` file, you can add the following dependency to any `cc_library()` or
+`cc_binary()` definitions in your project's `BAZEL` files:
+
+```python
 cc_binary(
     name = "my_application",
     srcs = ["main.cc"],
-    deps = ["@p1_polaris//:polaris_client"],
+    deps = ["@_polaris//:polaris_client"],
 )
 ```
 
 The `polaris_client` target enables TLS support by default, which is strongly recommended. If necessary, you can use the
-disable TLS by specifying `--//c:polaris_enable_tls=False` to Bazel on the command line.
+`polaris_client_no_tls` target to connect without TLS, or specify `--//:polaris_enable_tls=False` to Bazel on the
+command line.
 
-> Note that you do not need to clone the Polaris repository when including it in your Bazel application. Bazel will
-clone it automatically when you build your application.
+> Note that you do not need to manually clone the Polaris repository when including it in your Bazel application. Bazel
+will clone it automatically when you build your application.
 
-##### Compiling Example Applications With Bazel ####
+##### Compiling From Source
 
-To compile and run the included example applications using Bazel, follow these steps:
+In general, it is strongly recommended that you let Bazel import and compile the library using `git_repository()` as
+shown above. However, if you would like to compile the example applications, you can run the following command:
 
-1. Clone the Polaris source code:
-   ```bash
-   git clone https://github.com/PointOneNav/polaris.git
-   cd polaris
-   ```
-2. Compile the Polaris source code and example applications:
-   ```bash
-   bazel build -c opt //examples:*
-   ```
+```
+bazel build -c opt //examples:*
+```
 
 The generated example applications will be stored within the Bazel cache directory
 (`bazel-bin/examples/<APPLICATION_NAME>`). You may run them directly from the `bazel-bin/` directory if you wish, but
@@ -366,7 +438,7 @@ bazel run -c opt //examples:simple_polaris_cpp_client -- --polaris_api_key=<POLA
 
 See [Simple Polaris Client](#simple-polaris-client-1) for more details.
 
-##### Cross-Compiling With Bazel #####
+##### Cross-Compiling With Bazel
 
 The Bazel build flow supports cross-compilation for 32- and 64-bit ARM architectures. To build for either architecture,
 specify the `--config` argument to Bazel with one of the following values:
@@ -378,41 +450,7 @@ For example:
 bazel build --config=aarch64 //examples:simple_polaris_cpp_client
 ```
 
-#### CMake ####
-
-1. Install all required libraries:
-   ```bash
-   sudo apt install libssl-dev libgflags-dev libgoogle-glog-dev libboost-all-dev
-   ```
-   - OpenSSL is required by default and strongly recommended, but may be disabled by specifying
-     `-DPOLARIS_ENABLE_TLS=OFF` to the `cmake` command below.
-2. Clone the Polaris source code:
-   ```bash
-   git clone https://github.com/PointOneNav/polaris.git
-   cd polaris
-   ```
-3. Create a `build/` directory and run CMake to configure the build tree:
-   ```bash
-   mkdir build
-   cd build
-   cmake ..
-   ```
-4. Compile the Polaris source code and example applications:
-   ```bash
-   make
-   ```
-
-The generated example applications will be located at `examples/<APPLICATION NAME>` in the `build/` directory. For
-example, to run the [Simple Polaris Client](#simple-polaris-client-1) example application from the `build/` directory,
-run the following:
-
-```bash
-./examples/simple_polaris_cpp_client --polaris_api_key=<POLARIS_API_KEY>
-```
-
-See [Simple Polaris Client](#simple-polaris-client-1) for more details.
-
-#### Building On Mac OS ####
+#### Building On Mac OS
 
 The example applications can be built on Mac OS using CMake or Bazel and Clang. Assure that you have a C++ toolchain and
 the required libraries installed. These can be installed with
@@ -479,9 +517,7 @@ To run the application, run the following command:
 ```
 bazel run //examples:simple_polaris_cpp_client -- --polaris_api_key=<POLARIS_API_KEY>
 ```
-where `<POLARIS_API_KEY>` is the API key assigned to you by Point One. The application uses a built-in unique ID by
-default, but you may change the unique ID using the `--polaris_unique_id` argument. See
-[Polaris API Key and Unique ID](#polaris-api-key-and-unique-id) for details.
+where `<POLARIS_API_KEY>` is the Polaris key assigned to you by Point One.
 
 #### Generic Serial Receiver Example ####
 
@@ -494,7 +530,7 @@ To run the application, run the following command:
 ```
 bazel run //examples:serial_port_example -- --polaris_api_key=<POLARIS_API_KEY> --device=/dev/ttyACM0
 ```
-where `<POLARIS_API_KEY>` is your polaris key
+where `<POLARIS_API_KEY>` is the Polaris key assigned to you by Point One.
 
 ##### CMake
 
@@ -502,7 +538,7 @@ CMake requires [dependencies](#requirements-1) are installed ahead of time.
 
 On Linux:
 ```bash
-sudo apt install libgoogle-glog-dev libgflags-dev libboost-all-dev libssl-dev 
+sudo apt install libssl-dev libgflags-dev libgoogle-glog-dev libboost-all-dev
 ```
 
 ```
@@ -512,7 +548,7 @@ mkdir build && cd build && cmake .. && make && \
     --receiver_serial_baud 460800 \
     --receiver_serial_port=/dev/ttyACM0
 ```
-where `<POLARIS_API_KEY>` is your polaris key
+where `<POLARIS_API_KEY>` is the Polaris key assigned to you by Point One.
 
 #### NTRIP Server Example ####
 
@@ -524,9 +560,7 @@ For example, to run an NTRIP server on TCP port 2101 (the standard NTRIP port), 
 ```
 bazel run -c opt examples/ntrip:ntrip_server_example -- --polaris_api_key=<POLARIS_API_KEY> 0.0.0.0 2101 examples/ntrip
 ```
-where `<POLARIS_API_KEY>` is the API key assigned to you by Point One. The application uses a built-in unique ID by
-default, but you may change the unique ID using the `--polaris_unique_id` argument. See
-[Polaris API Key and Unique ID](#polaris-api-key-and-unique-id) for details.
+where `<POLARIS_API_KEY>` is the Polaris key assigned to you by Point One.
 
 Any GNSS receiver that supports an NTRIP connection can then connect to the computer running this application to receive
 corrections, connecting to the NTRIP endpoint `/Polaris`. The receiver should be configured to send NMEA `$GPGGA`
