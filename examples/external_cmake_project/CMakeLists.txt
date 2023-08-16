@@ -37,9 +37,8 @@ project(polaris_usage_example C CXX)
 include(FetchContent)
 FetchContent_Declare(
     polaris
-    #GIT_REPOSITORY https://github.com/PointOneNav/polaris.git
-    #GIT_TAG v1.3.1
-    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../..
+    GIT_REPOSITORY https://github.com/PointOneNav/polaris.git
+    GIT_TAG v1.3.1
 )
 set(POLARIS_BUILD_EXAMPLES OFF CACHE INTERNAL "")
 FetchContent_MakeAvailable(polaris)
