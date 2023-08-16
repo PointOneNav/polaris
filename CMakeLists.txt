@@ -1,6 +1,4 @@
 # Copyright (C) Point One Navigation - All Rights Reserved
-project(p1_polaris_client)
-
 cmake_minimum_required(VERSION 3.6)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/")
@@ -17,6 +15,12 @@ if (DEFINED BUILD_EXAMPLES AND BUILD_EXAMPLES)
   set(POLARIS_BUILD_EXAMPLES ${BUILD_EXAMPLES})
 endif()
 
+# Set toolchain parameters before calling project().
+set(CMAKE_CXX_STANDARD 11)
+
+# Define the project and setup the compiler toolchain.
+project(p1_polaris_client)
+
 # Set compilation flags.
 if (MSVC)
     add_compile_options(/W4 /WX)
@@ -24,8 +28,6 @@ else()
     add_compile_options(-Wall -Werror -Wno-unused-variable)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -pthread")
 endif()
-
-set(CMAKE_CXX_STANDARD 11)
 
 ################################################################################
 # Check for dependencies.

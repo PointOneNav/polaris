@@ -1,6 +1,4 @@
 # Copyright (C) Point One Navigation - All Rights Reserved
-project(p1_polaris_c_client)
-
 cmake_minimum_required(VERSION 3.6)
 
 # Option definitions.
@@ -19,6 +17,9 @@ option(POLARIS_ENABLE_TLS "Enable TLS support when connecting to Polaris." ON)
 if (DEFINED BUILD_EXAMPLES AND BUILD_EXAMPLES)
   set(POLARIS_BUILD_EXAMPLES ${BUILD_EXAMPLES})
 endif()
+
+# Define the project and setup the compiler toolchain.
+project(p1_polaris_c_client)
 
 # Set compilation flags.
 if (MSVC)
