@@ -150,6 +150,16 @@ jobs:
         POLARIS_API_KEY: ${{ secrets.POLARIS_API_KEY }}
       run: |
         ./test/run_unit_tests.sh --tool=${{ matrix.tool }} --unique-id-prefix=${{ matrix.tool }}_cpp
+    - name: Run Unit Tests With Installed Libraries (CMake, Linux)
+      if: matrix.arch == 'x64' && matrix.tool == 'cmake' && matrix.os == 'ubuntu-latest'
+      env:
+        POLARIS_API_KEY: ${{ secrets.POLARIS_API_KEY }}
+      run: |
+        mv cmake_build/libpolaris_cpp_client.so cmake_build/libpolaris_cpp_client.so.bak
+        mv cmake_build/c/libpolaris_client.so cmake_build/c/libpolaris_client.so.bak
+        ./test/run_unit_tests.sh --tool=${{ matrix.tool }} --unique-id-prefix=${{ matrix.tool }}_cpp  --install-prefix=cmake_build/install
+        mv cmake_build/libpolaris_cpp_client.so.bak cmake_build/libpolaris_cpp_client.so
+        mv cmake_build/c/libpolaris_client.so.bak cmake_build/c/libpolaris_client.so
 
     # Package artifacts (Bazel only -- no need to do this for multiple build
     # tools).
@@ -272,6 +282,14 @@ jobs:
         POLARIS_API_KEY: ${{ secrets.POLARIS_API_KEY }}
       run: |
         ./test/run_unit_tests.sh --tool=${{ matrix.tool }} --unique-id-prefix=${{ matrix.tool }}_c_
+    - name: Run Unit Tests With Installed Libraries (CMake, Linux)
+      if: matrix.arch == 'x64' && matrix.tool == 'cmake' && matrix.os == 'ubuntu-latest'
+      env:
+        POLARIS_API_KEY: ${{ secrets.POLARIS_API_KEY }}
+      run: |
+        mv cmake_build/libpolaris_client.so cmake_build/libpolaris_client.so.bak
+        ./test/run_unit_tests.sh --tool=${{ matrix.tool }} --unique-id-prefix=${{ matrix.tool }}_c_ --install-prefix=cmake_build/install
+        mv cmake_build/libpolaris_client.so.bak cmake_build/libpolaris_client.so
 
     # Package artifacts (Bazel only -- no need to do this for multiple build
     # tools).

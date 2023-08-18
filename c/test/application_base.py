@@ -30,6 +30,10 @@ class TestApplicationBase(object):
         self.parser = ArgumentParser(usage='%(prog)s [OPTIONS]...')
 
         self.parser.add_argument(
+            '--install-prefix', metavar='PATH',
+            help="Run the application using shared libraries installed on the system with the specified install prefix "
+                 "directory (CMake only). Librarie files are assumed to be in PATH/lib.")
+        self.parser.add_argument(
             '-p', '--path', metavar='PATH',
             help="The path to the application to be run.")
         self.parser.add_argument(
@@ -84,6 +88,10 @@ class TestApplicationBase(object):
                 print('Error: Unsupported --tool value.')
                 sys.exit(self.ARGUMENT_ERROR)
 
+        if self.options.install_prefix is not None and not self.options.tool == 'cmake':
+            print('Error: Installed applications only supported for CMake.')
+            sys.exit(self.ARGUMENT_ERROR)
+
         if self.options.unique_id_prefix is not None:
             self.options.unique_id = self.options.unique_id_prefix + self.options.unique_id
         if len(self.options.unique_id) > 36:
@@ -114,6 +122,15 @@ class TestApplicationBase(object):
             if command[i].endswith(api_key_standin):
                 command[i] = command[i].replace(api_key_standin, self.options.polaris_api_key)
 
+        # If running using installed libraries (CMake), set LD_LIBRARY_PATH to explicitly override the rpath compiled
+        # into the application. This assumes the application is running out of the build directory, not a copy installed
+        # on the system. When CMake compiles an application, it sets its rpath to refer to the .so file from the build
+        # directory. When it installs that application, it strips that rpath.
+        env = None
+        if self.options.tool == 'cmake' and self.options.install_prefix is not None:
+            env = os.environ.copy()
+            env['LD_LIBRARY_PATH'] = f'{self.options.install_prefix}/lib'
+
         # Run the command.
         def ignore_signal(sig, frame):
             signal.signal(sig, signal.SIG_DFL)
@@ -126,7 +143,7 @@ class TestApplicationBase(object):
             signal.signal(signal.SIGTERM, ignore_signal)
 
         self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf-8',
-                                     preexec_fn=preexec_function)
+                                     preexec_fn=preexec_function, env=env)
 
         # Capture SIGINT and SIGTERM and shutdown the application gracefully.
         def request_shutdown(sig, frame):
