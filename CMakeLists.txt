@@ -66,7 +66,7 @@ target_link_libraries(polaris_cpp_client PUBLIC ${GLOG_LIBRARIES})
 target_link_libraries(polaris_cpp_client PUBLIC ${GFLAGS_LIBRARIES})
 
 # Install targets.
-install(TARGETS polaris_client
+install(TARGETS polaris_cpp_client
         LIBRARY DESTINATION lib)
 
 install(DIRECTORY src/point_one DESTINATION include
