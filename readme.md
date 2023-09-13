@@ -355,7 +355,7 @@ FetchContent_MakeAvailable(polaris)
 
 # Define your application and add a dependency for the Polaris client C library.
 add_executable(example_app main.c)
-target_link_libraries(example_app PUBLIC polaris_client)
+target_link_libraries(example_app PUBLIC polaris_cpp_client)
 ```
 
 Note that we strongly recommend using a specific version of the library in your code by specifying a git tag (e.g.,
