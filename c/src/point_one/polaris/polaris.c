@@ -1109,11 +1109,11 @@ void ShowCerts(SSL* ssl) {
 
   X509* cert = SSL_get_peer_certificate(ssl);
   if (cert != NULL) {
-    char* line;
+    char line[256];
     P1_DebugPrint("Server certificates:\n");
-    line = X509_NAME_oneline(X509_get_subject_name(cert), 0, 0);
+    X509_NAME_oneline(X509_get_subject_name(cert), line, sizeof(line));
     P1_DebugPrint("Subject: %s\n", line);
-    line = X509_NAME_oneline(X509_get_issuer_name(cert), 0, 0);
+    X509_NAME_oneline(X509_get_issuer_name(cert), line, sizeof(line));
     P1_DebugPrint("Issuer: %s\n", line);
   } else {
     P1_DebugPrint("No client certificates configured.\n");
