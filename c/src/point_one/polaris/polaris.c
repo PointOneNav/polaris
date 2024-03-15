@@ -1109,7 +1109,7 @@ void P1_PrintData(const uint8_t* buffer, size_t length) {
 /******************************************************************************/
 #if !defined(P1_NO_PRINT) && defined(POLARIS_USE_TLS)
 void ShowCerts(SSL* ssl) {
-  if (__log_level >= POLARIS_LOG_LEVEL_DEBUG) {
+  if (__log_level < POLARIS_LOG_LEVEL_DEBUG) {
     return;
   }
 
