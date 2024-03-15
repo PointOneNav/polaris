@@ -1118,9 +1118,9 @@ void ShowCerts(SSL* ssl) {
     char line[256];
     P1_DebugPrint("Server certificates:\n");
     X509_NAME_oneline(X509_get_subject_name(cert), line, sizeof(line));
-    P1_DebugPrint("Subject: %s\n", line);
+    P1_DebugPrint("  Subject: %s\n", line);
     X509_NAME_oneline(X509_get_issuer_name(cert), line, sizeof(line));
-    P1_DebugPrint("Issuer: %s\n", line);
+    P1_DebugPrint("  Issuer: %s\n", line);
   } else {
     P1_DebugPrint("No client certificates configured.\n");
   }
