@@ -23,45 +23,56 @@
 #define STR(x) MAKE_STR(x)
 
 #if defined(P1_NO_PRINT)
-# define P1_Print(x, ...) do {} while(0)
-# define P1_PrintError(x, ...) do {} while(0)
-# define P1_DebugPrint(x, ...) do {} while(0)
-# define PrintData(buffer, length) do {} while(0)
-# if defined(POLARIS_USE_TLS)
-#  define ShowCerts(ssl) do {} while(0)
-# endif
+#define P1_Print(x, ...) \
+  do {                   \
+  } while (0)
+#define P1_PrintError(x, ...) \
+  do {                        \
+  } while (0)
+#define P1_DebugPrint(x, ...) \
+  do {                        \
+  } while (0)
+#define PrintData(buffer, length) \
+  do {                            \
+  } while (0)
+#if defined(POLARIS_USE_TLS)
+#define ShowCerts(ssl) \
+  do {                 \
+  } while (0)
+#endif
 #else
 static int __log_level = POLARIS_LOG_LEVEL_INFO;
 
-# define P1_Print(x, ...) \
+#define P1_Print(x, ...) \
   P1_fprintf(stderr, "polaris.c:" STR(__LINE__) "] " x, ##__VA_ARGS__)
-# define P1_PrintError(x, ...) \
+#define P1_PrintError(x, ...) \
   P1_perror("polaris.c:" STR(__LINE__) "] " x, ##__VA_ARGS__)
-# define P1_DebugPrint(x, ...)              \
-  if (__log_level >= POLARIS_LOG_LEVEL_DEBUG) {  \
-    P1_Print(x, ##__VA_ARGS__);             \
+#define P1_DebugPrint(x, ...)                   \
+  if (__log_level >= POLARIS_LOG_LEVEL_DEBUG) { \
+    P1_Print(x, ##__VA_ARGS__);                 \
   }
-# define P1_TracePrint(x, ...)              \
-  if (__log_level >= POLARIS_LOG_LEVEL_TRACE) {  \
-    P1_Print(x, ##__VA_ARGS__);             \
+#define P1_TracePrint(x, ...)                   \
+  if (__log_level >= POLARIS_LOG_LEVEL_TRACE) { \
+    P1_Print(x, ##__VA_ARGS__);                 \
   }
 
 static void P1_PrintData(const uint8_t* buffer, size_t length);
-# if defined(POLARIS_USE_TLS)
+#if defined(POLARIS_USE_TLS)
 static void ShowCerts(SSL* ssl);
-# endif
+#endif
 #endif
 
 #if defined(POLARIS_NO_PRINT)
-# define P1_PrintReadWriteError(context, x, ret) do {} while(0)
+#define P1_PrintReadWriteError(context, x, ret) \
+  do {                                          \
+  } while (0)
 #elif defined(POLARIS_USE_TLS)
 static void __P1_PrintReadWriteError(int line, PolarisContext_t* context,
                                      const char* message, int ret) {
   SSL_load_error_strings();
   int ssl_error = SSL_get_error(context->ssl, ret);
   if (ssl_error == SSL_ERROR_SYSCALL) {
-    P1_fprintf(stderr,
-               "polaris.c:%d] %s. [error=%s (syscall: errno=%d; %s)]\n",
+    P1_fprintf(stderr, "polaris.c:%d] %s. [error=%s (syscall: errno=%d; %s)]\n",
                line, message, strerror(errno), errno,
                ERR_error_string(ssl_error, NULL));
   } else {
@@ -107,10 +118,10 @@ static void __P1_PrintReadWriteError(int line, PolarisContext_t* context,
   }
 }
 
-# define P1_PrintReadWriteError(context, x, ret) \
+#define P1_PrintReadWriteError(context, x, ret) \
   __P1_PrintReadWriteError(__LINE__, context, x, ret)
 #else
-# define P1_PrintReadWriteError(context, x, ret) P1_PrintError(x, ret)
+#define P1_PrintReadWriteError(context, x, ret) P1_PrintError(x, ret)
 #endif
 
 #define P1_DebugPrintReadWriteError(context, x, ret) \
@@ -163,9 +174,7 @@ int Polaris_Init(PolarisContext_t* context) {
 }
 
 /******************************************************************************/
-void Polaris_Free(PolarisContext_t* context) {
-  CloseSocket(context, 1);
-}
+void Polaris_Free(PolarisContext_t* context) { CloseSocket(context, 1); }
 
 /******************************************************************************/
 void Polaris_SetLogLevel(int log_level) {
@@ -221,13 +230,11 @@ int Polaris_AuthenticateTo(PolarisContext_t* context, const char* api_key,
       api_key, unique_id, api_url);
   context->auth_token[0] = '\0';
 #ifdef POLARIS_USE_TLS
-  int status_code =
-      SendPOSTRequest(context, api_url, 443, "/api/v1/auth/token",
-                      context->recv_buffer, (size_t)content_size);
+  int status_code = SendPOSTRequest(context, api_url, 443, "/api/v1/auth/token",
+                                    context->recv_buffer, (size_t)content_size);
 #else
-  int status_code =
-      SendPOSTRequest(context, api_url, 80, "/api/v1/auth/token",
-                      context->recv_buffer, (size_t)content_size);
+  int status_code = SendPOSTRequest(context, api_url, 80, "/api/v1/auth/token",
+                                    context->recv_buffer, (size_t)content_size);
 #endif
   if (status_code < 0) {
     P1_Print("Error sending authentication request.\n");
@@ -319,7 +326,7 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
   size_t message_size = Polaris_PopulateChecksum(context->recv_buffer);
 
   P1_DebugPrint("Sending access token message. [size=%u B]\n",
-              (unsigned)message_size);
+                (unsigned)message_size);
 #ifdef POLARIS_USE_TLS
   ret = SSL_write(context->ssl, context->recv_buffer, message_size);
 #else
@@ -402,8 +409,7 @@ void Polaris_Disconnect(PolarisContext_t* context) {
 
 /******************************************************************************/
 void Polaris_SetRTCMCallback(PolarisContext_t* context,
-                             PolarisCallback_t callback,
-                             void* callback_info) {
+                             PolarisCallback_t callback, void* callback_info) {
   context->rtcm_callback = callback;
   context->rtcm_callback_info = callback_info;
 }
@@ -508,7 +514,7 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id) {
   size_t message_size = Polaris_PopulateChecksum(context->send_buffer);
 
   P1_DebugPrint("Sending beacon request. [size=%u B, beacon='%s']\n",
-              (unsigned)message_size, beacon_id);
+                (unsigned)message_size, beacon_id);
   P1_PrintData(context->send_buffer, message_size);
 
 #ifdef POLARIS_USE_TLS
@@ -746,8 +752,7 @@ static inline int P1_SetAddress(const char* hostname, int port,
   uint32_t ip = FreeRTOS_gethostbyname(hostname);
   if (ip == 0) {
     return -1;
-  }
-  else {
+  } else {
     result->sin_family = AF_INET;
     result->sin_port = FreeRTOS_htons(port);
     result->sin_addr = ip;
@@ -761,8 +766,7 @@ static inline int P1_SetAddress(const char* hostname, int port,
   if (host_info == NULL) {
     P1_Print("Unable to resolve \"%s\": %s\n", hostname, hstrerror(h_errno));
     return -1;
-  }
-  else {
+  } else {
     result->sin_family = AF_INET;
     result->sin_port = htons(port);
     memcpy(&result->sin_addr, host_info->h_addr_list[0], host_info->h_length);
@@ -815,9 +819,11 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
   // Set send/receive timeouts.
   P1_TimeValue_t timeout;
   P1_SetTimeMS(POLARIS_RECV_TIMEOUT_MS, &timeout);
-  setsockopt(context->socket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+  setsockopt(context->socket, SOL_SOCKET, SO_RCVTIMEO, &timeout,
+             sizeof(timeout));
   P1_SetTimeMS(POLARIS_SEND_TIMEOUT_MS, &timeout);
-  setsockopt(context->socket, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+  setsockopt(context->socket, SOL_SOCKET, SO_SNDTIMEO, &timeout,
+             sizeof(timeout));
 
   // Lookup the IP of the endpoint used for auth requests.
   P1_SocketAddrV4_t address;
@@ -1006,9 +1012,9 @@ static int GetHTTPResponse(PolarisContext_t* context) {
   int bytes_read;
 
 #ifdef POLARIS_USE_TLS
-  while ((bytes_read = SSL_read(context->ssl, context->recv_buffer + total_bytes,
-                            POLARIS_RECV_BUFFER_SIZE - total_bytes - 1)) >
-         0) {
+  while (
+      (bytes_read = SSL_read(context->ssl, context->recv_buffer + total_bytes,
+                             POLARIS_RECV_BUFFER_SIZE - total_bytes - 1)) > 0) {
 #else
   while ((bytes_read = recv(context->socket, context->recv_buffer + total_bytes,
                             POLARIS_RECV_BUFFER_SIZE - total_bytes - 1, 0)) >
@@ -1032,18 +1038,18 @@ static int GetHTTPResponse(PolarisContext_t* context) {
   // Similarly, FreeRTOS returns -pdFREERTOS_ERRNO_ENOTCONN on an orderly socket
   // shutdown rather than 0. Any other <0 return is considered an error.
   else if (bytes_read != -pdFREERTOS_ERRNO_ENOTCONN) {
-    P1_PrintReadWriteError(
-        context, "Unexpected error while waiting for HTTP response",
-        bytes_read);
+    P1_PrintReadWriteError(context,
+                           "Unexpected error while waiting for HTTP response",
+                           bytes_read);
     return POLARIS_SEND_ERROR;
   }
 #else
   // Check for socket read errors. Under normal circumstances, recv() should
   // return 0 when finished, indicating the HTTP server closed the connection.
   if (bytes_read < 0) {
-    P1_PrintReadWriteError(
-        context, "Unexpected error while waiting for HTTP response",
-        bytes_read);
+    P1_PrintReadWriteError(context,
+                           "Unexpected error while waiting for HTTP response",
+                           bytes_read);
     return POLARIS_SEND_ERROR;
   }
 #endif
