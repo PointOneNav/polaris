@@ -216,8 +216,9 @@ int Polaris_AuthenticateTo(PolarisContext_t* context, const char* api_key,
     return POLARIS_NOT_ENOUGH_SPACE;
   }
 
-  P1_DebugPrint("Sending auth request. [api_key=%s, unique_id=%s, url=%s]\n",
-                api_key, unique_id, api_url);
+  P1_DebugPrint(
+      "Sending auth request. [api_key=%.7s..., unique_id=%s, url=%s]\n",
+      api_key, unique_id, api_url);
   context->auth_token[0] = '\0';
 #ifdef POLARIS_USE_TLS
   int status_code =
