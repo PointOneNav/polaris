@@ -62,10 +62,10 @@ PolarisClient::PolarisClient(const std::string& api_key,
       unique_id_(unique_id) {
   // Note that the C library print level will not change if the VLOG level is
   // changed dynamically via SetVLOGLevel() at runtime.
-  if (VLOG_IS_ON(1)) {
-    Polaris_SetLogLevel(POLARIS_LOG_LEVEL_DEBUG);
-  } else if (VLOG_IS_ON(2)) {
+  if (VLOG_IS_ON(2)) {
     Polaris_SetLogLevel(POLARIS_LOG_LEVEL_TRACE);
+  } else if (VLOG_IS_ON(1)) {
+    Polaris_SetLogLevel(POLARIS_LOG_LEVEL_DEBUG);
   }
 
   SetPolarisAuthenticationServer();
