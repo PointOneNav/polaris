@@ -408,15 +408,16 @@ void PolarisClient::IncrementRetryCount() {
 int PolarisClient::ResendRequest() {
   std::unique_lock<std::mutex> position_lock(position_mutex_);
   if (current_request_type_ == RequestType::ECEF) {
-    VLOG(1) << "Resending ECEF position update. [" << ecef_position_m_[0]
-            << ", " << ecef_position_m_[1] << ", " << ecef_position_m_[2]
-            << "]";
+    VLOG(1) << "Resending ECEF position update. [" << std::fixed
+            << std::setprecision(2) << ecef_position_m_[0] << ", "
+            << ecef_position_m_[1] << ", " << ecef_position_m_[2] << "]";
     return polaris_.SendECEFPosition(ecef_position_m_[0], ecef_position_m_[1],
                                      ecef_position_m_[2]);
   } else if (current_request_type_ == RequestType::LLA) {
-    VLOG(1) << "Resending LLA position update. [" << lla_position_deg_[0]
-            << ", " << lla_position_deg_[1] << ", " << lla_position_deg_[2]
-            << "]";
+    VLOG(1) << "Resending LLA position update. [" << std::fixed
+            << std::setprecision(7) << lla_position_deg_[0] << ", "
+            << lla_position_deg_[1] << ", " << std::setprecision(2)
+            << lla_position_deg_[2] << "]";
     return polaris_.SendLLAPosition(lla_position_deg_[0], lla_position_deg_[1],
                                     lla_position_deg_[2]);
   } else if (current_request_type_ == RequestType::BEACON) {
