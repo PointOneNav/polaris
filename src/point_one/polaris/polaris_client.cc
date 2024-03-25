@@ -74,6 +74,23 @@ PolarisClient::PolarisClient(const std::string& api_key,
   polaris_.SetRTCMCallback([&](const uint8_t* buffer, size_t size_bytes) {
     std::unique_lock<std::recursive_mutex> lock(mutex_);
     VLOG(2) << "Received " << size_bytes << " bytes.";
+    bytes_received_ += size_bytes;
+
+    // When we successfully reconnect and get data from the network, reset the
+    // retry count. That way if we have N-1 connection issues earlier in the
+    // day and then just 1 later, we don't end up reauthenticating immediately
+    // thinking we failed N times.
+    //
+    // We wait until we get data since "no data received" is also treated as a
+    // potential authentication issue. The network may send a single RTCM 1029
+    // text message in response to an invalid request, including a bad
+    // authentication. Since we are not parsing the incoming RTCM stream, we
+    // wait until we have received more data than the max 1029 message size
+    // before declaring the connection successful.
+    if (bytes_received_ > 270) {
+      connect_count_ = 0;
+    }
+
     if (callback_) {
       callback_(buffer, size_bytes);
     }
@@ -243,6 +260,8 @@ void PolarisClient::Run(double timeout_sec) {
     previous_connect_failed = true;
 
     std::unique_lock<std::recursive_mutex> lock(mutex_);
+
+    bytes_received_ = 0;
 
     // Retrieve an access token using the specified API key.
     if (!auth_valid_ && !no_auth_) {
