@@ -275,13 +275,18 @@ void PolarisClient::Run(double timeout_sec) {
     VLOG(1) << "Authenticated. Connecting to Polaris... [" << endpoint_url_
             << ":" << endpoint_port_ << "]";
 
-    if ((!no_auth_ && polaris_.ConnectTo(endpoint_url_, endpoint_port_) !=
-                          POLARIS_SUCCESS) ||
-        (no_auth_ &&
-         polaris_.ConnectWithoutAuth(endpoint_url_, endpoint_port_,
-                                     unique_id_) != POLARIS_SUCCESS)) {
+    if (no_auth_) {
+      ret = polaris_.ConnectWithoutAuth(endpoint_url_, endpoint_port_,
+                                        unique_id_);
+    } else {
+      ret = polaris_.ConnectTo(endpoint_url_, endpoint_port_);
+    }
+
+    if (ret != POLARIS_SUCCESS) {
       LOG(ERROR) << "Error connecting to Polaris corrections stream. Retrying.";
-      IncrementRetryCount();
+      if (ret != POLARIS_SOCKET_ERROR) {
+        IncrementRetryCount();
+      }
       continue;
     }
 
@@ -296,7 +301,9 @@ void PolarisClient::Run(double timeout_sec) {
           << "Error resending position update/beacon request. Reconnecting.";
       connected_ = false;
       polaris_.Disconnect();
-      IncrementRetryCount();
+      if (ret != POLARIS_SOCKET_ERROR) {
+        IncrementRetryCount();
+      }
       continue;
     }
     previous_connect_failed = false;
@@ -325,7 +332,9 @@ void PolarisClient::Run(double timeout_sec) {
     }
 
     // Connection closed due to an error. Reconnect.
-    IncrementRetryCount();
+    if (ret != POLARIS_SOCKET_ERROR) {
+      IncrementRetryCount();
+    }
   }
 
   // Finished running - clear any pending send requests for next time.
