@@ -48,7 +48,8 @@ endif()
 # Polaris client C library - all messages and supporting code.
 add_library(polaris_client
             src/point_one/polaris/polaris.c
-            src/point_one/polaris/polaris_internal.c)
+            src/point_one/polaris/polaris_internal.c
+            src/point_one/polaris/portability.c)
 target_include_directories(polaris_client PUBLIC ${PROJECT_SOURCE_DIR}/src)
 if (MSVC)
     target_compile_definitions(polaris_client PRIVATE BUILDING_DLL)
