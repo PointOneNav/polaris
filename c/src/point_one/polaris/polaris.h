@@ -107,6 +107,7 @@ struct PolarisContext_s {
   char auth_token[POLARIS_MAX_TOKEN_SIZE + 1];
   uint8_t authenticated;
   uint8_t disconnected;
+  size_t total_bytes_received;
 
   // Note: Enforcing 4-byte alignment of the buffers for platforms that require
   // aligned 2- or 4-byte access.

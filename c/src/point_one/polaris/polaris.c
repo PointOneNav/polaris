@@ -7,6 +7,7 @@
 #include "point_one/polaris/polaris.h"
 
 #include <errno.h>
+#include <inttypes.h>  // For PRI*
 #include <stdio.h>   // For sscanf() and snprintf()
 #include <stdlib.h>  // For malloc()
 #include <string.h>  // For memmove()
@@ -187,6 +188,7 @@ int Polaris_Init(PolarisContext_t* context) {
   context->auth_token[0] = '\0';
   context->authenticated = 0;
   context->disconnected = 0;
+  context->total_bytes_received = 0;
   context->rtcm_callback = NULL;
   context->rtcm_callback_info = NULL;
 
@@ -335,6 +337,7 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
   // Connect to the corrections endpoint.
   context->disconnected = 0;
   context->authenticated = 0;
+  context->total_bytes_received = 0;
   int ret = OpenSocket(context, endpoint_url, endpoint_port);
   if (ret != POLARIS_SUCCESS) {
     P1_Print("Error connecting to corrections endpoint: tcp://%s:%d.\n",
@@ -383,6 +386,7 @@ int Polaris_ConnectWithoutAuth(PolarisContext_t* context,
   // Connect to the corrections endpoint.
   context->disconnected = 0;
   context->authenticated = 0;
+  context->total_bytes_received = 0;
   ret = OpenSocket(context, endpoint_url, endpoint_port);
   if (ret != POLARIS_SUCCESS) {
     P1_Print("Error connecting to corrections endpoint: tcp://%s:%d.\n",
@@ -669,7 +673,10 @@ int Polaris_Work(PolarisContext_t* context) {
       return POLARIS_CONNECTION_CLOSED;
     }
   } else {
-    P1_DebugPrint("Received %u bytes.\n", (unsigned)bytes_read);
+    context->total_bytes_received += bytes_read;
+    P1_DebugPrint("Received %u bytes. [%" PRIu64 " bytes total]\n",
+                  (unsigned)bytes_read,
+                  (uint64_t)context->total_bytes_received);
     P1_PrintData(context->recv_buffer, bytes_read);
 
     context->authenticated = 1;
@@ -710,7 +717,6 @@ int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
   P1_TimeValue_t last_read_time;
   P1_GetCurrentTime(&last_read_time);
 
-  size_t total_bytes = 0;
   int ret = POLARIS_ERROR;
   while (1) {
     // Read the next data block.
@@ -743,7 +749,6 @@ int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
     }
     // Data received and dispatched to the callback.
     else {
-      total_bytes += (size_t)ret;
       P1_GetCurrentTime(&last_read_time);
 
       if (context->disconnected) {
@@ -755,7 +760,8 @@ int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
     }
   }
 
-  P1_DebugPrint("Received %u total bytes.\n", (unsigned)total_bytes);
+  P1_DebugPrint("Received %" PRIu64 " total bytes.\n",
+                (uint64_t)context->total_bytes_received);
   if (ret == POLARIS_CONNECTION_CLOSED && context->disconnected) {
     return POLARIS_SUCCESS;
   } else {
