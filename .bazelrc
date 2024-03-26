@@ -22,4 +22,4 @@ build:aarch64 --spawn_strategy=local
 # When using, you may also wish to disable optimizations (`-c dbg` or
 # `--copt=-O0`). This may significantly impact performance, but may be
 # necessary to pinpoint certain errors in highly optimized sections of code.
-build:asan --copt=-g --copt=-fsanitize=address --linkopt=-fsanitize=address
+build:asan --copt=-g --copt=-fsanitize=address --linkopt=-fsanitize=address --linkopt=-static-libasan
