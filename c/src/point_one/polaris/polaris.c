@@ -629,8 +629,15 @@ int Polaris_Work(PolarisContext_t* context) {
 #endif
 
       if (context->disconnected) {
-        P1_DebugPrintReadWriteError(
-            context, "Connection terminated by user request", bytes_read);
+        if (errno == EINTR || errno == ENOTCONN) {
+          P1_DebugPrint(
+              "Connection terminated by user request.\n");
+        } else {
+          P1_DebugPrintReadWriteError(
+              context,
+              "Connection terminated by user request; unexpected error",
+              bytes_read);
+        }
       } else {
         P1_DebugPrintReadWriteError(context, "Connection terminated upstream",
                                     bytes_read);
