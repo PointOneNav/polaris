@@ -42,7 +42,7 @@
   do {                        \
   } while (0)
 #define P1_PrintData(buffer, length) \
-  do {                            \
+  do {                               \
   } while (0)
 #if defined(POLARIS_USE_TLS)
 #define ShowCerts(ssl) \
@@ -659,8 +659,7 @@ int Polaris_Work(PolarisContext_t* context) {
     if (context->disconnected) {
       if (bytes_read == 0 || errno == EINTR || errno == ENOTCONN ||
           errno == EAGAIN) {
-        P1_DebugPrint(
-            "Connection terminated by user request.\n");
+        P1_DebugPrint("Connection terminated by user request.\n");
       } else {
         P1_PrintReadWriteError(
             context,
@@ -953,7 +952,7 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
 #ifndef P1_FREERTOS
   int flags = fcntl(context->socket, F_GETFL);
   P1_DebugPrint("Socket flags: 0x%08x\n", flags);
-#endif // P1_FREERTOS
+#endif  // P1_FREERTOS
 
   // Lookup the IP of the endpoint used for auth requests.
   P1_SocketAddrV4_t address;
