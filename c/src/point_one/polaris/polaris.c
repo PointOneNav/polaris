@@ -12,6 +12,10 @@
 #include <stdlib.h>  // For malloc()
 #include <string.h>  // For memmove()
 
+#ifndef P1_FREERTOS
+#include <fcntl.h>  // For fcntl()
+#endif
+
 #ifdef POLARIS_USE_TLS
 #include <openssl/err.h>
 #include <openssl/ssl.h>
@@ -945,6 +949,11 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
   P1_SetTimeMS(POLARIS_SEND_TIMEOUT_MS, &timeout);
   setsockopt(context->socket, SOL_SOCKET, SO_SNDTIMEO, &timeout,
              sizeof(timeout));
+
+#ifndef P1_FREERTOS
+  int flags = fcntl(context->socket, F_GETFL);
+  P1_DebugPrint("Socket flags: 0x%08x\n", flags);
+#endif // P1_FREERTOS
 
   // Lookup the IP of the endpoint used for auth requests.
   P1_SocketAddrV4_t address;
