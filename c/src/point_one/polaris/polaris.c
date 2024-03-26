@@ -646,7 +646,12 @@ int Polaris_Work(PolarisContext_t* context) {
                              context->recv_buffer, bytes_read);
     }
 
-    return (int)bytes_read;
+    if (context->disconnected) {
+      P1_DebugPrint("Connection terminated by user.\n");
+      return POLARIS_SUCCESS;
+    } else {
+      return (int)bytes_read;
+    }
   }
 }
 
@@ -707,8 +712,9 @@ int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
       P1_GetCurrentTime(&last_read_time);
 
       if (context->disconnected) {
-        P1_DebugPrint("Connection terminated.\n");
+        P1_DebugPrint("Connection terminated by user.\n");
         CloseSocket(context, 1);
+        ret = POLARIS_SUCCESS;
         break;
       }
     }
