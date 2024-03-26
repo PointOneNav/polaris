@@ -635,6 +635,8 @@ int Polaris_Work(PolarisContext_t* context) {
     }
   } else {
     P1_DebugPrint("Received %u bytes.\n", (unsigned)bytes_read);
+    P1_PrintData(context->recv_buffer, bytes_read);
+
     context->authenticated = 1;
 
     // We don't interpret the incoming RTCM data, so there's no need to buffer
