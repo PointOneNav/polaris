@@ -20,6 +20,10 @@
 #include "point_one/polaris/polaris_internal.h"
 #include "point_one/polaris/portability.h"
 
+#define POLARIS_NOT_AUTHENTICATED 0
+#define POLARIS_AUTHENTICATED 1
+#define POLARIS_AUTHENTICATION_SKIPPED 2
+
 #define MAKE_STR(x) #x
 #define STR(x) MAKE_STR(x)
 
@@ -186,9 +190,10 @@ int Polaris_Init(PolarisContext_t* context) {
 
   context->socket = P1_INVALID_SOCKET;
   context->auth_token[0] = '\0';
-  context->authenticated = 0;
+  context->authenticated = POLARIS_NOT_AUTHENTICATED;
   context->disconnected = 0;
   context->total_bytes_received = 0;
+  context->data_request_sent = 0;
   context->rtcm_callback = NULL;
   context->rtcm_callback_info = NULL;
 
@@ -336,8 +341,9 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
 
   // Connect to the corrections endpoint.
   context->disconnected = 0;
-  context->authenticated = 0;
+  context->authenticated = POLARIS_NOT_AUTHENTICATED;
   context->total_bytes_received = 0;
+  context->data_request_sent = 0;
   int ret = OpenSocket(context, endpoint_url, endpoint_port);
   if (ret != POLARIS_SUCCESS) {
     P1_Print("Error connecting to corrections endpoint: tcp://%s:%d.\n",
@@ -385,8 +391,9 @@ int Polaris_ConnectWithoutAuth(PolarisContext_t* context,
 
   // Connect to the corrections endpoint.
   context->disconnected = 0;
-  context->authenticated = 0;
+  context->authenticated = POLARIS_NOT_AUTHENTICATED;
   context->total_bytes_received = 0;
+  context->data_request_sent = 0;
   ret = OpenSocket(context, endpoint_url, endpoint_port);
   if (ret != POLARIS_SUCCESS) {
     P1_Print("Error connecting to corrections endpoint: tcp://%s:%d.\n",
@@ -416,7 +423,7 @@ int Polaris_ConnectWithoutAuth(PolarisContext_t* context,
     }
   }
 
-  context->authenticated = 1;
+  context->authenticated = POLARIS_AUTHENTICATION_SKIPPED;
 
   return POLARIS_SUCCESS;
 }
@@ -485,6 +492,7 @@ int Polaris_SendECEFPosition(PolarisContext_t* context, double x_m, double y_m,
     P1_PrintReadWriteError(context, "Error sending ECEF position", ret);
     return POLARIS_SEND_ERROR;
   } else {
+    context->data_request_sent = 1;
     return POLARIS_SUCCESS;
   }
 }
@@ -528,6 +536,7 @@ int Polaris_SendLLAPosition(PolarisContext_t* context, double latitude_deg,
     P1_PrintReadWriteError(context, "Error sending LLA position", ret);
     return POLARIS_SEND_ERROR;
   } else {
+    context->data_request_sent = 1;
     return POLARIS_SUCCESS;
   }
 }
@@ -559,6 +568,7 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id) {
     P1_PrintReadWriteError(context, "Error sending beacon request", ret);
     return POLARIS_SEND_ERROR;
   } else {
+    context->data_request_sent = 1;
     return POLARIS_SUCCESS;
   }
 }
@@ -602,15 +612,15 @@ int Polaris_Work(PolarisContext_t* context) {
   }
 #endif
 
+  // Did we hit a read timeout? This is normal behavior (e.g., brief loss of
+  // cell service) and is not considered an error. Most receivers can handle
+  // small gaps in corrections data. We do not close the socket here.
+  //
+  // Note that in this context the timeout is the socket receive timeout
+  // (POLARIS_RECV_TIMEOUT_MS; typically a few seconds). This is not the same as
+  // the longer connection timeout used by Polaris_Run() to decide if the
+  // connection was lost upstream (typically 30 seconds or longer).
   if (bytes_read < 0) {
-    // Did we hit a read timeout? This is normal behavior (e.g., brief loss of
-    // cell service) and is not considered an error. Most receivers can handle
-    // small gaps in corrections data. We do not close the socket here.
-    //
-    // Note that in this context the timeout is the socket receive timeout
-    // (POLARIS_RECV_TIMEOUT_MS; typically a few seconds). This is not the same
-    // as the longer connection timeout used by Polaris_Run() to decide if the
-    // connection was lost upstream (typically 30 seconds or longer).
 #ifdef POLARIS_USE_TLS
     int ssl_error = SSL_get_error(context->ssl, bytes_read);
     if (ssl_error == SSL_ERROR_WANT_READ || ssl_error == SSL_ERROR_WANT_WRITE) {
@@ -620,58 +630,105 @@ int Polaris_Work(PolarisContext_t* context) {
       P1_DebugPrint("Socket timed out.\n");
       return POLARIS_TIMED_OUT;
     }
-    // Otherwise, we hit some other error condition. Typically ENOTCONN (i.e.,
-    // socket closed) or EINTR, but could be another error condition.
-    else {
+  }
+
+  // Check if we hit an error condition (<0) or a shutdown (0).
+  //
+  // If we hit an error, it will typically be ENOTCONN (i.e., socket closed) or
+  // EINTR, but could be another error condition.
+  //
+  // If recv() returns 0, the socket had an "orderly shutdown", i.e., it was
+  // either closed by user request or disconnected upstream by the Polaris
+  // service, and it was not necessary to interrupt an existing recv() call.
+  //
+  if (bytes_read <= 0) {
 #ifdef P1_FREERTOS
-      // For FreeRTOS, we moved the return value into errno above. Now we need
-      // to move it back before calling P1_DebugPrintReadWriteError() -- that
-      // function expects to be provided the returned error value. We can't
-      // simply pass errno, however, because it also expects the return value
-      // for TLS connections (outside of FreeRTOS).
-      bytes_read = errno;
+    // For FreeRTOS, we moved the return value into errno above. Now we need to
+    // move it back before calling P1_DebugPrintReadWriteError() -- that
+    // function expects to be provided the returned error value. We can't simply
+    // pass errno, however, because it also expects the return value for TLS
+    // connections (outside of FreeRTOS).
+    bytes_read = errno;
 #endif
 
-      if (context->disconnected) {
-        if (errno == EINTR || errno == ENOTCONN) {
-          P1_DebugPrint(
-              "Connection terminated by user request.\n");
-        } else {
-          P1_DebugPrintReadWriteError(
-              context,
-              "Connection terminated by user request; unexpected error",
-              bytes_read);
-        }
+    // Was the connection closed by the user?
+    if (context->disconnected) {
+      if (bytes_read == 0 || errno == EINTR || errno == ENOTCONN ||
+          errno == EAGAIN) {
+        P1_DebugPrint(
+            "Connection terminated by user request.\n");
       } else {
-        P1_DebugPrintReadWriteError(context, "Connection terminated upstream",
-                                    bytes_read);
+        P1_PrintReadWriteError(
+            context,
+            "Warning: Connection terminated by user request; unexpected error",
+            bytes_read);
       }
-
-      CloseSocket(context, 1);
-      return POLARIS_CONNECTION_CLOSED;
     }
-  } else if (bytes_read == 0) {
-    // If recv() times out before we've gotten anything, the socket was probably
-    // closed on the other end due to an auth failure.
-    if (!context->authenticated) {
-      P1_Print(
-          "Warning: Polaris connection closed and no data received. Is your "
-          "authentication token valid? Did you send a position?\n");
-      CloseSocket(context, 1);
-      return POLARIS_FORBIDDEN;
-    }
-    // A 0 return means the socket had an "orderly shutdown", i.e., it was
-    // either closed by user request or disconnected upstream by the Polaris
-    // service.
+    // If the connection was closed by the server, print the reason.
     else {
-      if (context->disconnected) {
-        P1_DebugPrint("Connection terminated by user request.\n");
-      } else {
+      if (bytes_read == 0) {
         P1_DebugPrint("Connection terminated upstream.\n");
+      } else {
+        P1_PrintReadWriteError(
+            context, "Warning: Connection terminated upstream", bytes_read);
       }
-      CloseSocket(context, 1);
-      return POLARIS_CONNECTION_CLOSED;
     }
+
+    // If we connected to the server but never got any data, it was likely:
+    // 1. The user failed to send either a position (that is within range of a
+    //    base station in the network) or a request for a specific base station
+    // 2. The authentication token was rejected and socket was closed remotely
+    //
+    // Note that in general for case (2), we do expect the server to send an
+    // RTCM 1029 message indicating the reason for failure. That would be
+    // handled as "data received but not authenticated" (authenticated == 0),
+    // followed by EINTR or a similar condition above. total_bytes_received will
+    // not be 0.
+    //
+    // Similarly, if we received something from the server but no position or
+    // beacon request has been sent, the data we received is likely an
+    // authentication error. This too should be treated as "data received but
+    // not authenticated" (authenticated == 0).
+    int ret = POLARIS_CONNECTION_CLOSED;
+    if (context->authenticated == POLARIS_AUTHENTICATED) {
+      // Note that currently, we only declare authenticated == 1 after we
+      // receive enough data to confirm we did not get an error 1029 response,
+      // so we do not expect to get here if the user did not send either a
+      // position or base station request.
+      //
+      // No warning needed. If there was a socket error, we'll have printed a
+      // warning above.
+    }
+    // Authentication skipped and data received.
+    else if (context->total_bytes_received > 0 &&
+             context->authenticated == POLARIS_AUTHENTICATION_SKIPPED) {
+      // No warning necessary.
+    }
+    // Not authenticated, but response received: likely server indicated an
+    // error.
+    else if (context->total_bytes_received > 0) {
+      P1_Print(
+          "Warning: Polaris connection closed with an error response. Is "
+          "your authentication token valid?\n");
+      ret = POLARIS_FORBIDDEN;
+    }
+    // Data request sent but no response received: authentication (presumably)
+    // accepted but position likely out of network.
+    else if (context->data_request_sent) {
+      P1_Print(
+          "Warning: Polaris connection closed and no response received "
+          "from server.\n");
+    }
+    // Data request not sent and no response received: authentication
+    // (presumably) accepted.
+    else {
+      P1_Print(
+          "Warning: Polaris connection closed and no position or beacon "
+          "request issued.\n");
+    }
+
+    CloseSocket(context, 1);
+    return ret;
   } else {
     context->total_bytes_received += bytes_read;
     P1_DebugPrint("Received %u bytes. [%" PRIu64 " bytes total]\n",
@@ -679,7 +736,21 @@ int Polaris_Work(PolarisContext_t* context) {
                   (uint64_t)context->total_bytes_received);
     P1_PrintData(context->recv_buffer, bytes_read);
 
-    context->authenticated = 1;
+    // We do not consider the connection authenticated (auth token valid and
+    // accepted by the network) until after we begin receiving data. It the auth
+    // token is rejected, the network may respond with an RTCM 1029 text message
+    // indicating the reason. However, we do not currently parse the incoming
+    // RTCM stream, so instead we simply wait until we've received more than the
+    // maximum 1029 message size.
+    //
+    // If the user never sends a position or beacon request to the network, no
+    // data will be received. That does not necessarily imply an authentication
+    // failure.
+    if (!context->authenticated && context->total_bytes_received > 270) {
+      P1_DebugPrint(
+          "Sufficient data received. Authentication token accepted.\n");
+      context->authenticated = POLARIS_AUTHENTICATED;
+    }
 
     // We don't interpret the incoming RTCM data, so there's no need to buffer
     // it up to a complete RTCM frame. We'll just forward what we got along.
@@ -960,11 +1031,9 @@ void CloseSocket(PolarisContext_t* context, int destroy_context) {
   }
 #endif
 
-  context->authenticated = 0;
-
-  // Note: We do not clear disconnected here since it is used to determine
-  // the return value in Polaris_Run() _after_ Polaris_Work() has returned and
-  // may have closed the socket.
+  // Note: We do not clear any of the authenticated, disconnected, etc. flags
+  // here since it is used to determine the return value in Polaris_Run()
+  // _after_ Polaris_Work() has returned and may have closed the socket.
 }
 
 /******************************************************************************/

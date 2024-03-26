@@ -108,6 +108,7 @@ struct PolarisContext_s {
   uint8_t authenticated;
   uint8_t disconnected;
   size_t total_bytes_received;
+  uint8_t data_request_sent;
 
   // Note: Enforcing 4-byte alignment of the buffers for platforms that require
   // aligned 2- or 4-byte access.
@@ -400,9 +401,9 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id);
  * @return @ref POLARIS_CONNECTION_CLOSED if the connection was closed remotely
  *         or by calling @ref Polaris_Disconnect().
  * @return @ref POLARIS_TIMED_OUT if the socket receive timeout elapsed.
- * @return @ref POLARIS_FORBIDDEN if the connection is closed before any data
- *         is received, indicating an authentication failure (invalid or expired
- *         access token).
+ * @return @ref POLARIS_FORBIDDEN if the connection is closed after a position
+ *         or beacon request is sent but before any data is received, indicating
+ *         a possible authentication failure (invalid or expired access token).
  * @return @ref POLARIS_SOCKET_ERROR if the socket is not currently open.
  */
 int Polaris_Work(PolarisContext_t* context);
@@ -432,8 +433,9 @@ int Polaris_Work(PolarisContext_t* context);
  * @return @ref POLARIS_CONNECTION_CLOSED if the connection was closed remotely.
  * @return @ref POLARIS_TIMED_OUT if no data was received for the specified
  *         timeout.
- * @return @ref POLARIS_FORBIDDEN if the connection is closed before any data
- *         is received, indicating an authentication failure.
+ * @return @ref POLARIS_FORBIDDEN if the connection is closed after a position
+ *         or beacon request is sent but before any data is received, indicating
+ *         a possible authentication failure (invalid or expired access token).
  * @return @ref POLARIS_SOCKET_ERROR if the socket is not currently open.
  */
 int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms);
