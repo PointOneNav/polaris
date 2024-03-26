@@ -265,7 +265,8 @@ void PolarisClient::Run(double timeout_sec) {
 
     // Retrieve an access token using the specified API key.
     if (!auth_valid_ && !no_auth_) {
-      VLOG(1) << "Authenticating with Polaris service. [unique_id="
+      VLOG(1) << "Authenticating with Polaris service. [api_key="
+              << api_key_.substr(0, 7) << "..., unique_id="
               << (unique_id_.empty() ? "<not specified>" : unique_id_)
               << ", api_url=" << api_url_ << "]";
       ret = polaris_.AuthenticateTo(api_key_, unique_id_, api_url_);
