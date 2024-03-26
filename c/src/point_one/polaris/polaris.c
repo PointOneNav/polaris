@@ -32,7 +32,7 @@
 #define P1_DebugPrint(x, ...) \
   do {                        \
   } while (0)
-#define PrintData(buffer, length) \
+#define P1_PrintData(buffer, length) \
   do {                            \
   } while (0)
 #if defined(POLARIS_USE_TLS)
