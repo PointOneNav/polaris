@@ -734,6 +734,7 @@ int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
       P1_TimeValue_t current_time;
       P1_GetCurrentTime(&current_time);
       int elapsed_ms = P1_GetElapsedMS(&last_read_time, &current_time);
+      P1_DebugPrint("%d ms elapsed since last data arrived.\n", elapsed_ms);
       if (elapsed_ms >= connection_timeout_ms) {
         P1_Print("Warning: Connection timed out after %d ms.\n", elapsed_ms);
         CloseSocket(context, 1);
