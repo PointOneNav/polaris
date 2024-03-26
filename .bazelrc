@@ -16,3 +16,10 @@ build:aarch64 --spawn_strategy=local
 # instead of:
 #    bazel build -c opt --//c:polaris_enable_tls=False //:polaris_client
 #build --flag_alias=polaris_enable_tls=//c:polaris_enable_tls
+
+# Enable address sanitizer (ASAN).
+#
+# When using, you may also wish to disable optimizations (`-c dbg` or
+# `--copt=-O0`). This may significantly impact performance, but may be
+# necessary to pinpoint certain errors in highly optimized sections of code.
+build:asan --copt=-g --copt=-fsanitize=address --linkopt=-fsanitize=address
