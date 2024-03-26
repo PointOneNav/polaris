@@ -14,6 +14,7 @@
 
 #ifndef P1_FREERTOS
 #include <fcntl.h>  // For fcntl()
+#include <time.h>   // For struct tm
 #endif
 
 #ifdef POLARIS_USE_TLS
@@ -67,7 +68,17 @@ static void PrintTime() {
   now_ms /= 60;
   unsigned hour = now_ms % 24;
 
-  // For debugging, print just the H:M:S, not the date.
+  // Where date is available, print the date in a format consistent with glog
+  // used by the C++ client source code (YYYYMMDD).
+#ifndef P1_FREERTOS
+  time_t now_sec = (time_t)now.tv_sec;
+  struct tm local_time = *localtime(&now_sec);
+  P1_fprintf(stderr, "%04u%02u%02u ", 1900 + local_time.tm_year,
+             local_time.tm_mon + 1, local_time.tm_mday);
+#endif
+
+  // At a minimum, print HH:MM:SS.SSS. For FreeRTOS devices, this will likely be
+  // elapsed time since boot.
   P1_fprintf(stderr, "%02u:%02u:%02u.%03u", hour, min, sec, sec_frac_ms);
 }
 
