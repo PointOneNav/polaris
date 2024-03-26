@@ -43,10 +43,35 @@
 #else
 static int __log_level = POLARIS_LOG_LEVEL_INFO;
 
-#define P1_Print(x, ...) \
-  P1_fprintf(stderr, "polaris.c:" STR(__LINE__) "] " x, ##__VA_ARGS__)
-#define P1_PrintError(x, ...) \
-  P1_perror("polaris.c:" STR(__LINE__) "] " x, ##__VA_ARGS__)
+static void PrintTime() {
+  // Get the current _local_ time (not UTC).
+  P1_TimeValue_t now;
+  P1_GetCurrentTime(&now);
+  uint64_t now_ms = P1_GetTimeMS(&now);
+  now_ms += P1_GetUTCOffsetSec(&now) * 1000;
+
+  unsigned sec_frac_ms = now_ms % 1000;
+  now_ms /= 1000;
+  unsigned sec = now_ms % 60;
+  now_ms /= 60;
+  unsigned min = now_ms % 60;
+  now_ms /= 60;
+  unsigned hour = now_ms % 24;
+
+  // For debugging, print just the H:M:S, not the date.
+  P1_fprintf(stderr, "%02u:%02u:%02u.%03u", hour, min, sec, sec_frac_ms);
+}
+
+#define P1_Print(x, ...)                                                   \
+  {                                                                        \
+    PrintTime();                                                           \
+    P1_fprintf(stderr, " polaris.c:" STR(__LINE__) "] " x, ##__VA_ARGS__); \
+  }
+#define P1_PrintError(x, ...)                                     \
+  {                                                               \
+    PrintTime();                                                  \
+    P1_perror(" polaris.c:" STR(__LINE__) "] " x, ##__VA_ARGS__); \
+  }
 #define P1_DebugPrint(x, ...)                   \
   if (__log_level >= POLARIS_LOG_LEVEL_DEBUG) { \
     P1_Print(x, ##__VA_ARGS__);                 \
@@ -72,9 +97,10 @@ static void __P1_PrintReadWriteError(int line, PolarisContext_t* context,
   SSL_load_error_strings();
   int ssl_error = SSL_get_error(context->ssl, ret);
   if (ssl_error == SSL_ERROR_SYSCALL) {
-    P1_fprintf(stderr, "polaris.c:%d] %s. [error=%s (syscall: errno=%d; %s)]\n",
-               line, message, strerror(errno), errno,
-               ERR_error_string(ssl_error, NULL));
+    PrintTime();
+    P1_fprintf(
+        stderr, " polaris.c:%d] %s. [error=%s (syscall: errno=%d; %s)]\n", line,
+        message, strerror(errno), errno, ERR_error_string(ssl_error, NULL));
   } else {
     // Note: OpenSSL has a function sort of like strerror(), SSL_error_string(),
     // but in practice its output is less than helpful most of the time. We'll
@@ -113,8 +139,10 @@ static void __P1_PrintReadWriteError(int line, PolarisContext_t* context,
         break;
     }
 
-    P1_fprintf(stderr, "polaris.c:%d] %s. [error=%s (%d; %s)]\n", line, message,
-               error_name, ssl_error, ERR_error_string(ssl_error, NULL));
+    PrintTime();
+    P1_fprintf(stderr, " polaris.c:%d] %s. [error=%s (%d; %s)]\n", line,
+               message, error_name, ssl_error,
+               ERR_error_string(ssl_error, NULL));
   }
 }
 
