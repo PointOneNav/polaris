@@ -66,6 +66,7 @@ int main(int argc, const char* argv[]) {
   // Send a position update to Polaris. Position updates are used to select an
   // appropriate corrections stream, and should be updated periodically as the
   // receiver moves.
+  P1_printf("Setting initial position.\n");
   if (Polaris_SendLLAPosition(&context, 37.773971, -122.430996, -0.02) !=
       POLARIS_SUCCESS) {
     Polaris_Disconnect(&context);
@@ -80,9 +81,10 @@ int main(int argc, const char* argv[]) {
   signal(SIGTERM, HandleSignal);
 
   Polaris_Run(&context, 30000);
+
+  P1_printf("Finished running. Cleaning up.\n");
   Polaris_Free(&context);
 
-  P1_printf("Finished.\n");
-
+  P1_printf("Exiting.\n");
   return 0;
 }

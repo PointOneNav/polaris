@@ -364,6 +364,7 @@ void PolarisClient::Run(double timeout_sec) {
   }
 
   // Finished running - clear any pending send requests for next time.
+  VLOG(1) << "Finished running.";
   current_request_type_ = RequestType::NONE;
   connect_count_ = 0;
   if (auth_ret != POLARIS_SUCCESS) {
@@ -382,7 +383,14 @@ void PolarisClient::RunAsync(double timeout_sec) {
 /******************************************************************************/
 void PolarisClient::Disconnect() {
   std::unique_lock<std::recursive_mutex> lock(mutex_);
-  VLOG(1) << "Disconnecting from Polaris...";
+
+  if (connected_) {
+    VLOG(1) << "Disconnecting from Polaris...";
+  }
+  else {
+    VLOG(1) << "Already disconnected.";
+  }
+
   running_ = false;
   connected_ = false;
   polaris_.Disconnect();

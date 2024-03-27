@@ -82,7 +82,9 @@ int main(int argc, char* argv[]) {
   LOG(INFO) << "Connecting to Polaris and listening for data...";
   polaris_client->Run();
 
+  LOG(INFO) << "Finished running. Cleaning up.";
   delete polaris_client;
 
+  LOG(INFO) << "Exiting.";
   return 0;
 }
