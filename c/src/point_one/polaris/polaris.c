@@ -1226,13 +1226,12 @@ static int GetHTTPResponse(PolarisContext_t* context) {
     }
   }
 
-  CloseSocket(context, 1);
-
 #ifdef P1_FREERTOS
   // Unlike POSIX recv(), which returns <0 and sets ETIMEDOUT on a socket read
   // timeout, FreeRTOS returns 0.
   if (bytes_read == 0) {
     P1_Print("Socket timed out waiting for HTTP response.\n");
+    CloseSocket(context, 1);
     return POLARIS_SEND_ERROR;
   }
   // Similarly, FreeRTOS returns -pdFREERTOS_ERRNO_ENOTCONN on an orderly socket
@@ -1241,6 +1240,7 @@ static int GetHTTPResponse(PolarisContext_t* context) {
     P1_PrintReadWriteError(context,
                            "Unexpected error while waiting for HTTP response",
                            bytes_read);
+    CloseSocket(context, 1);
     return POLARIS_SEND_ERROR;
   }
 #else
@@ -1250,9 +1250,16 @@ static int GetHTTPResponse(PolarisContext_t* context) {
     P1_PrintReadWriteError(context,
                            "Unexpected error while waiting for HTTP response",
                            bytes_read);
+    CloseSocket(context, 1);
     return POLARIS_SEND_ERROR;
   }
 #endif
+
+  // Note: Ideally we'd do this just once up above before any of the error
+  // checks instead of having to do it explicitly in all of the if statements.
+  // However, when TLS is enabled, P1_PrintReadWriteError() needs to access
+  // context->ssl, which is freed by CloseSocket().
+  CloseSocket(context, 1);
 
   P1_DebugPrint("Received HTTP response. [size=%u B]\n", (unsigned)total_bytes);
 
