@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -45,9 +47,19 @@ static inline void P1_SetTimeMS(int time_ms, P1_TimeValue_t* result) {
   *result = pdMS_TO_TICKS(time_ms);
 }
 
+static inline uint64_t P1_GetTimeMS(const P1_TimeValue_t* time) {
+  return (uint64_t)pdTICKS_TO_MS(*time);
+}
+
 static inline int P1_GetElapsedMS(const P1_TimeValue_t* start,
                                   const P1_TimeValue_t* end) {
   return (int)((*end - *start) * portTICK_PERIOD_MS);
+}
+
+static inline int P1_GetUTCOffsetSec(P1_TimeValue_t* time) { return 0; }
+
+static inline int P1_GetUTCOffsetHours(P1_TimeValue_t* time) {
+  return P1_GetUTCOffsetSec(time) / 3600;
 }
 
 #else // POSIX
@@ -80,9 +92,13 @@ static inline void P1_GetCurrentTime(P1_TimeValue_t* result) {
   gettimeofday(result, NULL);
 }
 
-static inline void P1_SetTimeMS(int time_ms, P1_TimeValue_t* result) {
-  result->tv_sec = time_ms / 1000;
-  result->tv_usec = (time_ms % 1000) * 1000;
+static inline void P1_SetTimeMS(uint64_t time_ms, P1_TimeValue_t* result) {
+  result->tv_sec = (time_t)(time_ms / 1000);
+  result->tv_usec = (suseconds_t)((time_ms % 1000) * 1000);
+}
+
+static inline uint64_t P1_GetTimeMS(const P1_TimeValue_t* time) {
+  return (((uint64_t)(time->tv_sec)) * 1000) + (time->tv_usec / 1000);
 }
 
 static inline int P1_GetElapsedMS(const P1_TimeValue_t* start,
@@ -90,6 +106,12 @@ static inline int P1_GetElapsedMS(const P1_TimeValue_t* start,
   P1_TimeValue_t delta;
   timersub(end, start, &delta);
   return (int)((delta.tv_sec * 1000) + (delta.tv_usec / 1000));
+}
+
+int P1_GetUTCOffsetSec(P1_TimeValue_t* time);
+
+static inline int P1_GetUTCOffsetHours(P1_TimeValue_t* time) {
+  return P1_GetUTCOffsetSec(time) / 3600;
 }
 
 #endif // End OS selection

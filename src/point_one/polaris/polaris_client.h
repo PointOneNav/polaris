@@ -274,6 +274,7 @@ class PolarisClient {
   bool connected_ = false;
   int max_reconnect_attempts_ = -1;
   int connect_count_ = 0;
+  size_t bytes_received_ = 0;
 
   std::string api_key_;
   std::string unique_id_;
