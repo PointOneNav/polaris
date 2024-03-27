@@ -56,8 +56,12 @@ int main(int argc, char* argv[]) {
   InitGoogleLogging(argv[0]);
 
   // Construct a Polaris client.
-  if (FLAGS_polaris_api_key == "") {
+  if (FLAGS_polaris_api_key.empty()) {
     LOG(ERROR) << "You must supply a Polaris API key to connect to the server.";
+    return 1;
+  }
+  else if (FLAGS_polaris_unique_id.empty()) {
+    LOG(ERROR) << "You must supply a unique ID to connect to the server.";
     return 1;
   }
 
