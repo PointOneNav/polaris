@@ -27,7 +27,7 @@ using namespace point_one::polaris;
 DEFINE_string(polaris_api_key, "",
               "The polaris API key. Sign up at app.pointonenav.com.");
 
-DEFINE_string(polaris_unique_id, "",
+DEFINE_string(polaris_unique_id, "device12345",
               "The unique ID to assign to this Polaris connection.");
 
 PolarisClient* polaris_client = nullptr;
