@@ -626,11 +626,19 @@ int Polaris_Work(PolarisContext_t* context) {
   // equivalent error value. On a socket timeout, it returns 0 instead of
   // ETIMEDOUT.
   //
-  // We try to mimick the actual POSIX behavior to simplify the code below.
+  // We try to mimick the actual POSIX behavior to simplify the code below, so
+  // we set bytes_read to -1 and set errno accordingly.
+  //
+  // Later, we will need to restore them both before calling
+  // P1_PrintReadWriteError(). That function and P1_PrintError(), which it calls
+  // if TLS is disabled, expect to be provided the return code, not errno.
+  P1_RecvSize_t original_bytes_read = bytes_read;
+  int original_errno = errno;
   if (bytes_read == 0) {
     bytes_read = -1;
     errno = ETIMEDOUT;
   } else if (bytes_read < 0) {
+    bytes_read = -1;
     errno = (int)bytes_read;
   }
 #endif
@@ -665,21 +673,16 @@ int Polaris_Work(PolarisContext_t* context) {
   // service, and it was not necessary to interrupt an existing recv() call.
   //
   if (bytes_read <= 0) {
-#ifdef P1_FREERTOS
-    // For FreeRTOS, we moved the return value into errno above. Now we need to
-    // move it back before calling P1_DebugPrintReadWriteError() -- that
-    // function expects to be provided the returned error value. We can't simply
-    // pass errno, however, because it also expects the return value for TLS
-    // connections (outside of FreeRTOS).
-    bytes_read = errno;
-#endif
-
     // Was the connection closed by the user?
     if (context->disconnected) {
       if (bytes_read == 0 || errno == EINTR || errno == ENOTCONN ||
           errno == EAGAIN) {
         P1_DebugPrint("Connection terminated by user request.\n");
       } else {
+#ifdef P1_FREERTOS
+        bytes_read = original_bytes_read;
+        errno = original_errno;
+#endif
         P1_PrintReadWriteError(
             context,
             "Warning: Connection terminated by user request; unexpected error",
@@ -691,6 +694,10 @@ int Polaris_Work(PolarisContext_t* context) {
       if (bytes_read == 0) {
         P1_DebugPrint("Connection terminated upstream.\n");
       } else {
+#ifdef P1_FREERTOS
+        bytes_read = original_bytes_read;
+        errno = original_errno;
+#endif
         P1_PrintReadWriteError(
             context, "Warning: Connection terminated upstream", bytes_read);
       }
