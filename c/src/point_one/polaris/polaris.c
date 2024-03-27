@@ -658,7 +658,14 @@ int Polaris_Work(PolarisContext_t* context) {
 #else
     if (errno == EAGAIN || errno == ETIMEDOUT) {
 #endif
-      P1_DebugPrint("Socket timed out.\n");
+
+#ifdef P1_FREERTOS
+    bytes_read = original_bytes_read;
+    errno = original_errno;
+#endif
+      P1_PrintReadWriteError(
+          context, "Warning: Socket read timed out", bytes_read);
+
       return POLARIS_TIMED_OUT;
     }
   }
@@ -692,14 +699,18 @@ int Polaris_Work(PolarisContext_t* context) {
     // If the connection was closed by the server, print the reason.
     else {
       if (bytes_read == 0) {
-        P1_DebugPrint("Connection terminated upstream.\n");
+        // Note that this is considered unexpected, even though the server
+        // closed the connection without error. Once connected, we expect the
+        // stream to stay open indefinitely under normal circumstances. The
+        // server should not have a reason to terminate the connection.
+        P1_Print("Warning: Connection terminated remotely.\n");
       } else {
 #ifdef P1_FREERTOS
         bytes_read = original_bytes_read;
         errno = original_errno;
 #endif
         P1_PrintReadWriteError(
-            context, "Warning: Connection terminated upstream", bytes_read);
+            context, "Warning: Connection terminated remotely", bytes_read);
       }
     }
 
