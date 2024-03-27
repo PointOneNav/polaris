@@ -654,9 +654,12 @@ int Polaris_Work(PolarisContext_t* context) {
   if (bytes_read < 0) {
 #ifdef POLARIS_USE_TLS
     int ssl_error = SSL_get_error(context->ssl, bytes_read);
-    if (ssl_error == SSL_ERROR_WANT_READ || ssl_error == SSL_ERROR_WANT_WRITE) {
+    if (ssl_error == SSL_ERROR_WANT_READ || ssl_error == SSL_ERROR_WANT_WRITE ||
+        ssl_error == SSL_ERROR_WANT_X509_LOOKUP ||
+        (ssl_error == SSL_ERROR_SYSCALL &&
+         (errno == EAGAIN || errno == EWOULDBLOCK || errno == ETIMEDOUT))) {
 #else
-    if (errno == EAGAIN || errno == ETIMEDOUT) {
+    if (errno == EAGAIN || errno == EWOULDBLOCK || errno == ETIMEDOUT) {
 #endif
 
 #ifdef P1_FREERTOS
@@ -682,8 +685,7 @@ int Polaris_Work(PolarisContext_t* context) {
   if (bytes_read <= 0) {
     // Was the connection closed by the user?
     if (context->disconnected) {
-      if (bytes_read == 0 || errno == EINTR || errno == ENOTCONN ||
-          errno == EAGAIN) {
+      if (bytes_read == 0 || errno == EINTR || errno == ENOTCONN) {
         P1_DebugPrint("Connection terminated by user request.\n");
       } else {
 #ifdef P1_FREERTOS
