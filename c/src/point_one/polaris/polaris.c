@@ -666,8 +666,13 @@ int Polaris_Work(PolarisContext_t* context) {
     bytes_read = original_bytes_read;
     errno = original_errno;
 #endif
-      P1_PrintReadWriteError(
-          context, "Warning: Socket read timed out", bytes_read);
+      if (context->disconnected) {
+        P1_DebugPrintReadWriteError(context, "Socket read timed out",
+                                    bytes_read);
+      } else {
+        P1_PrintReadWriteError(context, "Warning: Socket read timed out",
+                               bytes_read);
+      }
 
       return POLARIS_TIMED_OUT;
     }
