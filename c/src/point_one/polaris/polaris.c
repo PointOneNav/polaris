@@ -483,6 +483,12 @@ int Polaris_SendECEFPosition(PolarisContext_t* context, double x_m, double y_m,
     P1_Print("Error: Polaris connection not currently open.\n");
     return POLARIS_SOCKET_ERROR;
   }
+#ifdef POLARIS_USE_TLS
+  else if (context->ssl_ctx == NULL || context->ssl == NULL) {
+    P1_Print("Error: Polaris SSL connection not established.\n");
+    return POLARIS_SOCKET_ERROR;
+  }
+#endif
 
   PolarisHeader_t* header = Polaris_PopulateHeader(
       context->send_buffer, POLARIS_ID_ECEF, sizeof(PolarisECEFMessage_t));
@@ -527,6 +533,15 @@ int Polaris_SendLLAPosition(PolarisContext_t* context, double latitude_deg,
     P1_Print("Error: Polaris connection not currently open.\n");
     return POLARIS_SOCKET_ERROR;
   }
+#ifdef POLARIS_USE_TLS
+  else if (context->ssl_ctx == NULL || context->ssl == NULL) {
+    P1_Print("Error: Polaris SSL connection not established.\n");
+    return POLARIS_SOCKET_ERROR;
+  }
+#endif
+
+  // TODO Cache double buffer and flip flop, then send in Work()
+  //  - If we do this can we take out the mutex in polaris_client.cc?
 
   PolarisHeader_t* header = Polaris_PopulateHeader(
       context->send_buffer, POLARIS_ID_LLA, sizeof(PolarisLLAMessage_t));
@@ -570,6 +585,12 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id) {
     P1_Print("Error: Polaris connection not currently open.\n");
     return POLARIS_SOCKET_ERROR;
   }
+#ifdef POLARIS_USE_TLS
+  else if (context->ssl_ctx == NULL || context->ssl == NULL) {
+    P1_Print("Error: Polaris SSL connection not established.\n");
+    return POLARIS_SOCKET_ERROR;
+  }
+#endif
 
   size_t id_length = strlen(beacon_id);
   PolarisHeader_t* header = Polaris_PopulateHeader(
