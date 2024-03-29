@@ -1083,10 +1083,14 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
   ret = SSL_connect(context->ssl);
   if (ret != 1) {
 #if !defined(P1_NO_PRINT)
-    char message[256];
-    snprintf(message, sizeof(message), "TLS handshake failed for tcp://%s:%d",
-             endpoint_url, endpoint_port);
-    P1_PrintSSLError(context, message, ret);
+    // Note: We intentionally reuse the receive buffer to store the error
+    // message to be displayed to avoid requiring additional stack here. At this
+    // point we're trying to open the socket, so there should be nobody actively
+    // using the receive buffer.
+    snprintf((char*)context->recv_buffer, POLARIS_RECV_BUFFER_SIZE,
+             "TLS handshake failed for tcp://%s:%d", endpoint_url,
+             endpoint_port);
+    P1_PrintSSLError(context, (char*)context->recv_buffer, ret);
 #endif  // !defined(P1_NO_PRINT)
     CloseSocket(context, 1);
     return POLARIS_SOCKET_ERROR;
