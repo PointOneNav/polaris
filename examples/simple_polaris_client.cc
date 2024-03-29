@@ -27,7 +27,7 @@ using namespace point_one::polaris;
 DEFINE_string(polaris_api_key, "",
               "The polaris API key. Sign up at app.pointonenav.com.");
 
-DEFINE_string(polaris_unique_id, "device12345",
+DEFINE_string(polaris_unique_id, "",
               "The unique ID to assign to this Polaris connection.");
 
 PolarisClient* polaris_client = nullptr;
@@ -61,7 +61,7 @@ int main(int argc, char* argv[]) {
     return 1;
   }
   else if (FLAGS_polaris_unique_id.empty()) {
-    LOG(ERROR) << "You must supply a unique ID to connect to the server.";
+    LOG(ERROR) << "You must supply a unique ID for this connection.";
     return 1;
   }
 
