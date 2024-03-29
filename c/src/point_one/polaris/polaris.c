@@ -485,7 +485,7 @@ int Polaris_SendECEFPosition(PolarisContext_t* context, double x_m, double y_m,
   }
 #ifdef POLARIS_USE_TLS
   else if (context->ssl_ctx == NULL || context->ssl == NULL) {
-    P1_Print("Error: Polaris SSL connection not established.\n");
+    P1_Print("Error: Polaris SSL context not available.\n");
     return POLARIS_SOCKET_ERROR;
   }
 #endif
@@ -535,7 +535,7 @@ int Polaris_SendLLAPosition(PolarisContext_t* context, double latitude_deg,
   }
 #ifdef POLARIS_USE_TLS
   else if (context->ssl_ctx == NULL || context->ssl == NULL) {
-    P1_Print("Error: Polaris SSL connection not established.\n");
+    P1_Print("Error: Polaris SSL context not available.\n");
     return POLARIS_SOCKET_ERROR;
   }
 #endif
@@ -587,7 +587,7 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id) {
   }
 #ifdef POLARIS_USE_TLS
   else if (context->ssl_ctx == NULL || context->ssl == NULL) {
-    P1_Print("Error: Polaris SSL connection not established.\n");
+    P1_Print("Error: Polaris SSL context not available.\n");
     return POLARIS_SOCKET_ERROR;
   }
 #endif
