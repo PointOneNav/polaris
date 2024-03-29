@@ -7,9 +7,15 @@
 #include "point_one/polaris/polaris.h"
 
 #include <errno.h>
+#include <inttypes.h>  // For PRI*
 #include <stdio.h>   // For sscanf() and snprintf()
 #include <stdlib.h>  // For malloc()
 #include <string.h>  // For memmove()
+
+#ifndef P1_FREERTOS
+#include <fcntl.h>  // For fcntl()
+#include <time.h>   // For struct tm
+#endif
 
 #ifdef POLARIS_USE_TLS
 #include <openssl/err.h>
@@ -18,6 +24,10 @@
 
 #include "point_one/polaris/polaris_internal.h"
 #include "point_one/polaris/portability.h"
+
+#define POLARIS_NOT_AUTHENTICATED 0
+#define POLARIS_AUTHENTICATED 1
+#define POLARIS_AUTHENTICATION_SKIPPED 2
 
 #define MAKE_STR(x) #x
 #define STR(x) MAKE_STR(x)
@@ -32,8 +42,8 @@
 #define P1_DebugPrint(x, ...) \
   do {                        \
   } while (0)
-#define PrintData(buffer, length) \
-  do {                            \
+#define P1_PrintData(buffer, length) \
+  do {                               \
   } while (0)
 #if defined(POLARIS_USE_TLS)
 #define ShowCerts(ssl) \
@@ -43,10 +53,45 @@
 #else
 static int __log_level = POLARIS_LOG_LEVEL_INFO;
 
-#define P1_Print(x, ...) \
-  P1_fprintf(stderr, "polaris.c:" STR(__LINE__) "] " x, ##__VA_ARGS__)
-#define P1_PrintError(x, ...) \
-  P1_perror("polaris.c:" STR(__LINE__) "] " x, ##__VA_ARGS__)
+static void PrintTime() {
+  // Get the current _local_ time (not UTC).
+  P1_TimeValue_t now;
+  P1_GetCurrentTime(&now);
+  uint64_t now_ms = P1_GetTimeMS(&now);
+  now_ms += P1_GetUTCOffsetSec(&now) * 1000;
+
+  unsigned sec_frac_ms = now_ms % 1000;
+  now_ms /= 1000;
+  unsigned sec = now_ms % 60;
+  now_ms /= 60;
+  unsigned min = now_ms % 60;
+  now_ms /= 60;
+  unsigned hour = now_ms % 24;
+
+  // Where date is available, print the date in a format consistent with glog
+  // used by the C++ client source code (YYYYMMDD).
+#ifndef P1_FREERTOS
+  time_t now_sec = (time_t)now.tv_sec;
+  struct tm local_time = *localtime(&now_sec);
+  P1_fprintf(stderr, "%04u%02u%02u ", 1900 + local_time.tm_year,
+             local_time.tm_mon + 1, local_time.tm_mday);
+#endif
+
+  // At a minimum, print HH:MM:SS.SSS. For FreeRTOS devices, this will likely be
+  // elapsed time since boot.
+  P1_fprintf(stderr, "%02u:%02u:%02u.%03u", hour, min, sec, sec_frac_ms);
+}
+
+#define P1_Print(x, ...)                                                   \
+  {                                                                        \
+    PrintTime();                                                           \
+    P1_fprintf(stderr, " polaris.c:" STR(__LINE__) "] " x, ##__VA_ARGS__); \
+  }
+#define P1_PrintError(x, ...)                                     \
+  {                                                               \
+    PrintTime();                                                  \
+    P1_perror(" polaris.c:" STR(__LINE__) "] " x, ##__VA_ARGS__); \
+  }
 #define P1_DebugPrint(x, ...)                   \
   if (__log_level >= POLARIS_LOG_LEVEL_DEBUG) { \
     P1_Print(x, ##__VA_ARGS__);                 \
@@ -66,15 +111,19 @@ static void ShowCerts(SSL* ssl);
 #define P1_PrintReadWriteError(context, x, ret) \
   do {                                          \
   } while (0)
+#define P1_PrintSSLError(context, x, ret) \
+  do {                                    \
+  } while (0)
 #elif defined(POLARIS_USE_TLS)
-static void __P1_PrintReadWriteError(int line, PolarisContext_t* context,
-                                     const char* message, int ret) {
+static void __P1_PrintSSLError(int line, PolarisContext_t* context,
+                               const char* message, int ret) {
   SSL_load_error_strings();
   int ssl_error = SSL_get_error(context->ssl, ret);
   if (ssl_error == SSL_ERROR_SYSCALL) {
-    P1_fprintf(stderr, "polaris.c:%d] %s. [error=%s (syscall: errno=%d; %s)]\n",
-               line, message, strerror(errno), errno,
-               ERR_error_string(ssl_error, NULL));
+    PrintTime();
+    P1_fprintf(
+        stderr, " polaris.c:%d] %s. [error=%s (syscall: errno=%d; %s)]\n", line,
+        message, strerror(errno), errno, ERR_error_string(ssl_error, NULL));
   } else {
     // Note: OpenSSL has a function sort of like strerror(), SSL_error_string(),
     // but in practice its output is less than helpful most of the time. We'll
@@ -113,15 +162,22 @@ static void __P1_PrintReadWriteError(int line, PolarisContext_t* context,
         break;
     }
 
-    P1_fprintf(stderr, "polaris.c:%d] %s. [error=%s (%d; %s)]\n", line, message,
-               error_name, ssl_error, ERR_error_string(ssl_error, NULL));
+    PrintTime();
+    P1_fprintf(stderr, " polaris.c:%d] %s. [error=%s (%d; %s)]\n", line,
+               message, error_name, ssl_error,
+               ERR_error_string(ssl_error, NULL));
   }
 }
 
 #define P1_PrintReadWriteError(context, x, ret) \
-  __P1_PrintReadWriteError(__LINE__, context, x, ret)
+  __P1_PrintSSLError(__LINE__, context, x, ret)
+#define P1_PrintSSLError(context, x, ret) \
+  __P1_PrintSSLError(__LINE__, context, x, ret)
 #else
 #define P1_PrintReadWriteError(context, x, ret) P1_PrintError(x, ret)
+#define P1_PrintSSLError(context, x, ret) \
+  do {                                    \
+  } while (0)
 #endif
 
 #define P1_DebugPrintReadWriteError(context, x, ret) \
@@ -157,8 +213,10 @@ int Polaris_Init(PolarisContext_t* context) {
 
   context->socket = P1_INVALID_SOCKET;
   context->auth_token[0] = '\0';
-  context->authenticated = 0;
+  context->authenticated = POLARIS_NOT_AUTHENTICATED;
   context->disconnected = 0;
+  context->total_bytes_received = 0;
+  context->data_request_sent = 0;
   context->rtcm_callback = NULL;
   context->rtcm_callback_info = NULL;
 
@@ -306,7 +364,9 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
 
   // Connect to the corrections endpoint.
   context->disconnected = 0;
-  context->authenticated = 0;
+  context->authenticated = POLARIS_NOT_AUTHENTICATED;
+  context->total_bytes_received = 0;
+  context->data_request_sent = 0;
   int ret = OpenSocket(context, endpoint_url, endpoint_port);
   if (ret != POLARIS_SUCCESS) {
     P1_Print("Error connecting to corrections endpoint: tcp://%s:%d.\n",
@@ -354,7 +414,9 @@ int Polaris_ConnectWithoutAuth(PolarisContext_t* context,
 
   // Connect to the corrections endpoint.
   context->disconnected = 0;
-  context->authenticated = 0;
+  context->authenticated = POLARIS_NOT_AUTHENTICATED;
+  context->total_bytes_received = 0;
+  context->data_request_sent = 0;
   ret = OpenSocket(context, endpoint_url, endpoint_port);
   if (ret != POLARIS_SUCCESS) {
     P1_Print("Error connecting to corrections endpoint: tcp://%s:%d.\n",
@@ -384,7 +446,7 @@ int Polaris_ConnectWithoutAuth(PolarisContext_t* context,
     }
   }
 
-  context->authenticated = 1;
+  context->authenticated = POLARIS_AUTHENTICATION_SKIPPED;
 
   return POLARIS_SUCCESS;
 }
@@ -421,6 +483,12 @@ int Polaris_SendECEFPosition(PolarisContext_t* context, double x_m, double y_m,
     P1_Print("Error: Polaris connection not currently open.\n");
     return POLARIS_SOCKET_ERROR;
   }
+#ifdef POLARIS_USE_TLS
+  else if (context->ssl_ctx == NULL || context->ssl == NULL) {
+    P1_Print("Error: Polaris SSL context not available.\n");
+    return POLARIS_SOCKET_ERROR;
+  }
+#endif
 
   PolarisHeader_t* header = Polaris_PopulateHeader(
       context->send_buffer, POLARIS_ID_ECEF, sizeof(PolarisECEFMessage_t));
@@ -453,6 +521,7 @@ int Polaris_SendECEFPosition(PolarisContext_t* context, double x_m, double y_m,
     P1_PrintReadWriteError(context, "Error sending ECEF position", ret);
     return POLARIS_SEND_ERROR;
   } else {
+    context->data_request_sent = 1;
     return POLARIS_SUCCESS;
   }
 }
@@ -464,6 +533,15 @@ int Polaris_SendLLAPosition(PolarisContext_t* context, double latitude_deg,
     P1_Print("Error: Polaris connection not currently open.\n");
     return POLARIS_SOCKET_ERROR;
   }
+#ifdef POLARIS_USE_TLS
+  else if (context->ssl_ctx == NULL || context->ssl == NULL) {
+    P1_Print("Error: Polaris SSL context not available.\n");
+    return POLARIS_SOCKET_ERROR;
+  }
+#endif
+
+  // TODO Cache double buffer and flip flop, then send in Work()
+  //  - If we do this can we take out the mutex in polaris_client.cc?
 
   PolarisHeader_t* header = Polaris_PopulateHeader(
       context->send_buffer, POLARIS_ID_LLA, sizeof(PolarisLLAMessage_t));
@@ -496,6 +574,7 @@ int Polaris_SendLLAPosition(PolarisContext_t* context, double latitude_deg,
     P1_PrintReadWriteError(context, "Error sending LLA position", ret);
     return POLARIS_SEND_ERROR;
   } else {
+    context->data_request_sent = 1;
     return POLARIS_SUCCESS;
   }
 }
@@ -506,6 +585,12 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id) {
     P1_Print("Error: Polaris connection not currently open.\n");
     return POLARIS_SOCKET_ERROR;
   }
+#ifdef POLARIS_USE_TLS
+  else if (context->ssl_ctx == NULL || context->ssl == NULL) {
+    P1_Print("Error: Polaris SSL context not available.\n");
+    return POLARIS_SOCKET_ERROR;
+  }
+#endif
 
   size_t id_length = strlen(beacon_id);
   PolarisHeader_t* header = Polaris_PopulateHeader(
@@ -527,6 +612,7 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id) {
     P1_PrintReadWriteError(context, "Error sending beacon request", ret);
     return POLARIS_SEND_ERROR;
   } else {
+    context->data_request_sent = 1;
     return POLARIS_SUCCESS;
   }
 }
@@ -561,81 +647,178 @@ int Polaris_Work(PolarisContext_t* context) {
   // equivalent error value. On a socket timeout, it returns 0 instead of
   // ETIMEDOUT.
   //
-  // We try to mimick the actual POSIX behavior to simplify the code below.
+  // We try to mimick the actual POSIX behavior to simplify the code below, so
+  // we set bytes_read to -1 and set errno accordingly.
+  //
+  // Later, we will need to restore them both before calling
+  // P1_PrintReadWriteError(). That function and P1_PrintError(), which it calls
+  // if TLS is disabled, expect to be provided the return code, not errno.
+  P1_RecvSize_t original_bytes_read = bytes_read;
+  int original_errno = errno;
   if (bytes_read == 0) {
     bytes_read = -1;
     errno = ETIMEDOUT;
   } else if (bytes_read < 0) {
+    bytes_read = -1;
     errno = (int)bytes_read;
   }
 #endif
 
+  // Did we hit a read timeout? This is normal behavior (e.g., brief loss of
+  // cell service) and is not considered an error. Most receivers can handle
+  // small gaps in corrections data. We do not close the socket here.
+  //
+  // Note that in this context the timeout is the socket receive timeout
+  // (POLARIS_RECV_TIMEOUT_MS; typically a few seconds). This is not the same as
+  // the longer connection timeout used by Polaris_Run() to decide if the
+  // connection was lost upstream (typically 30 seconds or longer).
   if (bytes_read < 0) {
-    // Did we hit a read timeout? This is normal behavior (e.g., brief loss of
-    // cell service) and is not considered an error. Most receivers can handle
-    // small gaps in corrections data. We do not close the socket here.
-    //
-    // Note that in this context the timeout is the socket receive timeout
-    // (POLARIS_RECV_TIMEOUT_MS; typically a few seconds). This is not the same
-    // as the longer connection timeout used by Polaris_Run() to decide if the
-    // connection was lost upstream (typically 30 seconds or longer).
 #ifdef POLARIS_USE_TLS
     int ssl_error = SSL_get_error(context->ssl, bytes_read);
-    if (ssl_error == SSL_ERROR_WANT_READ || ssl_error == SSL_ERROR_WANT_WRITE) {
+    if (ssl_error == SSL_ERROR_WANT_READ || ssl_error == SSL_ERROR_WANT_WRITE ||
+        ssl_error == SSL_ERROR_WANT_X509_LOOKUP ||
+        (ssl_error == SSL_ERROR_SYSCALL &&
+         (errno == EAGAIN || errno == EWOULDBLOCK || errno == ETIMEDOUT))) {
 #else
-    if (errno == EAGAIN || errno == ETIMEDOUT) {
+    if (errno == EAGAIN || errno == EWOULDBLOCK || errno == ETIMEDOUT) {
 #endif
-      P1_DebugPrint("Socket timed out.\n");
+
+#ifdef P1_FREERTOS
+    bytes_read = original_bytes_read;
+    errno = original_errno;
+#endif
+      if (context->disconnected) {
+        P1_DebugPrintReadWriteError(context, "Socket read timed out",
+                                    bytes_read);
+      } else {
+        P1_PrintReadWriteError(context, "Warning: Socket read timed out",
+                               bytes_read);
+      }
+
       return POLARIS_TIMED_OUT;
     }
-    // Otherwise, we hit some other error condition. Typically ENOTCONN (i.e.,
-    // socket closed) or EINTR, but could be another error condition.
-    else {
-#ifdef P1_FREERTOS
-      // For FreeRTOS, we moved the return value into errno above. Now we need
-      // to move it back before calling P1_DebugPrintReadWriteError() -- that
-      // function expects to be provided the returned error value. We can't
-      // simply pass errno, however, because it also expects the return value
-      // for TLS connections (outside of FreeRTOS).
-      bytes_read = errno;
-#endif
+  }
 
-      if (context->disconnected) {
-        P1_DebugPrintReadWriteError(
-            context, "Connection terminated by user request", bytes_read);
-      } else {
-        P1_DebugPrintReadWriteError(context, "Connection terminated upstream",
-                                    bytes_read);
-      }
-
-      CloseSocket(context, 1);
-      return POLARIS_CONNECTION_CLOSED;
-    }
-  } else if (bytes_read == 0) {
-    // If recv() times out before we've gotten anything, the socket was probably
-    // closed on the other end due to an auth failure.
-    if (!context->authenticated) {
-      P1_Print(
-          "Warning: Polaris connection closed and no data received. Is your "
-          "authentication token valid? Did you send a position?\n");
-      CloseSocket(context, 1);
-      return POLARIS_FORBIDDEN;
-    }
-    // A 0 return means the socket had an "orderly shutdown", i.e., it was
-    // either closed by user request or disconnected upstream by the Polaris
-    // service.
-    else {
-      if (context->disconnected) {
+  // Check if we hit an error condition (<0) or a shutdown (0).
+  //
+  // If we hit an error, it will typically be ENOTCONN (i.e., socket closed) or
+  // EINTR, but could be another error condition.
+  //
+  // If recv() returns 0, the socket had an "orderly shutdown", i.e., it was
+  // either closed by user request or disconnected upstream by the Polaris
+  // service, and it was not necessary to interrupt an existing recv() call.
+  //
+  if (bytes_read <= 0) {
+    // Was the connection closed by the user?
+    if (context->disconnected) {
+      if (bytes_read == 0 || errno == EINTR || errno == ENOTCONN) {
         P1_DebugPrint("Connection terminated by user request.\n");
       } else {
-        P1_DebugPrint("Connection terminated upstream.\n");
+#ifdef P1_FREERTOS
+        bytes_read = original_bytes_read;
+        errno = original_errno;
+#endif
+        P1_PrintReadWriteError(
+            context,
+            "Warning: Connection terminated by user request; unexpected error",
+            bytes_read);
       }
-      CloseSocket(context, 1);
-      return POLARIS_CONNECTION_CLOSED;
     }
+    // If the connection was closed by the server, print the reason.
+    else {
+      if (bytes_read == 0) {
+        // Note that this is considered unexpected, even though the server
+        // closed the connection without error. Once connected, we expect the
+        // stream to stay open indefinitely under normal circumstances. The
+        // server should not have a reason to terminate the connection.
+        P1_Print("Warning: Connection terminated remotely.\n");
+      } else {
+#ifdef P1_FREERTOS
+        bytes_read = original_bytes_read;
+        errno = original_errno;
+#endif
+        P1_PrintReadWriteError(
+            context, "Warning: Connection terminated remotely", bytes_read);
+      }
+    }
+
+    // If we connected to the server but never got any data, it was likely:
+    // 1. The user failed to send either a position (that is within range of a
+    //    base station in the network) or a request for a specific base station
+    // 2. The authentication token was rejected and socket was closed remotely
+    //
+    // Note that in general for case (2), we do expect the server to send an
+    // RTCM 1029 message indicating the reason for failure. That would be
+    // handled as "data received but not authenticated" (authenticated == 0),
+    // followed by EINTR or a similar condition above. total_bytes_received will
+    // not be 0.
+    //
+    // Similarly, if we received something from the server but no position or
+    // beacon request has been sent, the data we received is likely an
+    // authentication error. This too should be treated as "data received but
+    // not authenticated" (authenticated == 0).
+    int ret = POLARIS_CONNECTION_CLOSED;
+    if (context->authenticated == POLARIS_AUTHENTICATED) {
+      // Note that currently, we only declare authenticated == 1 after we
+      // receive enough data to confirm we did not get an error 1029 response,
+      // so we do not expect to get here if the user did not send either a
+      // position or base station request.
+      //
+      // No warning needed. If there was a socket error, we'll have printed a
+      // warning above.
+    }
+    // Authentication skipped and data received.
+    else if (context->total_bytes_received > 0 &&
+             context->authenticated == POLARIS_AUTHENTICATION_SKIPPED) {
+      // No warning necessary.
+    }
+    // Not authenticated, but response received: likely server indicated an
+    // error.
+    else if (context->total_bytes_received > 0) {
+      P1_Print(
+          "Warning: Polaris connection closed with an error response. Is "
+          "your authentication token valid?\n");
+      ret = POLARIS_FORBIDDEN;
+    }
+    // Data request sent but no response received: authentication (presumably)
+    // accepted but position likely out of network.
+    else if (context->data_request_sent) {
+      P1_Print(
+          "Warning: Polaris connection closed and no response received "
+          "from server.\n");
+    }
+    // Data request not sent and no response received: authentication
+    // (presumably) accepted.
+    else {
+      P1_Print(
+          "Warning: Polaris connection closed and no position or beacon "
+          "request issued.\n");
+    }
+
+    CloseSocket(context, 1);
+    return ret;
   } else {
-    P1_DebugPrint("Received %u bytes.\n", (unsigned)bytes_read);
-    context->authenticated = 1;
+    context->total_bytes_received += bytes_read;
+    P1_DebugPrint("Received %u bytes. [%" PRIu64 " bytes total]\n",
+                  (unsigned)bytes_read,
+                  (uint64_t)context->total_bytes_received);
+    P1_PrintData(context->recv_buffer, bytes_read);
+
+    // We do not consider the connection authenticated (auth token valid and
+    // accepted by the network) until after we begin receiving data. It the auth
+    // token is rejected, the network may respond with an RTCM 1029 text message
+    // indicating the reason. However, we do not currently parse the incoming
+    // RTCM stream, so instead we simply wait until we've received more than the
+    // maximum 1029 message size.
+    //
+    // If the user never sends a position or beacon request to the network, no
+    // data will be received. That does not necessarily imply an authentication
+    // failure.
+    if (!context->authenticated && context->total_bytes_received > 270) {
+      P1_DebugPrint(
+          "Sufficient data received. Authentication token accepted.\n");
+      context->authenticated = POLARIS_AUTHENTICATED;
+    }
 
     // We don't interpret the incoming RTCM data, so there's no need to buffer
     // it up to a complete RTCM frame. We'll just forward what we got along.
@@ -644,7 +827,12 @@ int Polaris_Work(PolarisContext_t* context) {
                              context->recv_buffer, bytes_read);
     }
 
-    return (int)bytes_read;
+    if (context->disconnected) {
+      P1_DebugPrint("Connection terminated by user.\n");
+      return POLARIS_SUCCESS;
+    } else {
+      return (int)bytes_read;
+    }
   }
 }
 
@@ -668,7 +856,6 @@ int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
   P1_TimeValue_t last_read_time;
   P1_GetCurrentTime(&last_read_time);
 
-  size_t total_bytes = 0;
   int ret = POLARIS_ERROR;
   while (1) {
     // Read the next data block.
@@ -686,6 +873,7 @@ int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
       P1_TimeValue_t current_time;
       P1_GetCurrentTime(&current_time);
       int elapsed_ms = P1_GetElapsedMS(&last_read_time, &current_time);
+      P1_DebugPrint("%d ms elapsed since last data arrived.\n", elapsed_ms);
       if (elapsed_ms >= connection_timeout_ms) {
         P1_Print("Warning: Connection timed out after %d ms.\n", elapsed_ms);
         CloseSocket(context, 1);
@@ -701,18 +889,19 @@ int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
     }
     // Data received and dispatched to the callback.
     else {
-      total_bytes += (size_t)ret;
       P1_GetCurrentTime(&last_read_time);
 
       if (context->disconnected) {
-        P1_DebugPrint("Connection terminated.\n");
+        P1_DebugPrint("Connection terminated by user.\n");
         CloseSocket(context, 1);
+        ret = POLARIS_SUCCESS;
         break;
       }
     }
   }
 
-  P1_DebugPrint("Received %u total bytes.\n", (unsigned)total_bytes);
+  P1_DebugPrint("Received %" PRIu64 " total bytes.\n",
+                (uint64_t)context->total_bytes_received);
   if (ret == POLARIS_CONNECTION_CLOSED && context->disconnected) {
     return POLARIS_SUCCESS;
   } else {
@@ -766,6 +955,17 @@ static inline int P1_SetAddress(const char* hostname, int port,
   if (host_info == NULL) {
     P1_Print("Unable to resolve \"%s\": %s\n", hostname, hstrerror(h_errno));
     return -1;
+  }
+  // IPv6 not currently supported by the API.
+  else if (host_info->h_addrtype != AF_INET) {
+    P1_Print(
+        "Warning: DNS lookup for \"%s\" returned an IPv6 address (not "
+        "supported).\n",
+        hostname);
+    // Explicitly set h_errno to _something_ (gethostbyname() doesn't touch
+    // h_errno on success).
+    h_errno = NO_RECOVERY;
+    return -2;
   } else {
     result->sin_family = AF_INET;
     result->sin_port = htons(port);
@@ -792,6 +992,7 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
 
 #ifdef POLARIS_USE_TLS
   // Configure TLS.
+  P1_DebugPrint("Configuring TLS context.\n");
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
   context->ssl_ctx = SSL_CTX_new(TLSv1_2_client_method());
 #else
@@ -811,10 +1012,15 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
   // Open a socket.
   context->socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   if (context->socket < 0) {
-    P1_Print("Error opening socket.\n");
+    P1_PrintError("Error creating socket", context->socket);
     CloseSocket(context, 1);
     return POLARIS_SOCKET_ERROR;
   }
+
+  P1_DebugPrint(
+      "Configuring socket. [socket=%d, read_timeout=%d ms, send_timeout=%d "
+      "ms]\n",
+      context->socket, POLARIS_RECV_TIMEOUT_MS, POLARIS_SEND_TIMEOUT_MS);
 
   // Set send/receive timeouts.
   P1_TimeValue_t timeout;
@@ -825,16 +1031,35 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
   setsockopt(context->socket, SOL_SOCKET, SO_SNDTIMEO, &timeout,
              sizeof(timeout));
 
+#ifndef P1_FREERTOS
+  int flags = fcntl(context->socket, F_GETFL);
+  P1_DebugPrint("Socket flags: 0x%08x\n", flags);
+#endif  // P1_FREERTOS
+
   // Lookup the IP of the endpoint used for auth requests.
+  P1_DebugPrint("Performing DNS lookup for '%s'.\n", endpoint_url);
   P1_SocketAddrV4_t address;
   if (P1_SetAddress(endpoint_url, endpoint_port, &address) < 0) {
+#ifdef P1_FREERTOS
     P1_Print("Error locating address '%s'.\n", endpoint_url);
+#else
+    P1_Print("Error locating address '%s'. [error=%s (%d)]\n", endpoint_url,
+             hstrerror(h_errno), h_errno);
+#endif
     CloseSocket(context, 1);
     return POLARIS_SOCKET_ERROR;
   }
 
   // Connect to the server.
-  P1_DebugPrint("Connecting to 'tcp://%s:%d'.\n", endpoint_url, endpoint_port);
+#ifdef P1_FREERTOS
+  uint32_t ip_host_endian = ntohl(address.sin_addr);
+#else
+  uint32_t ip_host_endian = ntohl(address.sin_addr.s_addr);
+#endif
+  P1_DebugPrint("Connecting to 'tcp://%d.%d.%d.%d:%d'.\n",
+                (ip_host_endian >> 24) & 0xFF, (ip_host_endian >> 16) & 0xFF,
+                (ip_host_endian >> 8) & 0xFF, ip_host_endian & 0xFF,
+                endpoint_port);
   int ret =
       connect(context->socket, (P1_SocketAddr_t*)&address, sizeof(address));
   if (ret < 0) {
@@ -842,9 +1067,11 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
     CloseSocket(context, 1);
     return POLARIS_SOCKET_ERROR;
   }
+  P1_DebugPrint("Connected successfully.\n");
 
 #ifdef POLARIS_USE_TLS
   // Create new SSL connection state and attach the socket.
+  P1_DebugPrint("Establishing TLS connection.\n");
   context->ssl = SSL_new(context->ssl_ctx);
   SSL_set_fd(context->ssl, context->socket);
 
@@ -855,14 +1082,16 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
   // Perform SSL handhshake.
   ret = SSL_connect(context->ssl);
   if (ret != 1) {
-    int err = SSL_get_error(context->ssl, ret);
-    P1_Print("SSL handshake failed to tcp://%s:%d, ssl_error=%d.\n",
-             endpoint_url, endpoint_port, err);
-#ifndef P1_FREERTOS
-    if (err == SSL_ERROR_SYSCALL) {
-      P1_PrintError("syscall error: ", errno);
-    }
-#endif
+#if !defined(P1_NO_PRINT)
+    // Note: We intentionally reuse the receive buffer to store the error
+    // message to be displayed to avoid requiring additional stack here. At this
+    // point we're trying to open the socket, so there should be nobody actively
+    // using the receive buffer.
+    snprintf((char*)context->recv_buffer, POLARIS_RECV_BUFFER_SIZE,
+             "TLS handshake failed for tcp://%s:%d", endpoint_url,
+             endpoint_port);
+    P1_PrintSSLError(context, (char*)context->recv_buffer, ret);
+#endif  // !defined(P1_NO_PRINT)
     CloseSocket(context, 1);
     return POLARIS_SOCKET_ERROR;
   }
@@ -889,6 +1118,7 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
 void CloseSocket(PolarisContext_t* context, int destroy_context) {
 #ifdef POLARIS_USE_TLS
   if (destroy_context && context->ssl != NULL) {
+    P1_DebugPrint("Shutting down TLS context.\n");
     if (SSL_get_shutdown(context->ssl) == 0) {
       SSL_shutdown(context->ssl);
     }
@@ -899,22 +1129,22 @@ void CloseSocket(PolarisContext_t* context, int destroy_context) {
 #endif
 
   if (context->socket != P1_INVALID_SOCKET) {
+    P1_DebugPrint("Closing socket.\n");
     close(context->socket);
     context->socket = P1_INVALID_SOCKET;
   }
 
 #ifdef POLARIS_USE_TLS
   if (destroy_context && context->ssl_ctx != NULL) {
+    P1_DebugPrint("Freeing TLS context.\n");
     SSL_CTX_free(context->ssl_ctx);
     context->ssl_ctx = NULL;
   }
 #endif
 
-  context->authenticated = 0;
-
-  // Note: We do not clear disconnected here since it is used to determine
-  // the return value in Polaris_Run() _after_ Polaris_Work() has returned and
-  // may have closed the socket.
+  // Note: We do not clear any of the authenticated, disconnected, etc. flags
+  // here since it is used to determine the return value in Polaris_Run()
+  // _after_ Polaris_Work() has returned and may have closed the socket.
 }
 
 /******************************************************************************/
@@ -1026,13 +1256,12 @@ static int GetHTTPResponse(PolarisContext_t* context) {
     }
   }
 
-  CloseSocket(context, 1);
-
 #ifdef P1_FREERTOS
   // Unlike POSIX recv(), which returns <0 and sets ETIMEDOUT on a socket read
   // timeout, FreeRTOS returns 0.
   if (bytes_read == 0) {
     P1_Print("Socket timed out waiting for HTTP response.\n");
+    CloseSocket(context, 1);
     return POLARIS_SEND_ERROR;
   }
   // Similarly, FreeRTOS returns -pdFREERTOS_ERRNO_ENOTCONN on an orderly socket
@@ -1041,6 +1270,7 @@ static int GetHTTPResponse(PolarisContext_t* context) {
     P1_PrintReadWriteError(context,
                            "Unexpected error while waiting for HTTP response",
                            bytes_read);
+    CloseSocket(context, 1);
     return POLARIS_SEND_ERROR;
   }
 #else
@@ -1050,11 +1280,18 @@ static int GetHTTPResponse(PolarisContext_t* context) {
     P1_PrintReadWriteError(context,
                            "Unexpected error while waiting for HTTP response",
                            bytes_read);
+    CloseSocket(context, 1);
     return POLARIS_SEND_ERROR;
   }
 #endif
 
-  P1_DebugPrint("Received HTTP request. [size=%u B]\n", (unsigned)total_bytes);
+  // Note: Ideally we'd do this just once up above before any of the error
+  // checks instead of having to do it explicitly in all of the if statements.
+  // However, when TLS is enabled, P1_PrintReadWriteError() needs to access
+  // context->ssl, which is freed by CloseSocket().
+  CloseSocket(context, 1);
+
+  P1_DebugPrint("Received HTTP response. [size=%u B]\n", (unsigned)total_bytes);
 
   // Append a null terminator to the response.
   context->recv_buffer[total_bytes++] = '\0';

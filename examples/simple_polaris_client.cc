@@ -56,8 +56,12 @@ int main(int argc, char* argv[]) {
   InitGoogleLogging(argv[0]);
 
   // Construct a Polaris client.
-  if (FLAGS_polaris_api_key == "") {
+  if (FLAGS_polaris_api_key.empty()) {
     LOG(ERROR) << "You must supply a Polaris API key to connect to the server.";
+    return 1;
+  }
+  else if (FLAGS_polaris_unique_id.empty()) {
+    LOG(ERROR) << "You must supply a unique ID for this connection.";
     return 1;
   }
 
@@ -82,7 +86,9 @@ int main(int argc, char* argv[]) {
   LOG(INFO) << "Connecting to Polaris and listening for data...";
   polaris_client->Run();
 
+  LOG(INFO) << "Finished running. Cleaning up.";
   delete polaris_client;
 
+  LOG(INFO) << "Exiting.";
   return 0;
 }
