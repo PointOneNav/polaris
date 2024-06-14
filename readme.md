@@ -1,9 +1,6 @@
 ![Polaris Build](https://github.com/PointOneNav/polaris/workflows/Polaris%20Build/badge.svg?branch=master)
 
-[![Total alerts](https://img.shields.io/lgtm/alerts/g/PointOneNav/polaris.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/PointOneNav/polaris/alerts/)
-
-[![Language grade: C/C++](https://img.shields.io/lgtm/grade/cpp/g/PointOneNav/polaris.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/PointOneNav/polaris/context:cpp)
-
+[![CodeQL](https://github.com/PointOneNav/polaris/actions/workflows/codeql.yml/badge.svg?branch=master)](https://github.com/PointOneNav/polaris/actions/workflows/codeql.yml)
 
 # Point One Navigation Polaris Service #
 
