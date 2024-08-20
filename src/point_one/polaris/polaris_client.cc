@@ -9,17 +9,17 @@
 #include <iomanip>
 
 #if P1_NO_PRINT
-#include <iostream>
+#  include <iostream>
 static std::ostream null_stream(0);
-#define LOG(severity) null_stream
-#define VLOG(severity) null_stream
-#define VLOG_IS_ON(severity) false
-#define LOG_INFO_STREAM(filename, line) null_stream
-#define LOG_WARNING_STREAM(filename, line) null_stream
-#define LOG_ERROR_STREAM(filename, line) null_stream
+#  define LOG(severity) null_stream
+#  define VLOG(severity) null_stream
+#  define VLOG_IS_ON(severity) false
+#  define LOG_INFO_STREAM(filename, line) null_stream
+#  define LOG_WARNING_STREAM(filename, line) null_stream
+#  define LOG_ERROR_STREAM(filename, line) null_stream
 
 #elif POLARIS_NO_GLOG
-#include <iostream>
+#  include <iostream>
 
 // Reference:
 // https://stackoverflow.com/questions/49332013/adding-a-new-line-after-stdostream-output-without-explicitly-calling-it
@@ -46,44 +46,44 @@ class Stream {
 static Stream cerr_stream;
 static std::ostream null_stream(0);
 
-#define LOG(severity) cerr_stream
-#if POLARIS_DEBUG
-#define VLOG(severity) cerr_stream
-#define VLOG_IS_ON(severity) true
-#else // !POLARIS_DEBUG
-#define VLOG(severity) null_stream
-#define VLOG_IS_ON(severity) false
-#endif // POLARIS_DEBUG
+#  define LOG(severity) cerr_stream
+#  if POLARIS_DEBUG
+#    define VLOG(severity) cerr_stream
+#    define VLOG_IS_ON(severity) true
+#  else  // !POLARIS_DEBUG
+#    define VLOG(severity) null_stream
+#    define VLOG_IS_ON(severity) false
+#  endif  // POLARIS_DEBUG
 
-#define LOG_INFO_STREAM(filename, line) LOG(INFO)
-#define LOG_WARNING_STREAM(filename, line) LOG(WARNING)
-#define LOG_ERROR_STREAM(filename, line) LOG(ERROR)
+#  define LOG_INFO_STREAM(filename, line) LOG(INFO)
+#  define LOG_WARNING_STREAM(filename, line) LOG(WARNING)
+#  define LOG_ERROR_STREAM(filename, line) LOG(ERROR)
 
-#else // !P1_NO_PRINT && !POLARIS_NO_GLOG
-#include <glog/logging.h>
+#else  // !P1_NO_PRINT && !POLARIS_NO_GLOG
+#  include <glog/logging.h>
 
-#if GOOGLE_STRIP_LOG == 0
-#define LOG_INFO_STREAM(filename, line) \
-  google::LogMessage(filename, line, google::GLOG_INFO).stream()
-#else
-#define LOG_INFO_STREAM(filename, line) google::NullStream()
-#endif
+#  if GOOGLE_STRIP_LOG == 0
+#    define LOG_INFO_STREAM(filename, line) \
+      google::LogMessage(filename, line, google::GLOG_INFO).stream()
+#  else
+#    define LOG_INFO_STREAM(filename, line) google::NullStream()
+#  endif
 
-#if GOOGLE_STRIP_LOG <= 1
-#define LOG_WARNING_STREAM(filename, line) \
-  google::LogMessage(filename, line, google::GLOG_WARNING).stream()
-#else
-#define LOG_WARNING_STREAM(filename, line) google::NullStream()
-#endif
+#  if GOOGLE_STRIP_LOG <= 1
+#    define LOG_WARNING_STREAM(filename, line) \
+      google::LogMessage(filename, line, google::GLOG_WARNING).stream()
+#  else
+#    define LOG_WARNING_STREAM(filename, line) google::NullStream()
+#  endif
 
-#if GOOGLE_STRIP_LOG <= 2
-#define LOG_ERROR_STREAM(filename, line) \
-  google::LogMessage(filename, line, google::GLOG_ERROR).stream()
-#else
-#define LOG_ERROR_STREAM(filename, line) google::NullStream()
-#endif
+#  if GOOGLE_STRIP_LOG <= 2
+#    define LOG_ERROR_STREAM(filename, line) \
+      google::LogMessage(filename, line, google::GLOG_ERROR).stream()
+#  else
+#    define LOG_ERROR_STREAM(filename, line) google::NullStream()
+#  endif
 
-#endif // P1_NO_PRINT / POLARIS_NO_GLOG
+#endif  // P1_NO_PRINT / POLARIS_NO_GLOG
 
 using namespace point_one::polaris;
 
@@ -149,9 +149,7 @@ PolarisClient::PolarisClient(const std::string& api_key,
 }
 
 /******************************************************************************/
-PolarisClient::~PolarisClient() {
-  Disconnect();
-}
+PolarisClient::~PolarisClient() { Disconnect(); }
 
 /******************************************************************************/
 void PolarisClient::SetAPIKey(const std::string& api_key,
@@ -188,8 +186,7 @@ void PolarisClient::SetPolarisAuthenticationServer(const std::string& api_url) {
   std::unique_lock<std::recursive_mutex> lock(mutex_);
   if (api_url.empty()) {
     api_url_ = POLARIS_API_URL;
-  }
-  else {
+  } else {
     api_url_ = api_url;
   }
 }
@@ -437,8 +434,7 @@ void PolarisClient::Disconnect() {
 
   if (connected_) {
     VLOG(1) << "Disconnecting from Polaris...";
-  }
-  else {
+  } else {
     VLOG(1) << "Already disconnected.";
   }
 

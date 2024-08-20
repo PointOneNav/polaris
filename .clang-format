@@ -1,6 +1,7 @@
 ---
 Language:        Cpp
 BasedOnStyle:  Google
+IndentPPDirectives: AfterHash
 ---
 Language: Proto
 BasedOnStyle: Google

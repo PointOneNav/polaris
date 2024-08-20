@@ -12,19 +12,21 @@
 extern "C" {
 #endif
 
-#ifdef P1_FREERTOS // FreeRTOS
+#ifdef P1_FREERTOS  // FreeRTOS
 
-#include <string.h> // For strerror()
+#  include <string.h>  // For strerror()
 
-#include "FreeRTOS.h"
+#  include "FreeRTOS.h"
 
-# ifndef P1_printf
-#  define P1_printf(format, ...) do {} while(0)
-# endif
+#  ifndef P1_printf
+#    define P1_printf(format, ...) \
+      do {                         \
+      } while (0)
+#  endif
 
-# ifndef P1_fprintf
-#  define P1_fprintf(stream, format, ...) P1_printf(format, ##__VA_ARGS__)
-# endif
+#  ifndef P1_fprintf
+#    define P1_fprintf(stream, format, ...) P1_printf(format, ##__VA_ARGS__)
+#  endif
 
 typedef TickType_t P1_TimeValue_t;
 
@@ -51,19 +53,19 @@ static inline int P1_GetUTCOffsetHours(P1_TimeValue_t* time) {
   return P1_GetUTCOffsetSec(time) / 3600;
 }
 
-#else // POSIX
+#else  // POSIX
 
-# include <errno.h>
-# include <stdio.h>
-# include <sys/time.h>
+#  include <errno.h>
+#  include <stdio.h>
+#  include <sys/time.h>
 
-# ifndef P1_printf
-#  define P1_printf printf
-# endif
+#  ifndef P1_printf
+#    define P1_printf printf
+#  endif
 
-# ifndef P1_fprintf
-#  define P1_fprintf fprintf
-# endif
+#  ifndef P1_fprintf
+#    define P1_fprintf fprintf
+#  endif
 
 typedef struct timeval P1_TimeValue_t;
 
@@ -93,8 +95,8 @@ static inline int P1_GetUTCOffsetHours(P1_TimeValue_t* time) {
   return P1_GetUTCOffsetSec(time) / 3600;
 }
 
-#endif // End OS selection
+#endif  // End OS selection
 
 #ifdef __cplusplus
-} // extern "C"
+}  // extern "C"
 #endif
