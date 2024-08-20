@@ -8,7 +8,17 @@
 
 #include <iomanip>
 
-#if defined(POLARIS_NO_GLOG)
+#if defined(P1_NO_PRINT)
+#include <iostream>
+static std::ostream null_stream(0);
+#define LOG(severity) null_stream
+#define VLOG(severity) null_stream
+#define VLOG_IS_ON(severity) false
+#define LOG_INFO_STREAM(filename, line) null_stream
+#define LOG_WARNING_STREAM(filename, line) null_stream
+#define LOG_ERROR_STREAM(filename, line) null_stream
+
+#elif defined(POLARIS_NO_GLOG)
 #include <iostream>
 
 // Reference:
@@ -36,25 +46,20 @@ class Stream {
 static Stream cerr_stream;
 static std::ostream null_stream(0);
 
-#if defined(P1_NO_PRINT)
-#define LOG(severity) null_stream
-#define VLOG(severity) null_stream
-#define VLOG_IS_ON(severity) false
-#else  // !defined(P1_NO_PRINT)
 #define LOG(severity) cerr_stream
 #if defined(POLARIS_DEBUG)
 #define VLOG(severity) cerr_stream
 #define VLOG_IS_ON(severity) true
-#else
+#else // !defined(POLARIS_DEBUG)
 #define VLOG(severity) null_stream
 #define VLOG_IS_ON(severity) false
-#endif // defined(P1_NO_PRINT)
 #endif // defined(POLARIS_DEBUG)
 
 #define LOG_INFO_STREAM(filename, line) LOG(INFO)
 #define LOG_WARNING_STREAM(filename, line) LOG(WARNING)
 #define LOG_ERROR_STREAM(filename, line) LOG(ERROR)
-#else
+
+#else // !defined(P1_NO_PRINT) && !defined(POLARIS_NO_GLOG)
 #include <glog/logging.h>
 
 #if GOOGLE_STRIP_LOG == 0
