@@ -90,6 +90,9 @@
  * @name Polaris Logging Verbosity Levels
  * @{
  */
+#define POLARIS_LOG_LEVEL_FATAL -3
+#define POLARIS_LOG_LEVEL_ERROR -2
+#define POLARIS_LOG_LEVEL_WARNING -1
 #define POLARIS_LOG_LEVEL_INFO 0
 #define POLARIS_LOG_LEVEL_DEBUG 1
 #define POLARIS_LOG_LEVEL_TRACE 2
