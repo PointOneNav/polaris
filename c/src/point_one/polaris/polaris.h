@@ -113,7 +113,8 @@ typedef struct PolarisContext_s PolarisContext_t;
 typedef void (*PolarisCallback_t)(void* info, PolarisContext_t* context,
                                   const uint8_t* buffer, size_t size_bytes);
 
-typedef void (*PolarisPrintCallback_t)(int level, const char* message);
+typedef void (*PolarisPrintCallback_t)(const char* filename, int line,
+                                       int level, const char* message);
 
 struct PolarisContext_s {
   P1_Socket_t socket;

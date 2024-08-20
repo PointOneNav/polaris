@@ -97,27 +97,27 @@ static int PrintTime(char* buffer, size_t capacity_bytes) {
   return length;
 }
 
-static void P1_PrintToCallback(int level, const char* format, ...) {
+static void P1_PrintToCallback(int line, int level, const char* format, ...) {
   char buffer[POLARIS_MAX_PRINT_LENGTH + 1];
   va_list args;
   va_start(args, format);
   vsnprintf(buffer, sizeof(buffer), format, args);
   va_end(args);
-  __print_callback(level, buffer);
+  __print_callback("polaris.c", line, level, buffer);
 }
 
-#define P1_DoPrint(level, x, ...)                  \
-  if (__log_level >= level) {                      \
-    if (__print_callback) {                        \
-      P1_PrintToCallback(level, x, ##__VA_ARGS__); \
-    } else {                                       \
-      PrintTime(NULL, 0);                          \
-      P1_fprintf(stderr, x "\n", ##__VA_ARGS__);   \
-    }                                              \
+#define P1_DoPrint(line, level, x, ...)                                       \
+  if (__log_level >= level) {                                                 \
+    if (__print_callback) {                                                   \
+      P1_PrintToCallback(line, level, x, ##__VA_ARGS__);                      \
+    } else {                                                                  \
+      PrintTime(NULL, 0);                                                     \
+      P1_fprintf(stderr, " polaris.c:" STR(line) "] " x "\n", ##__VA_ARGS__); \
+    }                                                                         \
   }
 
 #define P1_PrintMessage(level, x, ...) \
-  P1_DoPrint(level, " polaris.c:" STR(__LINE__) "] " x, ##__VA_ARGS__);
+  P1_DoPrint(__LINE__, level, x, ##__VA_ARGS__);
 
 // The standard POSIX perror() does not include the numeric error code in the
 // printout, which is often very useful, so we do not use it. We also can't use
@@ -131,14 +131,15 @@ static void P1_PrintToCallback(int level, const char* format, ...) {
 // systems, the return code argument is ignored. While it theoretically could be
 // omitted, it is required for FreeRTOS compilation.
 #ifdef P1_FREERTOS // FreeRTOS
-#define P1_PrintErrno(x, ret)                                     \
-  P1_PrintMessage(POLARIS_LOG_LEVEL_ERROR, x ". [error=%s (%d)]", \
-                  strerror(-ret), ret)
+#define P1_PrintErrnoLevel(level, x, ret) \
+  P1_PrintMessage(level, x ". [error=%s (%d)]", strerror(-ret), ret)
 #else  // POSIX
-#define P1_PrintErrno(x, ret)                                       \
-  P1_PrintMessage(POLARIS_LOG_LEVEL_ERROR, x ". [error=%s (%d)]", \
-                  strerror(errno), errno)
+#define P1_PrintErrnoLevel(level, x, ret) \
+  P1_PrintMessage(level, x ". [error=%s (%d)]", strerror(errno), errno)
 #endif  // End OS selection
+
+#define P1_PrintErrno(x, ret) \
+  P1_PrintErrnoLevel(POLARIS_LOG_LEVEL_ERROR, x, ret)
 
 static void P1_PrintData(const uint8_t* buffer, size_t length);
 #if defined(POLARIS_USE_TLS)
@@ -159,17 +160,16 @@ static void ShowCerts(SSL* ssl);
 
 #if defined(POLARIS_NO_PRINT)
 #define P1_PrintReadWriteError(context, x, ret) P1_NOOP
+#define P1_DebugPrintReadWriteError(context, x, ret) P1_NOOP
 #define P1_PrintSSLError(context, x, ret) P1_NOOP
 #elif defined(POLARIS_USE_TLS)
-static void __P1_PrintSSLError(int line, PolarisContext_t* context,
+static void __P1_PrintSSLError(int level, int line, PolarisContext_t* context,
                                const char* message, int ret) {
   SSL_load_error_strings();
   int ssl_error = SSL_get_error(context->ssl, ret);
   if (ssl_error == SSL_ERROR_SYSCALL) {
-    P1_DoPrint(POLARIS_LOG_LEVEL_ERROR,
-               " polaris.c:%d] %s. [error=%s (syscall: errno=%d; %s)]", line,
-               message, strerror(errno), errno,
-               ERR_error_string(ssl_error, NULL));
+    P1_DoPrint(line, level, "%s. [error=%s (syscall: errno=%d; %s)]", message,
+               strerror(errno), errno, ERR_error_string(ssl_error, NULL));
   } else {
     // Note: OpenSSL has a function sort of like strerror(), SSL_error_string(),
     // but in practice its output is less than helpful most of the time. We'll
@@ -208,25 +208,27 @@ static void __P1_PrintSSLError(int line, PolarisContext_t* context,
         break;
     }
 
-    P1_DoPrint(POLARIS_LOG_LEVEL_ERROR,
-               " polaris.c:%d] %s. [error=%s (%d; %s)]", line, message,
-               error_name, ssl_error, ERR_error_string(ssl_error, NULL));
+    P1_DoPrint(line, level, "%s. [error=%s (%d; %s)]", message, error_name,
+               ssl_error, ERR_error_string(ssl_error, NULL));
   }
 }
 
 #define P1_PrintReadWriteError(context, x, ret) \
-  __P1_PrintSSLError(__LINE__, context, x, ret)
+  __P1_PrintSSLError(POLARIS_LOG_LEVEL_ERROR, __LINE__, context, x, ret)
+#define P1_DebugPrintReadWriteError(context, x, ret)                        \
+  if (__log_level >= POLARIS_LOG_LEVEL_DEBUG) {                             \
+    __P1_PrintSSLError(POLARIS_LOG_LEVEL_DEBUG, __LINE__, context, x, ret); \
+  }
 #define P1_PrintSSLError(context, x, ret) \
-  __P1_PrintSSLError(__LINE__, context, x, ret)
+  __P1_PrintSSLError(POLARIS_LOG_LEVEL_ERROR, __LINE__, context, x, ret)
 #else  // !defined(POLARIS_NO_PRINT) && !defined(POLARIS_USE_TLS)
 #define P1_PrintReadWriteError(context, x, ret) P1_PrintErrno(x, ret)
+#define P1_DebugPrintReadWriteError(context, x, ret)     \
+  if (__log_level >= POLARIS_LOG_LEVEL_DEBUG) {          \
+    P1_PrintErrnoLevel(POLARIS_LOG_LEVEL_DEBUG, x, ret); \
+  }
 #define P1_PrintSSLError(context, x, ret) P1_NOOP
 #endif  // POLARIS_NO_PRINT / POLARIS_USE_TLS
-
-#define P1_DebugPrintReadWriteError(context, x, ret) \
-  if (__log_level >= POLARIS_LOG_LEVEL_DEBUG) {      \
-    P1_PrintReadWriteError(context, x, ret);         \
-  }
 
 static int ValidateUniqueID(const char* unique_id);
 
@@ -1394,7 +1396,7 @@ void P1_PrintData(const uint8_t* buffer, size_t length) {
       str[str_length++] = '\n';
       str[str_length++] = '\0';
       if (__print_callback) {
-        __print_callback(POLARIS_LOG_LEVEL_TRACE, str);
+        __print_callback("polaris.c", __LINE__, POLARIS_LOG_LEVEL_TRACE, str);
       } else {
         P1_fprintf(stderr, "%s", str);
       }
@@ -1405,7 +1407,7 @@ void P1_PrintData(const uint8_t* buffer, size_t length) {
   if (str_length != 0) {
     str[str_length++] = '\0';
     if (__print_callback) {
-      __print_callback(POLARIS_LOG_LEVEL_TRACE, str);
+      __print_callback("polaris.c", __LINE__, POLARIS_LOG_LEVEL_TRACE, str);
     } else {
       P1_fprintf(stderr, "%s\n", str);
     }
