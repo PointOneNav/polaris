@@ -39,13 +39,16 @@ static std::ostream null_stream(0);
 #if defined(P1_NO_PRINT)
 #define LOG(severity) null_stream
 #define VLOG(severity) null_stream
+#define VLOG_IS_ON(severity) false
 #else  // !defined(P1_NO_PRINT)
 #define LOG(severity) cerr_stream
 #if defined(POLARIS_DEBUG)
 #define VLOG(severity) cerr_stream
+#define VLOG_IS_ON(severity) true
 #else
 #define VLOG(severity) null_stream
-#endif defined(P1_NO_PRINT)
+#define VLOG_IS_ON(severity) false
+#endif // defined(P1_NO_PRINT)
 #endif // defined(POLARIS_DEBUG)
 
 #define LOG_INFO_STREAM(filename, line) LOG(INFO)
