@@ -37,17 +37,17 @@
   do {          \
   } while (0)
 
-#if defined(P1_NO_PRINT)
+#if P1_NO_PRINT
 #define P1_PrintMessage(level, x, ...) P1_NOOP
 #define P1_PrintErrno(x, ...) P1_NOOP
 
 #define P1_PrintData(buffer, length) P1_NOOP
-#if defined(POLARIS_USE_TLS)
+#if POLARIS_USE_TLS
 #define ShowCerts(ssl) \
   do {                 \
   } while (0)
 #endif
-#else  // !defined(P1_NO_PRINT)
+#else  // !P1_NO_PRINT
 static int __log_level = POLARIS_LOG_LEVEL_INFO;
 
 static PolarisPrintCallback_t __print_callback = NULL;
@@ -142,10 +142,10 @@ static void P1_PrintToCallback(int line, int level, const char* format, ...) {
   P1_PrintErrnoLevel(POLARIS_LOG_LEVEL_ERROR, x, ret)
 
 static void P1_PrintData(const uint8_t* buffer, size_t length);
-#if defined(POLARIS_USE_TLS)
+#if POLARIS_USE_TLS
 static void ShowCerts(SSL* ssl);
 #endif
-#endif  // defined(P1_NO_PRINT)
+#endif  // P1_NO_PRINT
 
 #define P1_PrintError(x, ...) \
   P1_PrintMessage(POLARIS_LOG_LEVEL_ERROR, x, ##__VA_ARGS__)
@@ -158,11 +158,11 @@ static void ShowCerts(SSL* ssl);
 #define P1_PrintTrace(x, ...) \
   P1_PrintMessage(POLARIS_LOG_LEVEL_TRACE, x, ##__VA_ARGS__)
 
-#if defined(POLARIS_NO_PRINT)
+#if POLARIS_NO_PRINT
 #define P1_PrintReadWriteError(context, x, ret) P1_NOOP
 #define P1_DebugPrintReadWriteError(context, x, ret) P1_NOOP
 #define P1_PrintSSLError(context, x, ret) P1_NOOP
-#elif defined(POLARIS_USE_TLS)
+#elif POLARIS_USE_TLS
 static void __P1_PrintSSLError(int level, int line, PolarisContext_t* context,
                                const char* message, int ret) {
   SSL_load_error_strings();
@@ -221,7 +221,7 @@ static void __P1_PrintSSLError(int level, int line, PolarisContext_t* context,
   }
 #define P1_PrintSSLError(context, x, ret) \
   __P1_PrintSSLError(POLARIS_LOG_LEVEL_ERROR, __LINE__, context, x, ret)
-#else  // !defined(POLARIS_NO_PRINT) && !defined(POLARIS_USE_TLS)
+#else  // !POLARIS_NO_PRINT && !POLARIS_USE_TLS
 #define P1_PrintReadWriteError(context, x, ret) P1_PrintErrno(x, ret)
 #define P1_DebugPrintReadWriteError(context, x, ret)     \
   if (__log_level >= POLARIS_LOG_LEVEL_DEBUG) {          \
@@ -281,14 +281,14 @@ void Polaris_Free(PolarisContext_t* context) { CloseSocket(context, 1); }
 
 /******************************************************************************/
 void Polaris_SetLogLevel(int log_level) {
-#if !defined(POLARIS_NO_PRINT)
+#if !POLARIS_NO_PRINT
   __log_level = log_level;
 #endif
 }
 
 /******************************************************************************/
 void Polaris_SetPrintCallback(PolarisPrintCallback_t callback) {
-#if !defined(POLARIS_NO_PRINT)
+#if !POLARIS_NO_PRINT
   __print_callback = callback;
 #endif
 }
@@ -1136,7 +1136,7 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
   // Perform SSL handhshake.
   ret = SSL_connect(context->ssl);
   if (ret != 1) {
-#if !defined(P1_NO_PRINT)
+#if !P1_NO_PRINT
     // Note: We intentionally reuse the receive buffer to store the error
     // message to be displayed to avoid requiring additional stack here. At this
     // point we're trying to open the socket, so there should be nobody actively
@@ -1145,7 +1145,7 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
              "TLS handshake failed for tcp://%s:%d", endpoint_url,
              endpoint_port);
     P1_PrintSSLError(context, (char*)context->recv_buffer, ret);
-#endif  // !defined(P1_NO_PRINT)
+#endif  // !P1_NO_PRINT
     CloseSocket(context, 1);
     return POLARIS_SOCKET_ERROR;
   }
@@ -1376,7 +1376,7 @@ static int GetHTTPResponse(PolarisContext_t* context) {
 }
 
 /******************************************************************************/
-#if !defined(P1_NO_PRINT)
+#if !P1_NO_PRINT
 void P1_PrintData(const uint8_t* buffer, size_t length) {
   if (__log_level < POLARIS_LOG_LEVEL_TRACE) {
     return;
@@ -1415,7 +1415,7 @@ void P1_PrintData(const uint8_t* buffer, size_t length) {
 #endif
 
 /******************************************************************************/
-#if !defined(P1_NO_PRINT) && defined(POLARIS_USE_TLS)
+#if !P1_NO_PRINT && POLARIS_USE_TLS
 void ShowCerts(SSL* ssl) {
   if (__log_level < POLARIS_LOG_LEVEL_DEBUG) {
     return;

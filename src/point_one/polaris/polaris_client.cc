@@ -8,7 +8,7 @@
 
 #include <iomanip>
 
-#if defined(P1_NO_PRINT)
+#if P1_NO_PRINT
 #include <iostream>
 static std::ostream null_stream(0);
 #define LOG(severity) null_stream
@@ -18,7 +18,7 @@ static std::ostream null_stream(0);
 #define LOG_WARNING_STREAM(filename, line) null_stream
 #define LOG_ERROR_STREAM(filename, line) null_stream
 
-#elif defined(POLARIS_NO_GLOG)
+#elif POLARIS_NO_GLOG
 #include <iostream>
 
 // Reference:
@@ -47,19 +47,19 @@ static Stream cerr_stream;
 static std::ostream null_stream(0);
 
 #define LOG(severity) cerr_stream
-#if defined(POLARIS_DEBUG)
+#if POLARIS_DEBUG
 #define VLOG(severity) cerr_stream
 #define VLOG_IS_ON(severity) true
-#else // !defined(POLARIS_DEBUG)
+#else // !POLARIS_DEBUG
 #define VLOG(severity) null_stream
 #define VLOG_IS_ON(severity) false
-#endif // defined(POLARIS_DEBUG)
+#endif // POLARIS_DEBUG
 
 #define LOG_INFO_STREAM(filename, line) LOG(INFO)
 #define LOG_WARNING_STREAM(filename, line) LOG(WARNING)
 #define LOG_ERROR_STREAM(filename, line) LOG(ERROR)
 
-#else // !defined(P1_NO_PRINT) && !defined(POLARIS_NO_GLOG)
+#else // !P1_NO_PRINT && !POLARIS_NO_GLOG
 #include <glog/logging.h>
 
 #if GOOGLE_STRIP_LOG == 0
@@ -83,7 +83,7 @@ static std::ostream null_stream(0);
 #define LOG_ERROR_STREAM(filename, line) google::NullStream()
 #endif
 
-#endif // defined(POLARIS_NO_GLOG)
+#endif // P1_NO_PRINT / POLARIS_NO_GLOG
 
 using namespace point_one::polaris;
 
