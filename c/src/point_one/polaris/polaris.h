@@ -72,6 +72,15 @@
 #endif
 
 /**
+ * @brief The maximum length of a message when a print callback is registered.
+ *
+ * See @ref Polaris_SetPrintCallback().
+ */
+#ifndef POLARIS_MAX_PRINT_LENGTH
+# define POLARIS_MAX_PRINT_LENGTH 256
+#endif
+
+/**
  * @name Polaris Return Codes
  * @{
  */
@@ -103,6 +112,8 @@ typedef struct PolarisContext_s PolarisContext_t;
 
 typedef void (*PolarisCallback_t)(void* info, PolarisContext_t* context,
                                   const uint8_t* buffer, size_t size_bytes);
+
+typedef void (*PolarisPrintCallback_t)(int level, const char* message);
 
 struct PolarisContext_s {
   P1_Socket_t socket;
@@ -158,6 +169,22 @@ void Polaris_Free(PolarisContext_t* context);
  * @param log_level The desired verbosity level.
  */
 void Polaris_SetLogLevel(int log_level);
+
+/**
+ * @brief Specify an alternate function to be called when printing messages.
+ *
+ * When a print callback is registered, all messages (error, info, debug, etc.)
+ * will be redirected to the callback and not printed to stderr.
+ *
+ * @note
+ * When a callback is enabled, messages will be constructed in a buffer declared
+ * on the stack in order to avoid heap usage. The size of the buffer may be
+ * controlled by @ref POLARIS_MAX_PRINT_LENGTH to limit stack usage where
+ * desired.
+ *
+ * @param callback The function to be called.
+ */
+void Polaris_SetPrintCallback(PolarisPrintCallback_t callback);
 
 /**
  * @brief Authenticate with Polaris.
