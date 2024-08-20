@@ -8,9 +8,9 @@
 
 #include <errno.h>
 #include <inttypes.h>  // For PRI*
-#include <stdio.h>   // For sscanf() and snprintf()
-#include <stdlib.h>  // For malloc()
-#include <string.h>  // For memmove()
+#include <stdio.h>     // For sscanf() and snprintf()
+#include <stdlib.h>    // For malloc()
+#include <string.h>    // For memmove()
 
 #ifndef P1_FREERTOS
 #include <fcntl.h>  // For fcntl()
