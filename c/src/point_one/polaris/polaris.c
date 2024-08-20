@@ -1393,7 +1393,6 @@ void P1_PrintData(const uint8_t* buffer, size_t length) {
         snprintf(str + str_length, sizeof(str - str_length), "%02x", buffer[i]);
 
     if (i % 16 == 15) {
-      str[str_length++] = '\n';
       str[str_length++] = '\0';
       if (__print_callback) {
         __print_callback("polaris.c", __LINE__, POLARIS_LOG_LEVEL_TRACE, str);
