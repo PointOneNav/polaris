@@ -30,6 +30,16 @@ DEFINE_string(polaris_api_key, "",
 DEFINE_string(polaris_unique_id, "",
               "The unique ID to assign to this Polaris connection.");
 
+DEFINE_string(
+    polaris_hostname, "",
+    "Specify an alternate hostname to use when connecting to the Polaris "
+    "corrections network. If blank, use the default hostname.");
+
+DEFINE_string(
+    polaris_api_hostname, "",
+    "Specify an alternate hostname to use when connecting to the Polaris "
+    "authentication API server. If blank, use the default hostname.");
+
 PolarisClient* polaris_client = nullptr;
 
 // Process receiver incoming messages.  This example code expects received data
@@ -67,6 +77,9 @@ int main(int argc, char* argv[]) {
 
   polaris_client =
       new PolarisClient(FLAGS_polaris_api_key, FLAGS_polaris_unique_id);
+  polaris_client->SetPolarisEndpoint(FLAGS_polaris_hostname);
+  polaris_client->SetPolarisAuthenticationServer(FLAGS_polaris_api_hostname);
+
   polaris_client->SetRTCMCallback(
       std::bind(&ReceivedData, std::placeholders::_1, std::placeholders::_2));
 
