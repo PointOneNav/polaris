@@ -340,7 +340,7 @@ jobs:
           - {lang: c, arch: aarch64}
     steps:
     - name: Download artifact
-      uses: actions/download-artifact@v1
+      uses: actions/download-artifact@v4.1.7
       with:
         name: polaris_examples.${{ matrix.lang }}.${{ matrix.arch }}
     - name: Set asset filename
