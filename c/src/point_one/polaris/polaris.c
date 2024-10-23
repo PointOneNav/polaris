@@ -8,18 +8,19 @@
 
 #include <errno.h>
 #include <inttypes.h>  // For PRI*
-#include <stdio.h>   // For sscanf() and snprintf()
-#include <stdlib.h>  // For malloc()
-#include <string.h>  // For memmove()
+#include <stdarg.h>    // For va_list support
+#include <stdio.h>     // For sscanf() and snprintf()
+#include <stdlib.h>    // For malloc()
+#include <string.h>    // For memmove()
 
 #ifndef P1_FREERTOS
-#include <fcntl.h>  // For fcntl()
-#include <time.h>   // For struct tm
+#  include <fcntl.h>  // For fcntl()
+#  include <time.h>   // For struct tm
 #endif
 
 #ifdef POLARIS_USE_TLS
-#include <openssl/err.h>
-#include <openssl/ssl.h>
+#  include <openssl/err.h>
+#  include <openssl/ssl.h>
 #endif
 
 #include "point_one/polaris/polaris_internal.h"
@@ -32,28 +33,26 @@
 #define MAKE_STR(x) #x
 #define STR(x) MAKE_STR(x)
 
-#if defined(P1_NO_PRINT)
-#define P1_Print(x, ...) \
-  do {                   \
+#define P1_NOOP \
+  do {          \
   } while (0)
-#define P1_PrintError(x, ...) \
-  do {                        \
-  } while (0)
-#define P1_DebugPrint(x, ...) \
-  do {                        \
-  } while (0)
-#define P1_PrintData(buffer, length) \
-  do {                               \
-  } while (0)
-#if defined(POLARIS_USE_TLS)
-#define ShowCerts(ssl) \
-  do {                 \
-  } while (0)
-#endif
-#else
+
+#if P1_NO_PRINT
+#  define P1_PrintMessage(level, x, ...) P1_NOOP
+#  define P1_PrintErrno(x, ...) P1_NOOP
+
+#  define P1_PrintData(buffer, length) P1_NOOP
+#  if POLARIS_USE_TLS
+#    define ShowCerts(ssl) \
+      do {                 \
+      } while (0)
+#  endif
+#else  // !P1_NO_PRINT
 static int __log_level = POLARIS_LOG_LEVEL_INFO;
 
-static void PrintTime() {
+static PolarisPrintCallback_t __print_callback = NULL;
+
+static int PrintTime(char* buffer, size_t capacity_bytes) {
   // Get the current _local_ time (not UTC).
   P1_TimeValue_t now;
   P1_GetCurrentTime(&now);
@@ -70,60 +69,108 @@ static void PrintTime() {
 
   // Where date is available, print the date in a format consistent with glog
   // used by the C++ client source code (YYYYMMDD).
-#ifndef P1_FREERTOS
+  int length = 0;
+#  ifndef P1_FREERTOS
   time_t now_sec = (time_t)now.tv_sec;
   struct tm local_time = *localtime(&now_sec);
-  P1_fprintf(stderr, "%04u%02u%02u ", 1900 + local_time.tm_year,
-             local_time.tm_mon + 1, local_time.tm_mday);
-#endif
+  if (buffer) {
+    length += snprintf(buffer, capacity_bytes, "%04u%02u%02u ",
+                       1900 + local_time.tm_year, local_time.tm_mon + 1,
+                       local_time.tm_mday);
+    buffer += length;
+    capacity_bytes -= length;
+  } else {
+    P1_fprintf(stderr, "%04u%02u%02u ", 1900 + local_time.tm_year,
+               local_time.tm_mon + 1, local_time.tm_mday);
+  }
+#  endif
 
   // At a minimum, print HH:MM:SS.SSS. For FreeRTOS devices, this will likely be
   // elapsed time since boot.
-  P1_fprintf(stderr, "%02u:%02u:%02u.%03u", hour, min, sec, sec_frac_ms);
+  if (buffer) {
+    length += snprintf(buffer, capacity_bytes, "%02u:%02u:%02u.%03u", hour, min,
+                       sec, sec_frac_ms);
+  } else {
+    P1_fprintf(stderr, "%02u:%02u:%02u.%03u", hour, min, sec, sec_frac_ms);
+  }
+
+  return length;
 }
 
-#define P1_Print(x, ...)                                                   \
-  {                                                                        \
-    PrintTime();                                                           \
-    P1_fprintf(stderr, " polaris.c:" STR(__LINE__) "] " x, ##__VA_ARGS__); \
-  }
-#define P1_PrintError(x, ...)                                     \
-  {                                                               \
-    PrintTime();                                                  \
-    P1_perror(" polaris.c:" STR(__LINE__) "] " x, ##__VA_ARGS__); \
-  }
-#define P1_DebugPrint(x, ...)                   \
-  if (__log_level >= POLARIS_LOG_LEVEL_DEBUG) { \
-    P1_Print(x, ##__VA_ARGS__);                 \
-  }
-#define P1_TracePrint(x, ...)                   \
-  if (__log_level >= POLARIS_LOG_LEVEL_TRACE) { \
-    P1_Print(x, ##__VA_ARGS__);                 \
-  }
+static void P1_PrintToCallback(int line, int level, const char* format, ...) {
+  char buffer[POLARIS_MAX_PRINT_LENGTH + 1];
+  va_list args;
+  va_start(args, format);
+  vsnprintf(buffer, sizeof(buffer), format, args);
+  va_end(args);
+  __print_callback("polaris.c", line, level, buffer);
+}
+
+#  define P1_DoPrint(line, level, x, ...)                       \
+    if (__log_level >= level) {                                 \
+      if (__print_callback) {                                   \
+        P1_PrintToCallback(line, level, x, ##__VA_ARGS__);      \
+      } else {                                                  \
+        PrintTime(NULL, 0);                                     \
+        P1_fprintf(stderr, " polaris.c:" STR(line) "] " x "\n", \
+                   ##__VA_ARGS__);                              \
+      }                                                         \
+    }
+
+#  define P1_PrintMessage(level, x, ...) \
+    P1_DoPrint(__LINE__, level, x, ##__VA_ARGS__);
+
+// The standard POSIX perror() does not include the numeric error code in the
+// printout, which is often very useful, so we do not use it. We also can't use
+// it anyway since we want to support using the print callback and perror()
+// prints directly to stderr. We do try to make this macro at least similar to
+// perror(), so it adds a trailing '.', etc.
+//
+// FreeRTOS does not use errno and does not support perror(). Instead, they
+// include the error condition in the return code itself. To get around this,
+// our macro also takes the function return code and prints it. For POSIX
+// systems, the return code argument is ignored. While it theoretically could be
+// omitted, it is required for FreeRTOS compilation.
+#  ifdef P1_FREERTOS  // FreeRTOS
+#    define P1_PrintErrnoLevel(level, x, ret) \
+      P1_PrintMessage(level, x ". [error=%s (%d)]", strerror(-ret), ret)
+#  else  // POSIX
+#    define P1_PrintErrnoLevel(level, x, ret) \
+      P1_PrintMessage(level, x ". [error=%s (%d)]", strerror(errno), errno)
+#  endif  // End OS selection
+
+#  define P1_PrintErrno(x, ret) \
+    P1_PrintErrnoLevel(POLARIS_LOG_LEVEL_ERROR, x, ret)
 
 static void P1_PrintData(const uint8_t* buffer, size_t length);
-#if defined(POLARIS_USE_TLS)
+#  if POLARIS_USE_TLS
 static void ShowCerts(SSL* ssl);
-#endif
-#endif
+#  endif
+#endif  // P1_NO_PRINT
 
-#if defined(POLARIS_NO_PRINT)
-#define P1_PrintReadWriteError(context, x, ret) \
-  do {                                          \
-  } while (0)
-#define P1_PrintSSLError(context, x, ret) \
-  do {                                    \
-  } while (0)
-#elif defined(POLARIS_USE_TLS)
-static void __P1_PrintSSLError(int line, PolarisContext_t* context,
+#define P1_PrintError(x, ...) \
+  P1_PrintMessage(POLARIS_LOG_LEVEL_ERROR, x, ##__VA_ARGS__)
+#define P1_PrintWarning(x, ...) \
+  P1_PrintMessage(POLARIS_LOG_LEVEL_WARNING, x, ##__VA_ARGS__)
+#define P1_PrintInfo(x, ...) \
+  P1_PrintMessage(POLARIS_LOG_LEVEL_INFO, x, ##__VA_ARGS__)
+#define P1_PrintDebug(x, ...) \
+  P1_PrintMessage(POLARIS_LOG_LEVEL_DEBUG, x, ##__VA_ARGS__)
+#define P1_PrintTrace(x, ...) \
+  P1_PrintMessage(POLARIS_LOG_LEVEL_TRACE, x, ##__VA_ARGS__)
+
+#if POLARIS_NO_PRINT
+#  define P1_PrintReadWriteError(context, x, ret) P1_NOOP
+#  define P1_DebugPrintReadWriteError(context, x, ret) P1_NOOP
+#  define P1_PrintSSLError(context, x, ret) P1_NOOP
+#elif POLARIS_USE_TLS
+static void __P1_PrintSSLError(int level, int line, PolarisContext_t* context,
                                const char* message, int ret) {
   SSL_load_error_strings();
   int ssl_error = SSL_get_error(context->ssl, ret);
   if (ssl_error == SSL_ERROR_SYSCALL) {
-    PrintTime();
-    P1_fprintf(
-        stderr, " polaris.c:%d] %s. [error=%s (syscall: errno=%d; %s)]\n", line,
-        message, strerror(errno), errno, ERR_error_string(ssl_error, NULL));
+    P1_DoPrint(line, level, "%s. [error=%s (syscall: errno=%d; %s)]", message,
+               strerror(errno), errno, ERR_error_string(ssl_error, NULL));
   } else {
     // Note: OpenSSL has a function sort of like strerror(), SSL_error_string(),
     // but in practice its output is less than helpful most of the time. We'll
@@ -162,28 +209,27 @@ static void __P1_PrintSSLError(int line, PolarisContext_t* context,
         break;
     }
 
-    PrintTime();
-    P1_fprintf(stderr, " polaris.c:%d] %s. [error=%s (%d; %s)]\n", line,
-               message, error_name, ssl_error,
-               ERR_error_string(ssl_error, NULL));
+    P1_DoPrint(line, level, "%s. [error=%s (%d; %s)]", message, error_name,
+               ssl_error, ERR_error_string(ssl_error, NULL));
   }
 }
 
-#define P1_PrintReadWriteError(context, x, ret) \
-  __P1_PrintSSLError(__LINE__, context, x, ret)
-#define P1_PrintSSLError(context, x, ret) \
-  __P1_PrintSSLError(__LINE__, context, x, ret)
-#else
-#define P1_PrintReadWriteError(context, x, ret) P1_PrintError(x, ret)
-#define P1_PrintSSLError(context, x, ret) \
-  do {                                    \
-  } while (0)
-#endif
-
-#define P1_DebugPrintReadWriteError(context, x, ret) \
-  if (__log_level >= POLARIS_LOG_LEVEL_DEBUG) {      \
-    P1_PrintReadWriteError(context, x, ret);         \
-  }
+#  define P1_PrintReadWriteError(context, x, ret) \
+    __P1_PrintSSLError(POLARIS_LOG_LEVEL_ERROR, __LINE__, context, x, ret)
+#  define P1_DebugPrintReadWriteError(context, x, ret)                        \
+    if (__log_level >= POLARIS_LOG_LEVEL_DEBUG) {                             \
+      __P1_PrintSSLError(POLARIS_LOG_LEVEL_DEBUG, __LINE__, context, x, ret); \
+    }
+#  define P1_PrintSSLError(context, x, ret) \
+    __P1_PrintSSLError(POLARIS_LOG_LEVEL_ERROR, __LINE__, context, x, ret)
+#else  // !POLARIS_NO_PRINT && !POLARIS_USE_TLS
+#  define P1_PrintReadWriteError(context, x, ret) P1_PrintErrno(x, ret)
+#  define P1_DebugPrintReadWriteError(context, x, ret)     \
+    if (__log_level >= POLARIS_LOG_LEVEL_DEBUG) {          \
+      P1_PrintErrnoLevel(POLARIS_LOG_LEVEL_DEBUG, x, ret); \
+    }
+#  define P1_PrintSSLError(context, x, ret) P1_NOOP
+#endif  // POLARIS_NO_PRINT / POLARIS_USE_TLS
 
 static int ValidateUniqueID(const char* unique_id);
 
@@ -201,14 +247,14 @@ static void CloseSocket(PolarisContext_t* context, int destroy_context);
 /******************************************************************************/
 int Polaris_Init(PolarisContext_t* context) {
   if (POLARIS_RECV_BUFFER_SIZE < POLARIS_MAX_HTTP_MESSAGE_SIZE) {
-    P1_Print(
+    P1_PrintWarning(
         "Warning: Receive buffer smaller than expected authentication "
-        "response.\n");
+        "response.");
   }
 
   if (POLARIS_SEND_BUFFER_SIZE < POLARIS_MAX_MESSAGE_SIZE) {
-    P1_Print(
-        "Warning: Send buffer smaller than max expected outbound packet.\n");
+    P1_PrintWarning(
+        "Warning: Send buffer smaller than max expected outbound packet.");
   }
 
   context->socket = P1_INVALID_SOCKET;
@@ -236,8 +282,15 @@ void Polaris_Free(PolarisContext_t* context) { CloseSocket(context, 1); }
 
 /******************************************************************************/
 void Polaris_SetLogLevel(int log_level) {
-#if !defined(POLARIS_NO_PRINT)
+#if !POLARIS_NO_PRINT
   __log_level = log_level;
+#endif
+}
+
+/******************************************************************************/
+void Polaris_SetPrintCallback(PolarisPrintCallback_t callback) {
+#if !POLARIS_NO_PRINT
+  __print_callback = callback;
 #endif
 }
 
@@ -252,7 +305,7 @@ int Polaris_AuthenticateTo(PolarisContext_t* context, const char* api_key,
                            const char* unique_id, const char* api_url) {
   // Sanity check the inputs.
   if (strlen(api_key) == 0) {
-    P1_Print("API key must not be empty.\n");
+    P1_PrintError("API key must not be empty.");
     return POLARIS_ERROR;
   }
 
@@ -279,13 +332,12 @@ int Polaris_AuthenticateTo(PolarisContext_t* context, const char* api_key,
                               POLARIS_RECV_BUFFER_SIZE, AUTH_REQUEST_TEMPLATE,
                               api_key, unique_id == NULL ? "" : unique_id);
   if (content_size < 0) {
-    P1_Print("Error populating authentication request payload.\n");
+    P1_PrintError("Error populating authentication request payload.");
     return POLARIS_NOT_ENOUGH_SPACE;
   }
 
-  P1_DebugPrint(
-      "Sending auth request. [api_key=%.7s..., unique_id=%s, url=%s]\n",
-      api_key, unique_id, api_url);
+  P1_PrintDebug("Sending auth request. [api_key=%.7s..., unique_id=%s, url=%s]",
+                api_key, unique_id, api_url);
   context->auth_token[0] = '\0';
 #ifdef POLARIS_USE_TLS
   int status_code = SendPOSTRequest(context, api_url, 443, "/api/v1/auth/token",
@@ -295,7 +347,7 @@ int Polaris_AuthenticateTo(PolarisContext_t* context, const char* api_key,
                                     context->recv_buffer, (size_t)content_size);
 #endif
   if (status_code < 0) {
-    P1_Print("Error sending authentication request.\n");
+    P1_PrintError("Error sending authentication request.");
     return status_code;
   }
 
@@ -304,24 +356,24 @@ int Polaris_AuthenticateTo(PolarisContext_t* context, const char* api_key,
     const char* token_start =
         strstr((char*)context->recv_buffer, "\"access_token\":\"");
     if (token_start == NULL) {
-      P1_Print("Authentication token not found in response.\n");
+      P1_PrintError("Authentication token not found in response.");
       return POLARIS_AUTH_ERROR;
     } else {
       token_start += 16;
       if (sscanf(token_start, "%" STR(POLARIS_MAX_TOKEN_SIZE) "[^\"]s",
                  context->auth_token) != 1) {
-        P1_Print("Authentication token not found in response.\n");
+        P1_PrintError("Authentication token not found in response.");
         return POLARIS_AUTH_ERROR;
       } else {
-        P1_DebugPrint("Received access token: %s\n", context->auth_token);
+        P1_PrintDebug("Received access token: %s", context->auth_token);
         return POLARIS_SUCCESS;
       }
     }
   } else if (status_code == 403) {
-    P1_Print("Authentication failed. Please check your API key.\n");
+    P1_PrintError("Authentication failed. Please check your API key.");
     return POLARIS_FORBIDDEN;
   } else {
-    P1_Print("Unexpected authentication response (%d).\n", status_code);
+    P1_PrintError("Unexpected authentication response (%d).", status_code);
     return POLARIS_AUTH_ERROR;
   }
 }
@@ -330,15 +382,14 @@ int Polaris_AuthenticateTo(PolarisContext_t* context, const char* api_key,
 int Polaris_SetAuthToken(PolarisContext_t* context, const char* auth_token) {
   size_t length = strlen(auth_token);
   if (length == 0) {
-    P1_Print("User-provided auth token must not be empty.\n");
+    P1_PrintError("User-provided auth token must not be empty.");
     return POLARIS_ERROR;
   } else if (length > POLARIS_MAX_TOKEN_SIZE) {
-    P1_Print("User-provided auth token is too long.\n");
+    P1_PrintError("User-provided auth token is too long.");
     return POLARIS_NOT_ENOUGH_SPACE;
   } else {
     memcpy(context->auth_token, auth_token, length + 1);
-    P1_DebugPrint("Using user-specified access token: %s\n",
-                  context->auth_token);
+    P1_PrintDebug("Using user-specified access token: %s", context->auth_token);
     return POLARIS_SUCCESS;
   }
 }
@@ -358,7 +409,7 @@ int Polaris_Connect(PolarisContext_t* context) {
 int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
                       int endpoint_port) {
   if (context->auth_token[0] == '\0') {
-    P1_Print("Error: Auth token not specified.\n");
+    P1_PrintError("Error: Auth token not specified.");
     return POLARIS_AUTH_ERROR;
   }
 
@@ -369,8 +420,8 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
   context->data_request_sent = 0;
   int ret = OpenSocket(context, endpoint_url, endpoint_port);
   if (ret != POLARIS_SUCCESS) {
-    P1_Print("Error connecting to corrections endpoint: tcp://%s:%d.\n",
-             endpoint_url, endpoint_port);
+    P1_PrintError("Error connecting to corrections endpoint: tcp://%s:%d.",
+                  endpoint_url, endpoint_port);
     return ret;
   }
 
@@ -385,7 +436,7 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
   memmove(header + 1, context->auth_token, token_length);
   size_t message_size = Polaris_PopulateChecksum(context->recv_buffer);
 
-  P1_DebugPrint("Sending access token message. [size=%u B]\n",
+  P1_PrintDebug("Sending access token message. [size=%u B]",
                 (unsigned)message_size);
 #ifdef POLARIS_USE_TLS
   ret = SSL_write(context->ssl, context->recv_buffer, message_size);
@@ -419,8 +470,8 @@ int Polaris_ConnectWithoutAuth(PolarisContext_t* context,
   context->data_request_sent = 0;
   ret = OpenSocket(context, endpoint_url, endpoint_port);
   if (ret != POLARIS_SUCCESS) {
-    P1_Print("Error connecting to corrections endpoint: tcp://%s:%d.\n",
-             endpoint_url, endpoint_port);
+    P1_PrintError("Error connecting to corrections endpoint: tcp://%s:%d.",
+                  endpoint_url, endpoint_port);
     return ret;
   }
 
@@ -432,7 +483,7 @@ int Polaris_ConnectWithoutAuth(PolarisContext_t* context,
     memmove(header + 1, unique_id, id_length);
     size_t message_size = Polaris_PopulateChecksum(context->send_buffer);
 
-    P1_DebugPrint("Sending unique ID message. [size=%u B]\n",
+    P1_PrintDebug("Sending unique ID message. [size=%u B]",
                   (unsigned)message_size);
 #ifdef POLARIS_USE_TLS
     ret = SSL_write(context->ssl, context->send_buffer, message_size);
@@ -454,7 +505,7 @@ int Polaris_ConnectWithoutAuth(PolarisContext_t* context,
 /******************************************************************************/
 void Polaris_Disconnect(PolarisContext_t* context) {
   if (context->socket != P1_INVALID_SOCKET) {
-    P1_DebugPrint("Closing Polaris connection.\n");
+    P1_PrintDebug("Closing Polaris connection.");
     context->disconnected = 1;
 #ifdef POLARIS_USE_TLS
     SSL_shutdown(context->ssl);
@@ -480,12 +531,12 @@ void Polaris_SetRTCMCallback(PolarisContext_t* context,
 int Polaris_SendECEFPosition(PolarisContext_t* context, double x_m, double y_m,
                              double z_m) {
   if (context->socket == P1_INVALID_SOCKET) {
-    P1_Print("Error: Polaris connection not currently open.\n");
+    P1_PrintError("Error: Polaris connection not currently open.");
     return POLARIS_SOCKET_ERROR;
   }
 #ifdef POLARIS_USE_TLS
   else if (context->ssl_ctx == NULL || context->ssl == NULL) {
-    P1_Print("Error: Polaris SSL context not available.\n");
+    P1_PrintError("Error: Polaris SSL context not available.");
     return POLARIS_SOCKET_ERROR;
   }
 #endif
@@ -500,13 +551,12 @@ int Polaris_SendECEFPosition(PolarisContext_t* context, double x_m, double y_m,
 
 #ifdef P1_FREERTOS
   // Floating point printf() not available in FreeRTOS.
-  P1_DebugPrint(
-      "Sending ECEF position. [size=%u B, position=[%d, %d, %d] cm]\n",
-      (unsigned)message_size, le32toh(payload->x_cm), le32toh(payload->y_cm),
-      le32toh(payload->z_cm));
+  P1_PrintDebug("Sending ECEF position. [size=%u B, position=[%d, %d, %d] cm]",
+                (unsigned)message_size, le32toh(payload->x_cm),
+                le32toh(payload->y_cm), le32toh(payload->z_cm));
 #else
-  P1_DebugPrint(
-      "Sending ECEF position. [size=%u B, position=[%.2f, %.2f, %.2f]]\n",
+  P1_PrintDebug(
+      "Sending ECEF position. [size=%u B, position=[%.2f, %.2f, %.2f]]",
       (unsigned)message_size, x_m, y_m, z_m);
 #endif
   P1_PrintData(context->send_buffer, message_size);
@@ -530,12 +580,12 @@ int Polaris_SendECEFPosition(PolarisContext_t* context, double x_m, double y_m,
 int Polaris_SendLLAPosition(PolarisContext_t* context, double latitude_deg,
                             double longitude_deg, double altitude_m) {
   if (context->socket == P1_INVALID_SOCKET) {
-    P1_Print("Error: Polaris connection not currently open.\n");
+    P1_PrintError("Error: Polaris connection not currently open.");
     return POLARIS_SOCKET_ERROR;
   }
 #ifdef POLARIS_USE_TLS
   else if (context->ssl_ctx == NULL || context->ssl == NULL) {
-    P1_Print("Error: Polaris SSL context not available.\n");
+    P1_PrintError("Error: Polaris SSL context not available.");
     return POLARIS_SOCKET_ERROR;
   }
 #endif
@@ -553,13 +603,13 @@ int Polaris_SendLLAPosition(PolarisContext_t* context, double latitude_deg,
 
 #ifdef P1_FREERTOS
   // Floating point printf() not available in FreeRTOS.
-  P1_DebugPrint(
-      "Sending LLA position. [size=%u B, position=[%d.0e-7, %d.0e-7, %d]]\n",
+  P1_PrintDebug(
+      "Sending LLA position. [size=%u B, position=[%d.0e-7, %d.0e-7, %d]]",
       (unsigned)message_size, le32toh(payload->latitude_dege7),
       le32toh(payload->longitude_dege7), le32toh(payload->altitude_mm));
 #else
-  P1_DebugPrint(
-      "Sending LLA position. [size=%u B, position=[%.6f, %.6f, %.2f]]\n",
+  P1_PrintDebug(
+      "Sending LLA position. [size=%u B, position=[%.6f, %.6f, %.2f]]",
       (unsigned)message_size, latitude_deg, longitude_deg, altitude_m);
 #endif
   P1_PrintData(context->send_buffer, message_size);
@@ -582,12 +632,12 @@ int Polaris_SendLLAPosition(PolarisContext_t* context, double latitude_deg,
 /******************************************************************************/
 int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id) {
   if (context->socket == P1_INVALID_SOCKET) {
-    P1_Print("Error: Polaris connection not currently open.\n");
+    P1_PrintError("Error: Polaris connection not currently open.");
     return POLARIS_SOCKET_ERROR;
   }
 #ifdef POLARIS_USE_TLS
   else if (context->ssl_ctx == NULL || context->ssl == NULL) {
-    P1_Print("Error: Polaris SSL context not available.\n");
+    P1_PrintError("Error: Polaris SSL context not available.");
     return POLARIS_SOCKET_ERROR;
   }
 #endif
@@ -598,7 +648,7 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id) {
   memmove(header + 1, beacon_id, id_length);
   size_t message_size = Polaris_PopulateChecksum(context->send_buffer);
 
-  P1_DebugPrint("Sending beacon request. [size=%u B, beacon='%s']\n",
+  P1_PrintDebug("Sending beacon request. [size=%u B, beacon='%s']",
                 (unsigned)message_size, beacon_id);
   P1_PrintData(context->send_buffer, message_size);
 
@@ -623,16 +673,16 @@ int Polaris_Work(PolarisContext_t* context) {
   // in case this function is called after Polaris_Disconnect() to clean up the
   // SSL session.
   if (context->disconnected) {
-    P1_DebugPrint("Connection terminated by user request.\n");
+    P1_PrintDebug("Connection terminated by user request.");
     CloseSocket(context, 1);
     return POLARIS_CONNECTION_CLOSED;
   } else if (context->socket == P1_INVALID_SOCKET) {
-    P1_Print("Error: Polaris connection not currently open.\n");
+    P1_PrintError("Error: Polaris connection not currently open.");
     CloseSocket(context, 1);
     return POLARIS_SOCKET_ERROR;
   }
 
-  P1_DebugPrint("Listening for data block.\n");
+  P1_PrintDebug("Listening for data block.");
 
 #ifdef POLARIS_USE_TLS
   P1_RecvSize_t bytes_read =
@@ -651,7 +701,7 @@ int Polaris_Work(PolarisContext_t* context) {
   // we set bytes_read to -1 and set errno accordingly.
   //
   // Later, we will need to restore them both before calling
-  // P1_PrintReadWriteError(). That function and P1_PrintError(), which it calls
+  // P1_PrintReadWriteError(). That function and P1_PrintErrno(), which it calls
   // if TLS is disabled, expect to be provided the return code, not errno.
   P1_RecvSize_t original_bytes_read = bytes_read;
   int original_errno = errno;
@@ -684,8 +734,8 @@ int Polaris_Work(PolarisContext_t* context) {
 #endif
 
 #ifdef P1_FREERTOS
-    bytes_read = original_bytes_read;
-    errno = original_errno;
+      bytes_read = original_bytes_read;
+      errno = original_errno;
 #endif
       if (context->disconnected) {
         P1_DebugPrintReadWriteError(context, "Socket read timed out",
@@ -712,7 +762,7 @@ int Polaris_Work(PolarisContext_t* context) {
     // Was the connection closed by the user?
     if (context->disconnected) {
       if (bytes_read == 0 || errno == EINTR || errno == ENOTCONN) {
-        P1_DebugPrint("Connection terminated by user request.\n");
+        P1_PrintDebug("Connection terminated by user request.");
       } else {
 #ifdef P1_FREERTOS
         bytes_read = original_bytes_read;
@@ -731,7 +781,7 @@ int Polaris_Work(PolarisContext_t* context) {
         // closed the connection without error. Once connected, we expect the
         // stream to stay open indefinitely under normal circumstances. The
         // server should not have a reason to terminate the connection.
-        P1_Print("Warning: Connection terminated remotely.\n");
+        P1_PrintWarning("Warning: Connection terminated remotely.");
       } else {
 #ifdef P1_FREERTOS
         bytes_read = original_bytes_read;
@@ -775,31 +825,31 @@ int Polaris_Work(PolarisContext_t* context) {
     // Not authenticated, but response received: likely server indicated an
     // error.
     else if (context->total_bytes_received > 0) {
-      P1_Print(
+      P1_PrintWarning(
           "Warning: Polaris connection closed with an error response. Is "
-          "your authentication token valid?\n");
+          "your authentication token valid?");
       ret = POLARIS_FORBIDDEN;
     }
     // Data request sent but no response received: authentication (presumably)
     // accepted but position likely out of network.
     else if (context->data_request_sent) {
-      P1_Print(
+      P1_PrintWarning(
           "Warning: Polaris connection closed and no response received "
-          "from server.\n");
+          "from server.");
     }
     // Data request not sent and no response received: authentication
     // (presumably) accepted.
     else {
-      P1_Print(
+      P1_PrintWarning(
           "Warning: Polaris connection closed and no position or beacon "
-          "request issued.\n");
+          "request issued.");
     }
 
     CloseSocket(context, 1);
     return ret;
   } else {
     context->total_bytes_received += bytes_read;
-    P1_DebugPrint("Received %u bytes. [%" PRIu64 " bytes total]\n",
+    P1_PrintDebug("Received %u bytes. [%" PRIu64 " bytes total]",
                   (unsigned)bytes_read,
                   (uint64_t)context->total_bytes_received);
     P1_PrintData(context->recv_buffer, bytes_read);
@@ -815,8 +865,7 @@ int Polaris_Work(PolarisContext_t* context) {
     // data will be received. That does not necessarily imply an authentication
     // failure.
     if (!context->authenticated && context->total_bytes_received > 270) {
-      P1_DebugPrint(
-          "Sufficient data received. Authentication token accepted.\n");
+      P1_PrintDebug("Sufficient data received. Authentication token accepted.");
       context->authenticated = POLARIS_AUTHENTICATED;
     }
 
@@ -828,7 +877,7 @@ int Polaris_Work(PolarisContext_t* context) {
     }
 
     if (context->disconnected) {
-      P1_DebugPrint("Connection terminated by user.\n");
+      P1_PrintDebug("Connection terminated by user.");
       return POLARIS_SUCCESS;
     } else {
       return (int)bytes_read;
@@ -842,16 +891,16 @@ int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
   // in case this function is called after Polaris_Disconnect() to clean up the
   // SSL session.
   if (context->disconnected) {
-    P1_DebugPrint("Connection terminated by user request.\n");
+    P1_PrintDebug("Connection terminated by user request.");
     CloseSocket(context, 1);
     return POLARIS_SUCCESS;
   } else if (context->socket == P1_INVALID_SOCKET) {
-    P1_Print("Error: Polaris connection not currently open.\n");
+    P1_PrintError("Error: Polaris connection not currently open.");
     CloseSocket(context, 1);
     return POLARIS_SOCKET_ERROR;
   }
 
-  P1_DebugPrint("Listening for data.\n");
+  P1_PrintDebug("Listening for data.");
 
   P1_TimeValue_t last_read_time;
   P1_GetCurrentTime(&last_read_time);
@@ -873,9 +922,10 @@ int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
       P1_TimeValue_t current_time;
       P1_GetCurrentTime(&current_time);
       int elapsed_ms = P1_GetElapsedMS(&last_read_time, &current_time);
-      P1_DebugPrint("%d ms elapsed since last data arrived.\n", elapsed_ms);
+      P1_PrintDebug("%d ms elapsed since last data arrived.", elapsed_ms);
       if (elapsed_ms >= connection_timeout_ms) {
-        P1_Print("Warning: Connection timed out after %d ms.\n", elapsed_ms);
+        P1_PrintWarning("Warning: Connection timed out after %d ms.",
+                        elapsed_ms);
         CloseSocket(context, 1);
         ret = POLARIS_TIMED_OUT;
         break;
@@ -892,7 +942,7 @@ int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
       P1_GetCurrentTime(&last_read_time);
 
       if (context->disconnected) {
-        P1_DebugPrint("Connection terminated by user.\n");
+        P1_PrintDebug("Connection terminated by user.");
         CloseSocket(context, 1);
         ret = POLARIS_SUCCESS;
         break;
@@ -900,7 +950,7 @@ int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
     }
   }
 
-  P1_DebugPrint("Received %" PRIu64 " total bytes.\n",
+  P1_PrintDebug("Received %" PRIu64 " total bytes.",
                 (uint64_t)context->total_bytes_received);
   if (ret == POLARIS_CONNECTION_CLOSED && context->disconnected) {
     return POLARIS_SUCCESS;
@@ -917,15 +967,15 @@ static int ValidateUniqueID(const char* unique_id) {
     // autogenerated on the back end.
     return POLARIS_SUCCESS;
   } else if (length > POLARIS_MAX_UNIQUE_ID_SIZE) {
-    P1_Print("Unique ID must be a maximum of %d characters. [id='%s']\n",
-             POLARIS_MAX_UNIQUE_ID_SIZE, unique_id);
+    P1_PrintError("Unique ID must be a maximum of %d characters. [id='%s']",
+                  POLARIS_MAX_UNIQUE_ID_SIZE, unique_id);
     return POLARIS_ERROR;
   } else {
     for (const char* ptr = unique_id; *ptr != '\0'; ++ptr) {
       char c = *ptr;
       if (c != '-' && c != '_' && (c < 'A' || c > 'Z') &&
           (c < 'a' || c > 'z') && (c < '0' || c > '9')) {
-        P1_Print("Invalid unique ID specified. [id='%s']\n", unique_id);
+        P1_PrintError("Invalid unique ID specified. [id='%s']", unique_id);
         return POLARIS_ERROR;
       }
     }
@@ -953,14 +1003,14 @@ static inline int P1_SetAddress(const char* hostname, int port,
                                 P1_SocketAddrV4_t* result) {
   struct hostent* host_info = gethostbyname(hostname);
   if (host_info == NULL) {
-    P1_Print("Unable to resolve \"%s\": %s\n", hostname, hstrerror(h_errno));
+    P1_PrintError("Unable to resolve \"%s\": %s", hostname, hstrerror(h_errno));
     return -1;
   }
   // IPv6 not currently supported by the API.
   else if (host_info->h_addrtype != AF_INET) {
-    P1_Print(
+    P1_PrintWarning(
         "Warning: DNS lookup for \"%s\" returned an IPv6 address (not "
-        "supported).\n",
+        "supported).",
         hostname);
     // Explicitly set h_errno to _something_ (gethostbyname() doesn't touch
     // h_errno on success).
@@ -980,31 +1030,31 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
                       int endpoint_port) {
   // Is the connection already open?
   if (context->socket != P1_INVALID_SOCKET) {
-    P1_Print("Error: socket already open.\n");
+    P1_PrintError("Error: socket already open.");
     return POLARIS_ERROR;
   }
 #ifdef POLARIS_USE_TLS
   else if (context->ssl_ctx != NULL || context->ssl != NULL) {
-    P1_Print("Error: SSL context not freed.\n");
+    P1_PrintError("Error: SSL context not freed.");
     return POLARIS_ERROR;
   }
 #endif
 
 #ifdef POLARIS_USE_TLS
   // Configure TLS.
-  P1_DebugPrint("Configuring TLS context.\n");
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
+  P1_PrintDebug("Configuring TLS context.");
+#  if OPENSSL_VERSION_NUMBER < 0x10100000L
   context->ssl_ctx = SSL_CTX_new(TLSv1_2_client_method());
-#else
+#  else
   context->ssl_ctx = SSL_CTX_new(TLS_client_method());
-#endif
+#  endif
   // we specifically disable older insecure protocols
   SSL_CTX_set_options(context->ssl_ctx, SSL_OP_NO_SSLv2);
   SSL_CTX_set_options(context->ssl_ctx, SSL_OP_NO_SSLv3);
   SSL_CTX_set_options(context->ssl_ctx, SSL_OP_NO_TLSv1);
 
   if (context->ssl_ctx == NULL) {
-    P1_Print("SSL context failed to initialize.\n");
+    P1_PrintError("SSL context failed to initialize.");
     return POLARIS_ERROR;
   }
 #endif
@@ -1012,14 +1062,14 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
   // Open a socket.
   context->socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   if (context->socket < 0) {
-    P1_PrintError("Error creating socket", context->socket);
+    P1_PrintErrno("Error creating socket", context->socket);
     CloseSocket(context, 1);
     return POLARIS_SOCKET_ERROR;
   }
 
-  P1_DebugPrint(
+  P1_PrintDebug(
       "Configuring socket. [socket=%d, read_timeout=%d ms, send_timeout=%d "
-      "ms]\n",
+      "ms]",
       context->socket, POLARIS_RECV_TIMEOUT_MS, POLARIS_SEND_TIMEOUT_MS);
 
   // Set send/receive timeouts.
@@ -1033,18 +1083,18 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
 
 #ifndef P1_FREERTOS
   int flags = fcntl(context->socket, F_GETFL);
-  P1_DebugPrint("Socket flags: 0x%08x\n", flags);
+  P1_PrintDebug("Socket flags: 0x%08x", flags);
 #endif  // P1_FREERTOS
 
   // Lookup the IP of the endpoint used for auth requests.
-  P1_DebugPrint("Performing DNS lookup for '%s'.\n", endpoint_url);
+  P1_PrintDebug("Performing DNS lookup for '%s'.", endpoint_url);
   P1_SocketAddrV4_t address;
   if (P1_SetAddress(endpoint_url, endpoint_port, &address) < 0) {
 #ifdef P1_FREERTOS
-    P1_Print("Error locating address '%s'.\n", endpoint_url);
+    P1_PrintError("Error locating address '%s'.", endpoint_url);
 #else
-    P1_Print("Error locating address '%s'. [error=%s (%d)]\n", endpoint_url,
-             hstrerror(h_errno), h_errno);
+    P1_PrintError("Error locating address '%s'. [error=%s (%d)]", endpoint_url,
+                  hstrerror(h_errno), h_errno);
 #endif
     CloseSocket(context, 1);
     return POLARIS_SOCKET_ERROR;
@@ -1056,22 +1106,22 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
 #else
   uint32_t ip_host_endian = ntohl(address.sin_addr.s_addr);
 #endif
-  P1_DebugPrint("Connecting to 'tcp://%d.%d.%d.%d:%d'.\n",
+  P1_PrintDebug("Connecting to 'tcp://%d.%d.%d.%d:%d'.",
                 (ip_host_endian >> 24) & 0xFF, (ip_host_endian >> 16) & 0xFF,
                 (ip_host_endian >> 8) & 0xFF, ip_host_endian & 0xFF,
                 endpoint_port);
   int ret =
       connect(context->socket, (P1_SocketAddr_t*)&address, sizeof(address));
   if (ret < 0) {
-    P1_PrintError("Error connecting to endpoint", ret);
+    P1_PrintErrno("Error connecting to endpoint", ret);
     CloseSocket(context, 1);
     return POLARIS_SOCKET_ERROR;
   }
-  P1_DebugPrint("Connected successfully.\n");
+  P1_PrintDebug("Connected successfully.");
 
 #ifdef POLARIS_USE_TLS
   // Create new SSL connection state and attach the socket.
-  P1_DebugPrint("Establishing TLS connection.\n");
+  P1_PrintDebug("Establishing TLS connection.");
   context->ssl = SSL_new(context->ssl_ctx);
   SSL_set_fd(context->ssl, context->socket);
 
@@ -1082,7 +1132,7 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
   // Perform SSL handhshake.
   ret = SSL_connect(context->ssl);
   if (ret != 1) {
-#if !defined(P1_NO_PRINT)
+#  if !P1_NO_PRINT
     // Note: We intentionally reuse the receive buffer to store the error
     // message to be displayed to avoid requiring additional stack here. At this
     // point we're trying to open the socket, so there should be nobody actively
@@ -1091,23 +1141,22 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
              "TLS handshake failed for tcp://%s:%d", endpoint_url,
              endpoint_port);
     P1_PrintSSLError(context, (char*)context->recv_buffer, ret);
-#endif  // !defined(P1_NO_PRINT)
+#  endif  // !P1_NO_PRINT
     CloseSocket(context, 1);
     return POLARIS_SOCKET_ERROR;
   }
 
   const SSL_CIPHER* c = SSL_get_current_cipher(context->ssl);
   if (c == NULL) {
-    P1_Print(
+    P1_PrintError(
         "Server failed to negotiate encryption cipher. Verify that endpoint "
-        "tcp://%s:%d supports TLS 1.2 or better.\n",
+        "tcp://%s:%d supports TLS 1.2 or better.",
         endpoint_url, endpoint_port);
     CloseSocket(context, 1);
     return POLARIS_ERROR;
   }
 
-  P1_DebugPrint("Connected with %s encryption.\n",
-                SSL_get_cipher(context->ssl));
+  P1_PrintDebug("Connected with %s encryption.", SSL_get_cipher(context->ssl));
   ShowCerts(context->ssl);
 #endif
 
@@ -1118,7 +1167,7 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
 void CloseSocket(PolarisContext_t* context, int destroy_context) {
 #ifdef POLARIS_USE_TLS
   if (destroy_context && context->ssl != NULL) {
-    P1_DebugPrint("Shutting down TLS context.\n");
+    P1_PrintDebug("Shutting down TLS context.");
     if (SSL_get_shutdown(context->ssl) == 0) {
       SSL_shutdown(context->ssl);
     }
@@ -1129,14 +1178,14 @@ void CloseSocket(PolarisContext_t* context, int destroy_context) {
 #endif
 
   if (context->socket != P1_INVALID_SOCKET) {
-    P1_DebugPrint("Closing socket.\n");
+    P1_PrintDebug("Closing socket.");
     close(context->socket);
     context->socket = P1_INVALID_SOCKET;
   }
 
 #ifdef POLARIS_USE_TLS
   if (destroy_context && context->ssl_ctx != NULL) {
-    P1_DebugPrint("Freeing TLS context.\n");
+    P1_PrintDebug("Freeing TLS context.");
     SSL_CTX_free(context->ssl_ctx);
     context->ssl_ctx = NULL;
   }
@@ -1187,7 +1236,7 @@ static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
   // larger than the send buffer. We currently only send HTTP requests during
   // authentication, before data is coming in.
   if (POLARIS_RECV_BUFFER_SIZE < header_size + content_length + 1) {
-    P1_Print("Error populating POST request: buffer too small.\n");
+    P1_PrintError("Error populating POST request: buffer too small.");
     CloseSocket(context, 1);
     return POLARIS_NOT_ENOUGH_SPACE;
   }
@@ -1203,7 +1252,7 @@ static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
                address, endpoint_url, port_str, content_length_str);
   if (header_size < 0) {
     // This shouldn't happen.
-    P1_Print("Error populating POST request.\n");
+    P1_PrintError("Error populating POST request.");
     CloseSocket(context, 1);
     return POLARIS_ERROR;
   }
@@ -1218,7 +1267,7 @@ static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
     return ret;
   }
 
-  P1_DebugPrint("Sending POST request. [size=%u B]\n", (unsigned)message_size);
+  P1_PrintDebug("Sending POST request. [size=%u B]", (unsigned)message_size);
 #ifdef POLARIS_USE_TLS
   ret = SSL_write(context->ssl, context->recv_buffer, message_size);
 #else
@@ -1260,7 +1309,7 @@ static int GetHTTPResponse(PolarisContext_t* context) {
   // Unlike POSIX recv(), which returns <0 and sets ETIMEDOUT on a socket read
   // timeout, FreeRTOS returns 0.
   if (bytes_read == 0) {
-    P1_Print("Socket timed out waiting for HTTP response.\n");
+    P1_PrintWarning("Socket timed out waiting for HTTP response.");
     CloseSocket(context, 1);
     return POLARIS_SEND_ERROR;
   }
@@ -1291,7 +1340,7 @@ static int GetHTTPResponse(PolarisContext_t* context) {
   // context->ssl, which is freed by CloseSocket().
   CloseSocket(context, 1);
 
-  P1_DebugPrint("Received HTTP response. [size=%u B]\n", (unsigned)total_bytes);
+  P1_PrintDebug("Received HTTP response. [size=%u B]", (unsigned)total_bytes);
 
   // Append a null terminator to the response.
   context->recv_buffer[total_bytes++] = '\0';
@@ -1299,7 +1348,7 @@ static int GetHTTPResponse(PolarisContext_t* context) {
   // Extract the status code.
   int status_code;
   if (sscanf((char*)context->recv_buffer, "HTTP/1.1 %d", &status_code) != 1) {
-    P1_Print("Invalid HTTP response:\n\n%s", context->recv_buffer);
+    P1_PrintError("Invalid HTTP response:\n\n%s", context->recv_buffer);
     return POLARIS_SEND_ERROR;
   }
 
@@ -1311,10 +1360,10 @@ static int GetHTTPResponse(PolarisContext_t* context) {
     size_t content_length =
         total_bytes - (content_start - (char*)context->recv_buffer);
     memmove(context->recv_buffer, content_start, content_length);
-    P1_DebugPrint("Response content:\n%s\n", context->recv_buffer);
+    P1_PrintDebug("Response content:\n%s", context->recv_buffer);
   } else {
     // No content in response.
-    P1_DebugPrint("No content in response.\n");
+    P1_PrintDebug("No content in response.");
     context->recv_buffer[0] = '\0';
   }
 
@@ -1322,29 +1371,46 @@ static int GetHTTPResponse(PolarisContext_t* context) {
 }
 
 /******************************************************************************/
-#if !defined(P1_NO_PRINT)
+#if !P1_NO_PRINT
 void P1_PrintData(const uint8_t* buffer, size_t length) {
   if (__log_level < POLARIS_LOG_LEVEL_TRACE) {
     return;
   }
 
+  char str[64] = {'\0'};
+  int str_length = 0;
   for (size_t i = 0; i < length; ++i) {
     if (i % 16 != 0) {
-      P1_fprintf(stderr, " ");
+      str[str_length++] = ' ';
     }
 
-    P1_fprintf(stderr, "%02x", buffer[i]);
+    str_length +=
+        snprintf(str + str_length, sizeof(str - str_length), "%02x", buffer[i]);
 
     if (i % 16 == 15) {
-      P1_fprintf(stderr, "\n");
+      str[str_length++] = '\0';
+      if (__print_callback) {
+        __print_callback("polaris.c", __LINE__, POLARIS_LOG_LEVEL_TRACE, str);
+      } else {
+        P1_fprintf(stderr, "%s", str);
+      }
+      str_length = 0;
     }
   }
-  P1_fprintf(stderr, "\n");
+
+  if (str_length != 0) {
+    str[str_length++] = '\0';
+    if (__print_callback) {
+      __print_callback("polaris.c", __LINE__, POLARIS_LOG_LEVEL_TRACE, str);
+    } else {
+      P1_fprintf(stderr, "%s\n", str);
+    }
+  }
 }
 #endif
 
 /******************************************************************************/
-#if !defined(P1_NO_PRINT) && defined(POLARIS_USE_TLS)
+#if !P1_NO_PRINT && POLARIS_USE_TLS
 void ShowCerts(SSL* ssl) {
   if (__log_level < POLARIS_LOG_LEVEL_DEBUG) {
     return;
@@ -1353,13 +1419,13 @@ void ShowCerts(SSL* ssl) {
   X509* cert = SSL_get_peer_certificate(ssl);
   if (cert != NULL) {
     char line[256];
-    P1_DebugPrint("Server certificates:\n");
+    P1_PrintDebug("Server certificates:");
     X509_NAME_oneline(X509_get_subject_name(cert), line, sizeof(line));
-    P1_DebugPrint("  Subject: %s\n", line);
+    P1_PrintDebug("  Subject: %s", line);
     X509_NAME_oneline(X509_get_issuer_name(cert), line, sizeof(line));
-    P1_DebugPrint("  Issuer: %s\n", line);
+    P1_PrintDebug("  Issuer: %s", line);
   } else {
-    P1_DebugPrint("No client certificates configured.\n");
+    P1_PrintDebug("No client certificates configured.");
   }
 }
 #endif
