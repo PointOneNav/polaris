@@ -172,7 +172,7 @@ jobs:
 
     - name: Upload artifact
       if: matrix.tool == 'bazel'
-      uses: actions/upload-artifact@v1
+      uses: actions/upload-artifact@v4.4.3
       with:
         path: polaris_examples.tar.gz
         name: polaris_examples.cpp.${{ matrix.arch }}
@@ -302,7 +302,7 @@ jobs:
 
     - name: Upload artifact
       if: matrix.tool == 'bazel'
-      uses: actions/upload-artifact@v1
+      uses: actions/upload-artifact@v4.4.3
       with:
         path: c/polaris_examples.tar.gz
         name: polaris_examples.c.${{ matrix.arch }}
@@ -340,7 +340,7 @@ jobs:
           - {lang: c, arch: aarch64}
     steps:
     - name: Download artifact
-      uses: actions/download-artifact@v1
+      uses: actions/download-artifact@v4.1.8
       with:
         name: polaris_examples.${{ matrix.lang }}.${{ matrix.arch }}
     - name: Set asset filename
