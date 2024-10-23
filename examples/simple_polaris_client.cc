@@ -33,12 +33,15 @@ DEFINE_string(polaris_unique_id, "",
 DEFINE_string(
     polaris_hostname, "",
     "Specify an alternate hostname to use when connecting to the Polaris "
-    "corrections network. If blank, use the default hostname.");
+    "corrections network. This may be useful when connecting to a regional "
+    "endpoint in the EU or APAC. If blank, use the default hostname.");
 
 DEFINE_string(
     polaris_api_hostname, "",
     "Specify an alternate hostname to use when connecting to the Polaris "
-    "authentication API server. If blank, use the default hostname.");
+    "authentication API server. Specifying a custom API hostname is not "
+    "common, and is intended primarily for development purposes. If blank, use "
+    "the default hostname.");
 
 PolarisClient* polaris_client = nullptr;
 
