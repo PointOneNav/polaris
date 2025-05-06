@@ -26,7 +26,7 @@ int P1_GetUTCOffsetSec(P1_TimeValue_t* time) {
   if (local_time.tm_isdst) {
     utc_offset_sec += 3600;
   }
-  return utc_offset_hours;
+  return utc_offset_sec;
 #endif
 }
 
