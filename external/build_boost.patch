@@ -1,0 +1,9 @@
+--- a/BUILD.boost
++++ b/BUILD.boost
+@@ -346,4 +346,1 @@ boost_library(
+-    deps = BOOST_ATOMIC_DEPS + select({
+-        "@platforms//cpu:x86_64": [":atomic_sse"],
+-        "//conditions:default": [],
+-    }),
++    deps = BOOST_ATOMIC_DEPS,
+ )
