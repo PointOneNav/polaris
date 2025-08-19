@@ -21,15 +21,18 @@ jobs:
         os: [ubuntu-latest]
         tool: [cmake, bazel]
         compiler: [g++]
+        bazel-version: [4.2.2, 6.5.0]
         include:
           - arch: armv7hf
             os: ubuntu-latest
             tool: bazel
             compiler: g++
+            bazel-version: 6.5.0
           - arch: aarch64
             os: ubuntu-latest
             tool: bazel
             compiler: g++
+            bazel-version: 6.5.0
           # Windows not currently supported by C++ library.
           #- arch: x64
           #  os: windows-latest
@@ -126,11 +129,11 @@ jobs:
         make
 
     # Bazel build support.
-    - name: Use Bazel 4.2.2
+    - name: Use Bazel ${{ matrix.bazel-version }}
       if: matrix.tool == 'bazel'
       uses: abhinavsingh/setup-bazel@v3
       with:
-        version: 4.2.2
+        version: ${{ matrix.bazel-version }}
 
     - name: Build Library And Examples (Bazel, Native x64)
       if: matrix.tool == 'bazel' && matrix.arch == 'x64'
@@ -187,6 +190,7 @@ jobs:
         os: [ubuntu-latest]
         tool: [make, cmake, bazel]
         compiler: [g++]
+        bazel-version: [4.2.2, 6.5.0]
         #include:
         #   Windows not currently supported by C library.
         #  - arch: x64
@@ -258,11 +262,11 @@ jobs:
         make
 
     # Bazel build support.
-    - name: Use Bazel 4.2.2
+    - name: Use Bazel ${{ matrix.bazel-version }}
       if: matrix.tool == 'bazel'
       uses: abhinavsingh/setup-bazel@v3
       with:
-        version: 4.2.2
+        version: ${{ matrix.bazel-version }}
 
     - name: Build Library And Examples (Bazel, Native x64)
       if: matrix.tool == 'bazel' && matrix.arch == 'x64'
