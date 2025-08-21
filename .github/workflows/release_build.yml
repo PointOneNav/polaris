@@ -178,9 +178,10 @@ jobs:
         xargs tar czf polaris_examples.tar.gz --transform 's|^bazel-bin|polaris|'
 
     - name: Upload artifact
-      # Only test uploading artifact for recommended bazel version (6.5.0). Without
-      # this the upload artifact action can fail since the artifact already exists
-      # from a previous upload artifact action for different bazel version.
+      # Only upload the compiled artifact for recommended bazel version (6.5.0).
+      # Without this the upload artifact action can fail since the artifact
+      # already exists from a previous upload artifact action for different
+      # bazel version.
       if: matrix.tool == 'bazel' && matrix.bazel-version == '6.5.0'
       uses: actions/upload-artifact@v4.4.3
       with:
@@ -316,9 +317,10 @@ jobs:
         xargs tar czf polaris_examples.tar.gz --transform 's|^bazel-bin|polaris/c|'
 
     - name: Upload artifact
-      # Only test uploading artifact for recommended bazel version (6.5.0). Without
-      # this the upload artifact action can fail since the artifact already exists
-      # from a previous upload artifact action for different bazel version.
+      # Only upload the compiled artifact for recommended bazel version (6.5.0).
+      # Without this the upload artifact action can fail since the artifact
+      # already exists from a previous upload artifact action for different
+      # bazel version.
       if: matrix.tool == 'bazel' && matrix.bazel-version == '6.5.0'
       uses: actions/upload-artifact@v4.4.3
       with:

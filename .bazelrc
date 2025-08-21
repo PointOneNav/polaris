@@ -3,11 +3,13 @@ build:armv7hf --crosstool_top=//compilers:toolchain
 build:armv7hf --host_crosstool_top=@bazel_tools//tools/cpp:toolchain
 build:armv7hf --cpu=armeabi-v7a --compiler=gcc
 build:armv7hf --spawn_strategy=local
+build:armv7hf --platforms=//compilers:arm_none_linux
 
 build:aarch64 --crosstool_top=//compilers:toolchain
 build:aarch64 --host_crosstool_top=@bazel_tools//tools/cpp:toolchain
 build:aarch64 --cpu=aarch64-linux-gnu --compiler=gcc
 build:aarch64 --spawn_strategy=local
+build:aarch64 --platforms=//compilers:aarch64_none_linux
 
 # Command-line argument aliases (requires Bazel 3.7.0 or newer).
 #
