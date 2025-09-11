@@ -19,20 +19,17 @@ jobs:
       matrix:
         arch: [x64]
         os: [ubuntu-latest]
-        tool: [cmake, bazel]
+        tool: [cmake, bazel-4.2.2, bazel-6.5.0]
         compiler: [g++]
-        bazel-version: [4.2.2, 6.5.0]
         include:
           - arch: armv7hf
             os: ubuntu-latest
-            tool: bazel
+            tool: bazel-6.5.0
             compiler: g++
-            bazel-version: 6.5.0
           - arch: aarch64
             os: ubuntu-latest
-            tool: bazel
+            tool: bazel-6.5.0
             compiler: g++
-            bazel-version: 6.5.0
           # Windows not currently supported by C++ library.
           #- arch: x64
           #  os: windows-latest
@@ -56,9 +53,15 @@ jobs:
         echo "CXX=/usr/bin/${{ matrix.compiler }}" >> $GITHUB_ENV
         echo "EXT=" >> $GITHUB_ENV
         # Just for Github action builds set USE_BAZEL_VERSION to override the
-        # .bazelversion file so we can test different Bazel versions even though
-        # the recommended Bazel version will be in the .bazelversion file.
-        echo "USE_BAZEL_VERSION=${{ matrix.bazel-version }}" >> $GITHUB_ENV
+        # bazelversion file so we can test different Bazel versions even though
+        # the recommended Bazel version will be in the bazelversion file.
+        TOOL_SPECIFIER="${{ matrix.tool }}"
+        if [[ "$TOOL_SPECIFIER" == bazel-* ]]; then
+          echo "TOOL=bazel" >> $GITHUB_ENV
+          echo "USE_BAZEL_VERSION=${TOOL_SPECIFIER#bazel-}" >> $GITHUB_ENV
+        else
+          echo "TOOL=$TOOL_SPECIFIER" >> $GITHUB_ENV
+        fi
 
     - name: Install msbuild (Windows)
       if: matrix.os == 'windows-latest'
@@ -133,19 +136,19 @@ jobs:
         make
 
     # Bazel build support.
-    - name: Use Bazel ${{ matrix.bazel-version }}
-      if: matrix.tool == 'bazel'
+    - name: Use Bazel ${{ env.USE_BAZEL_VERSION }}
+      if: env.TOOL == 'bazel'
       uses: abhinavsingh/setup-bazel@v3
       with:
-        version: ${{ matrix.bazel-version }}
+        version: ${{ env.USE_BAZEL_VERSION }}
 
     - name: Build Library And Examples (Bazel, Native x64)
-      if: matrix.tool == 'bazel' && matrix.arch == 'x64'
+      if: env.TOOL == 'bazel' && matrix.arch == 'x64'
       run: |
         bazel build -c opt //:polaris_client
         bazel build -c opt //examples:*
     - name: Build Library And Examples (Bazel, Cross-Compile)
-      if: matrix.tool == 'bazel' && matrix.arch != 'x64'
+      if: env.TOOL == 'bazel' && matrix.arch != 'x64'
       run: |
         bazel build -c opt --config=${{ matrix.arch }} //:polaris_client
         bazel build -c opt --config=${{ matrix.arch }} //examples:*
@@ -156,7 +159,7 @@ jobs:
       env:
         POLARIS_API_KEY: ${{ secrets.POLARIS_API_KEY }}
       run: |
-        ./test/run_unit_tests.sh --tool=${{ matrix.tool }} --unique-id-prefix=${{ matrix.tool }}_cpp
+        ./test/run_unit_tests.sh --tool=${{ env.TOOL }} --unique-id-prefix=${{ env.TOOL }}_cpp
     - name: Run Unit Tests With Installed Libraries (CMake, Linux)
       if: matrix.arch == 'x64' && matrix.tool == 'cmake' && matrix.os == 'ubuntu-latest'
       env:
@@ -171,7 +174,7 @@ jobs:
     # Package artifacts (Bazel only -- no need to do this for multiple build
     # tools).
     - name: Create artifact
-      if: matrix.tool == 'bazel'
+      if: env.TOOL == 'bazel'
       run: |
         bazel query 'kind("cc_binary", //examples:*)' 2>/dev/null |
         sed -e 's|//examples:|bazel-bin/examples/|' |
@@ -182,7 +185,7 @@ jobs:
       # Without this the upload artifact action can fail since the artifact
       # already exists from a previous upload artifact action for different
       # bazel version.
-      if: matrix.tool == 'bazel' && matrix.bazel-version == '6.5.0'
+      if: env.TOOL == 'bazel' && env.USE_BAZEL_VERSION == '6.5.0'
       uses: actions/upload-artifact@v4.4.3
       with:
         path: polaris_examples.tar.gz
@@ -196,9 +199,8 @@ jobs:
       matrix:
         arch: [x64]
         os: [ubuntu-latest]
-        tool: [make, cmake, bazel]
+        tool: [make, cmake, bazel-4.2.2, bazel-6.5.0]
         compiler: [g++]
-        bazel-version: [4.2.2, 6.5.0]
         #include:
         #   Windows not currently supported by C library.
         #  - arch: x64
@@ -224,9 +226,15 @@ jobs:
         echo "CXX=/usr/bin/${{ matrix.compiler }}" >> $GITHUB_ENV
         echo "EXT=" >> $GITHUB_ENV
         # Just for Github action builds set USE_BAZEL_VERSION to override the
-        # .bazelversion file so we can test different Bazel versions even though
-        # the recommended Bazel version will be in the .bazelversion file.
-        echo "USE_BAZEL_VERSION=${{ matrix.bazel-version }}" >> $GITHUB_ENV
+        # bazelversion file so we can test different Bazel versions even though
+        # the recommended Bazel version will be in the bazelversion file.
+        TOOL_SPECIFIER="${{ matrix.tool }}"
+        if [[ "$TOOL_SPECIFIER" == bazel-* ]]; then
+          echo "TOOL=bazel" >> $GITHUB_ENV
+          echo "USE_BAZEL_VERSION=${TOOL_SPECIFIER#bazel-}" >> $GITHUB_ENV
+        else
+          echo "TOOL=$TOOL_SPECIFIER" >> $GITHUB_ENV
+        fi
 
     - name: Install msbuild (Windows)
       if: matrix.os == 'windows-latest'
@@ -274,19 +282,19 @@ jobs:
         make
 
     # Bazel build support.
-    - name: Use Bazel ${{ matrix.bazel-version }}
-      if: matrix.tool == 'bazel'
+    - name: Use Bazel ${{ env.USE_BAZEL_VERSION }}
+      if: env.ACTUAL_TOOL == 'bazel'
       uses: abhinavsingh/setup-bazel@v3
       with:
-        version: ${{ matrix.bazel-version }}
+        version: ${{ env.USE_BAZEL_VERSION }}
 
     - name: Build Library And Examples (Bazel, Native x64)
-      if: matrix.tool == 'bazel' && matrix.arch == 'x64'
+      if: env.TOOL == 'bazel' && matrix.arch == 'x64'
       run: |
         bazel build -c opt //:polaris_client
         bazel build -c opt //examples:*
     - name: Build Library And Examples (Bazel, Cross-Compile)
-      if: matrix.tool == 'bazel' && matrix.arch != 'x64'
+      if: env.TOOL == 'bazel' && matrix.arch != 'x64'
       run: |
         bazel build -c opt --config=${{ matrix.arch }} //:polaris_client
         bazel build -c opt --config=${{ matrix.arch }} //examples:*
@@ -297,7 +305,7 @@ jobs:
       env:
         POLARIS_API_KEY: ${{ secrets.POLARIS_API_KEY }}
       run: |
-        ./test/run_unit_tests.sh --tool=${{ matrix.tool }} --unique-id-prefix=${{ matrix.tool }}_c_
+        ./test/run_unit_tests.sh --tool=${{ env.TOOL }} --unique-id-prefix=${{ env.TOOL }}_c_
     - name: Run Unit Tests With Installed Libraries (CMake, Linux)
       if: matrix.arch == 'x64' && matrix.tool == 'cmake' && matrix.os == 'ubuntu-latest'
       env:
@@ -310,7 +318,7 @@ jobs:
     # Package artifacts (Bazel only -- no need to do this for multiple build
     # tools).
     - name: Create artifact
-      if: matrix.tool == 'bazel'
+      if: env.TOOL == 'bazel'
       run: |
         bazel query 'kind("cc_binary", //examples:*)' 2>/dev/null |
         sed -e 's|//examples:|bazel-bin/examples/|' |
@@ -321,7 +329,7 @@ jobs:
       # Without this the upload artifact action can fail since the artifact
       # already exists from a previous upload artifact action for different
       # bazel version.
-      if: matrix.tool == 'bazel' && matrix.bazel-version == '6.5.0'
+      if: env.TOOL == 'bazel' && env.USE_BAZEL_VERSION == '6.5.0'
       uses: actions/upload-artifact@v4.4.3
       with:
         path: c/polaris_examples.tar.gz
