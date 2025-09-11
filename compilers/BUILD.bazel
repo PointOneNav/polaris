@@ -5,6 +5,25 @@
 
 package(default_visibility = ["//compilers:__pkg__"])
 
+platform(
+    name = "aarch64_none_linux",
+    constraint_values = [
+        "@platforms//cpu:aarch64",
+        "@platforms//os:linux",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+platform(
+    name = "arm_none_linux",
+    constraint_values = [
+        "@platforms//cpu:arm",  # Is an alias for aarch32 in platforms
+        "@platforms//os:linux",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+
 # This file group should include
 #   * all cc_toolchain targets supported
 #   * all file groups that said cc_toolchain might refer to

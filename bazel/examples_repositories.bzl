@@ -7,8 +7,8 @@ def dependencies():
     maybe(
         git_repository,
         name = "com_github_nelhage_rules_boost",
-        # 2019/10/2 = Boost v1.68.0
-        commit = "9f9fb8b2f0213989247c9d5c0e814a8451d18d7f",
+        # 2022/12/21 = Boost v1.81.0
+        commit = "18006d8df898d3010d5355774933f451cd4117fa",
         remote = "https://github.com/nelhage/rules_boost",
         repo_mapping = {"@net_zlib_zlib": "@p1_zlib"},
         shallow_since = "1570056263 -0700",
