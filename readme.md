@@ -76,7 +76,7 @@ Unique IDs have the following requirements:
 
 ### Requirements ###
 
-- [Bazel](https://bazel.build/) 3.6+, or [CMake](https://cmake.org/) 3.6+ and
+- [Bazel](https://bazel.build/) 4.2+, or [CMake](https://cmake.org/) 3.6+ and
   [GNU Make](https://www.gnu.org/software/make/)
   - Note: CMake 3.18 or newer required when including the C library using `FetchContent_Declare()`
 - [OpenSSL](https://www.openssl.org/) or [BoringSSL](https://boringssl.googlesource.com/boringssl/) (optional; required
@@ -311,11 +311,11 @@ where `<POLARIS_API_KEY>` is the Polaris key assigned to you by Point One.
 
 ### Requirements ###
 
-- [Bazel](https://bazel.build/) 3.6+, or [CMake](https://cmake.org/) 3.6+ and
+- [Bazel](https://bazel.build/) 4.2+, or [CMake](https://cmake.org/) 3.6+ and
   [GNU Make](https://www.gnu.org/software/make/)
 - [Google gflags 2.2.2+](https://github.com/gflags/gflags)
 - [Google glog 0.4.0+](https://github.com/google/glog)
-- [Boost 1.58+](https://www.boost.org/) (for building example applications only)
+- [Boost 1.81+](https://www.boost.org/) (for building example applications only)
 - [OpenSSL](https://www.openssl.org/) or [BoringSSL](https://boringssl.googlesource.com/boringssl/) (optional; required
   for TLS support (strongly recommended))
 
