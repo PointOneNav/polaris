@@ -376,7 +376,7 @@ jobs:
       env:
         TAG_REF_NAME: ${{ github.ref }}
       run: |
-        # polaris_examples-v1.0.0.cpp.aarch64.tar.gz
+        # e.g., polaris_examples-v1.0.0.cpp.aarch64.tar.gz
         echo ::set-output name=file_name::polaris_examples-${TAG_REF_NAME##*/v}.${{ matrix.lang }}.${{ matrix.arch }}.tar.gz
     - name: Upload release asset
       uses: actions/upload-release-asset@v1
@@ -384,6 +384,6 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ needs.release.outputs.upload_url }}
-        asset_path: polaris_examples.${{ matrix.lang }}.${{ matrix.arch }}/polaris_examples.tar.gz
+        asset_path: polaris_examples.tar.gz
         asset_name: ${{ steps.release_info.outputs.file_name }}
         asset_content_type: application/tar+gzip
