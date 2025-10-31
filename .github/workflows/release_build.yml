@@ -30,6 +30,10 @@ jobs:
             os: ubuntu-latest
             tool: bazel-6.5.0
             compiler: g++
+          - arch: x64
+            os: ubuntu-latest
+            tool: cmake
+            compiler: clang++
           # Windows not currently supported by C++ library.
           #- arch: x64
           #  os: windows-latest
@@ -206,12 +210,16 @@ jobs:
         os: [ubuntu-latest]
         tool: [make, cmake, bazel-4.2.2, bazel-6.5.0]
         compiler: [g++]
-        #include:
-        #   Windows not currently supported by C library.
-        #  - arch: x64
-        #    os: windows-latest
-        #    tool: cmake
-        #    compiler: msvc
+        include:
+          - arch: x64
+            os: ubuntu-latest
+            tool: cmake
+            compiler: clang++
+          # Windows not currently supported by C library.
+          #- arch: x64
+          #  os: windows-latest
+          #  tool: cmake
+          #  compiler: msvc
     defaults:
       run:
         shell: bash
