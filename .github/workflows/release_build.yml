@@ -51,6 +51,11 @@ jobs:
       if: matrix.os == 'ubuntu-latest'
       run: |
         echo "CXX=/usr/bin/${{ matrix.compiler }}" >> $GITHUB_ENV
+        if [[ "${{ matrix.compiler }}" == "clang++" ]]; then
+          echo "CC=/usr/bin/clang" >> $GITHUB_ENV
+        else
+          echo "CC=/usr/bin/gcc" >> $GITHUB_ENV
+        fi
         echo "EXT=" >> $GITHUB_ENV
         # Just for Github action builds set USE_BAZEL_VERSION to override the
         # bazelversion file so we can test different Bazel versions even though
@@ -224,6 +229,11 @@ jobs:
       if: matrix.os == 'ubuntu-latest'
       run: |
         echo "CXX=/usr/bin/${{ matrix.compiler }}" >> $GITHUB_ENV
+        if [[ "${{ matrix.compiler }}" == "clang++" ]]; then
+          echo "CC=/usr/bin/clang" >> $GITHUB_ENV
+        else
+          echo "CC=/usr/bin/gcc" >> $GITHUB_ENV
+        fi
         echo "EXT=" >> $GITHUB_ENV
         # Just for Github action builds set USE_BAZEL_VERSION to override the
         # bazelversion file so we can test different Bazel versions even though
