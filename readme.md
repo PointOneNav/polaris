@@ -5,9 +5,9 @@
 [![Language grade: C/C++](https://img.shields.io/lgtm/grade/cpp/g/PointOneNav/polaris.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/PointOneNav/polaris/context:cpp)
 
 
-# Point One Navigation Polaris Service #
+# Point One Navigation RTK Network #
 
-This repo provides C and C++ libraries for interacting with the Point One Navigation Polaris Service to receive GNSS RTK
+This repo provides C and C++ libraries for interacting with the Point One Navigation RTK Network to receive GNSS RTK
 corrections. Compatible GNSS receivers can achieve better than 10 cm accuracy when used with the service.
 
 Polaris corrections are distributed using the
