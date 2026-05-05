@@ -300,7 +300,7 @@ void PolarisClient::Run(double timeout_sec) {
   // Exponential backoff delay in milliseconds. Starts at 0 (no delay on the
   // first attempt), then increases to 1s, 2s, 4s, ..., up to 20s maximum.
   int retry_delay_ms = 0;
-  static constexpr int kMaxRetryDelayMs = 20000;
+  static constexpr int MAX_RETRY_DELAY_MS = 20000;
   while (running_) {
     // Pause before a failed reconnect attempt, with exponential backoff.
     if (retry_delay_ms > 0) {
@@ -316,10 +316,10 @@ void PolarisClient::Run(double timeout_sec) {
       }
     }
     // Advance the backoff for the next failure: 0 -> 1000 -> 2000 -> ... ->
-    // kMaxRetryDelayMs.
-    retry_delay_ms =
-        (retry_delay_ms == 0) ? 1000
-                               : std::min(retry_delay_ms * 2, kMaxRetryDelayMs);
+    // MAX_RETRY_DELAY_MS.
+    retry_delay_ms = (retry_delay_ms == 0)
+                         ? 1000
+                         : std::min(retry_delay_ms * 2, MAX_RETRY_DELAY_MS);
 
     std::unique_lock<std::recursive_mutex> lock(mutex_);
 
