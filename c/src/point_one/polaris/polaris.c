@@ -827,7 +827,7 @@ int Polaris_Work(PolarisContext_t* context) {
     }
     // Not authenticated, but response received: likely server indicated an
     // error.
-    else if (context->total_bytes_received > 0) {
+    else if (!context->disconnected && context->total_bytes_received > 0) {
       P1_PrintWarning(
           "Warning: Polaris connection closed with an error response. Is "
           "your authentication token valid?");
