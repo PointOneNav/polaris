@@ -761,8 +761,11 @@ int Polaris_Work(PolarisContext_t* context) {
   if (bytes_read <= 0) {
     // Was the connection closed by the user?
     if (context->disconnected) {
-      if (bytes_read == 0 || errno == EINTR || errno == ENOTCONN) {
+      if (bytes_read == 0) {
         P1_PrintDebug("Connection terminated by user request.");
+      } else if (errno == EINTR || errno == ENOTCONN) {
+        P1_DebugPrintReadWriteError(
+            context, "Connection terminated by user request", bytes_read);
       } else {
 #ifdef P1_FREERTOS
         bytes_read = original_bytes_read;
