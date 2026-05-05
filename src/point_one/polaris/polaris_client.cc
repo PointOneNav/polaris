@@ -6,6 +6,7 @@
 
 #include "point_one/polaris/polaris_client.h"
 
+#include <chrono>
 #include <iomanip>
 
 #if P1_NO_PRINT
@@ -296,16 +297,29 @@ void PolarisClient::Run(double timeout_sec) {
   const int timeout_ms = std::lround(timeout_sec * 1e3);
   int auth_ret = POLARIS_SUCCESS;
   running_ = true;
-  bool previous_connect_failed = false;
+  // Exponential backoff delay in milliseconds. Starts at 0 (no delay on the
+  // first attempt), then increases to 1s, 2s, 4s, ..., up to 20s maximum.
+  int retry_delay_ms = 0;
+  static constexpr int MAX_RETRY_DELAY_MS = 20000;
   while (running_) {
-    // Pause briefly after a failed reconnect attempt.
-    if (previous_connect_failed) {
-      sleep(2);
+    // Pause before a failed reconnect attempt, with exponential backoff.
+    if (retry_delay_ms > 0) {
+      // Sleep in 100 ms increments so we can react promptly to Disconnect().
+      int remaining_ms = retry_delay_ms;
+      while (running_ && remaining_ms > 0) {
+        int sleep_ms = std::min(remaining_ms, 100);
+        std::this_thread::sleep_for(std::chrono::milliseconds(sleep_ms));
+        remaining_ms -= sleep_ms;
+      }
       if (!running_) {
         break;
       }
     }
-    previous_connect_failed = true;
+    // Advance the backoff for the next failure: 0 -> 1000 -> 2000 -> ... ->
+    // MAX_RETRY_DELAY_MS.
+    retry_delay_ms = (retry_delay_ms == 0)
+                         ? 1000
+                         : std::min(retry_delay_ms * 2, MAX_RETRY_DELAY_MS);
 
     std::unique_lock<std::recursive_mutex> lock(mutex_);
 
@@ -380,8 +394,6 @@ void PolarisClient::Run(double timeout_sec) {
       }
       continue;
     }
-    previous_connect_failed = false;
-
     // Now release the mutex and start processing data.
     lock.unlock();
     int run_ret = polaris_.Run(timeout_ms);
@@ -391,6 +403,8 @@ void PolarisClient::Run(double timeout_sec) {
 
     if (run_ret == POLARIS_SUCCESS) {
       // Connection closed by a call to PolarisInterface::Disconnect().
+      // Reset backoff so the next connection attempt (if any) starts fresh.
+      retry_delay_ms = 0;
       VLOG(1) << "Connection closed by user.";
       continue;
     } else if (run_ret == POLARIS_CONNECTION_CLOSED) {
