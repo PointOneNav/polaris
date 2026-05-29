@@ -40,6 +40,11 @@ int PolarisInterface::SetAuthToken(const std::string& auth_token) {
 }
 
 /******************************************************************************/
+int PolarisInterface::UseTLS(bool enable) {
+  return Polaris_UseTLS(&context_, static_cast<uint8_t>(enable));
+}
+
+/******************************************************************************/
 int PolarisInterface::Connect() {
   return Polaris_Connect(&context_);
 }
