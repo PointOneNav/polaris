@@ -16,7 +16,7 @@ cc_library(
         "src/point_one/polaris/polaris_interface.h",
     ],
     copts = select({
-        "//c:tls_enabled": ["-DPOLARIS_USE_TLS=1"],
+        "//c:tls_enabled": ["-DPOLARIS_ENABLE_TLS=1"],
         "//conditions:default": [],
     }),
     includes = [

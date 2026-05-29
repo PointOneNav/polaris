@@ -81,6 +81,21 @@
 #endif
 
 /**
+ * @brief Set `POLARIS_ENABLE_TLS=1` to enable TLS support (on by default).
+ *
+ * @note
+ * If `POLARIS_ENABLE_TLS` is not defined, it will fall back to the deprecated
+ * `POLARIS_USE_TLS` macro.
+ */
+#ifndef POLARIS_ENABLE_TLS
+#  ifdef POLARIS_USE_TLS
+#    define POLARIS_ENABLE_TLS 1
+#  else  // !POLARIS_USE_TLS
+#    define POLARIS_ENABLE_TLS 0
+#  endif  // POLARIS_USE_TLS
+#endif    // POLARIS_ENABLE_TLS
+
+/**
  * @name Polaris Return Codes
  * @{
  */
@@ -195,7 +210,7 @@ void Polaris_SetPrintCallback(PolarisPrintCallback_t callback);
  *
  * @note
  * To enable secure connections using TLS, the library must be compiled with
- * `POLARIS_USE_TLS` defined.
+ * `POLARIS_ENABLE_TLS=1`.
  *
  * @post
  * On success, `context.auth_token` will be populated with the generated token.

@@ -204,7 +204,7 @@ void PolarisClient::SetPolarisEndpoint(const std::string& endpoint_url,
 
   if (endpoint_port == 0) {
     endpoint_port_ =
-#ifdef POLARIS_USE_TLS
+#if POLARIS_ENABLE_TLS
         POLARIS_ENDPOINT_TLS_PORT;
 #else
         POLARIS_ENDPOINT_PORT;
