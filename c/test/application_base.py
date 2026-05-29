@@ -60,6 +60,7 @@ class TestApplicationBase(object):
         self.program_args = []
 
         self.proc = None
+        self.bytes_received = 0
 
     def parse_args(self):
         self.options, program_args = self.parser.parse_known_args()
@@ -240,7 +241,10 @@ class StandardApplication(TestApplicationBase):
             return super().check_pass_fail(exit_code)
 
     def on_stdout(self, line):
-        if re.match(r'.*Application received \d+ bytes.', line):
-            print('Corrections data detected.')
-            self.data_received = True
-            self.stop()
+        m = re.match(r'.*Application received (\d+) bytes.', line)
+        if m:
+            self.bytes_received += int(m.group(1))
+            if self.bytes_received >= 1024:
+                print('Corrections data detected.')
+                self.data_received = True
+                self.stop()
