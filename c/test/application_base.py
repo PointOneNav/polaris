@@ -62,7 +62,7 @@ class TestApplicationBase(object):
         self.proc = None
 
     def parse_args(self):
-        self.options = self.parser.parse_args()
+        self.options, program_args = self.parser.parse_known_args()
 
         if self.options.polaris_api_key is None:
             self.options.polaris_api_key = os.getenv('POLARIS_API_KEY')
@@ -97,6 +97,8 @@ class TestApplicationBase(object):
         if len(self.options.unique_id) > 36:
             self.options.unique_id = self.options.unique_id[:36]
             print("Unique ID too long. Truncating to '%s'." % self.options.unique_id)
+
+        self.program_args.extend(program_args)
 
         return self.options
 
