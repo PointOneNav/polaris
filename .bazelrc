@@ -1,3 +1,6 @@
+# Default to K8 toolchain using local GCC installation.
+build --crosstool_top=//compilers:toolchain
+
 # Cross-compilation configurations (e.g., bazel build --config=aarch64).
 build:armv7hf --crosstool_top=//compilers:toolchain
 build:armv7hf --host_crosstool_top=@bazel_tools//tools/cpp:toolchain
