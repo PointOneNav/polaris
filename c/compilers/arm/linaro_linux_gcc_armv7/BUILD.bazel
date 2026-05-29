@@ -1,0 +1,141 @@
+package(default_visibility = ["//compilers/arm/linaro_linux_gcc_armv7:__pkg__"])
+
+load(":cc_toolchain_config.bzl", "cc_toolchain_config")
+
+cc_toolchain_config(
+    name = "armeabi-v7a_config",
+    compiler = "gcc",
+    cpu = "armeabi-v7a",
+)
+
+cc_toolchain(
+    name = "cc-compiler-armeabi-v7a",
+    all_files = ":linaro_linux_all_files_armv7",
+    ar_files = ":ar",
+    as_files = ":as",
+    compiler_files = ":linaro_linux_compiler_files_armv7",
+    dwp_files = ":empty",
+    linker_files = ":linaro_linux_linker_files_armv7",
+    objcopy_files = ":objcopy",
+    strip_files = ":strip",
+    supports_param_files = 1,
+    tags = ["no-ide"],
+    toolchain_config = ":armeabi-v7a_config",
+    toolchain_identifier = "armeabi-v7a",
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "linaro_linux_all_files_armv7",
+    srcs = [
+        ":tool-wrappers",
+        "@org_linaro_components_toolchain_gcc_armv7//:compiler_pieces",
+    ],
+)
+
+filegroup(
+    name = "linaro_linux_linker_files_armv7",
+    srcs = [
+        ":ar",
+        ":gcc",
+        ":ld",
+        "@org_linaro_components_toolchain_gcc_armv7//:compiler_pieces",
+    ],
+)
+
+filegroup(
+    name = "linaro_linux_compiler_files_armv7",
+    srcs = [
+        ":as",
+        ":gcc",
+        ":ld",
+    ],
+)
+
+filegroup(
+    name = "tool-wrappers",
+    srcs = [
+        ":ar",
+        ":as",
+        ":gcc",
+        ":ld",
+        ":nm",
+        ":objcopy",
+        ":objdump",
+        ":strip",
+    ],
+)
+
+filegroup(
+    name = "empty",
+    srcs = [],
+)
+
+filegroup(
+    name = "srcs",
+    srcs = glob(["**"]),
+)
+
+filegroup(
+    name = "gcc",
+    srcs = [
+        "arm-linux-gnueabihf-gcc",
+        "@org_linaro_components_toolchain_gcc_armv7//:gcc",
+    ],
+)
+
+filegroup(
+    name = "ar",
+    srcs = [
+        "arm-linux-gnueabihf-ar",
+        "@org_linaro_components_toolchain_gcc_armv7//:ar",
+    ],
+)
+
+filegroup(
+    name = "ld",
+    srcs = [
+        "arm-linux-gnueabihf-ld",
+        "@org_linaro_components_toolchain_gcc_armv7//:ld",
+    ],
+)
+
+filegroup(
+    name = "nm",
+    srcs = [
+        "arm-linux-gnueabihf-nm",
+        "@org_linaro_components_toolchain_gcc_armv7//:nm",
+    ],
+)
+
+filegroup(
+    name = "objcopy",
+    srcs = [
+        "arm-linux-gnueabihf-objcopy",
+        "@org_linaro_components_toolchain_gcc_armv7//:objcopy",
+    ],
+)
+
+filegroup(
+    name = "objdump",
+    srcs = [
+        "arm-linux-gnueabihf-objdump",
+        "@org_linaro_components_toolchain_gcc_armv7//:objdump",
+    ],
+)
+
+filegroup(
+    name = "strip",
+    srcs = [
+        "arm-linux-gnueabihf-strip",
+        "@org_linaro_components_toolchain_gcc_armv7//:strip",
+    ],
+)
+
+filegroup(
+    name = "as",
+    srcs = [
+        "arm-linux-gnueabihf-as",
+        "@org_linaro_components_toolchain_gcc_armv7//:as",
+    ],
+)
