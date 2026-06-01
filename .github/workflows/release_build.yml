@@ -22,7 +22,7 @@ jobs:
         tool: [cmake, bazel-4.2.2, bazel-6.5.0]
         compiler: [g++]
         include:
-          - arch: armv7hf
+          - arch: armv7
             os: ubuntu-latest
             tool: bazel-6.5.0
             compiler: g++
