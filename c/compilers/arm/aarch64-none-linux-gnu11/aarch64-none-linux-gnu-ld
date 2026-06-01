@@ -1,0 +1,5 @@
+#!/bin/bash --norc
+
+exec -a aarch64-linux-gnu-ld \
+    external/aarch64-none-linux-gnu11/bin/aarch64-none-linux-gnu-ld \
+    "$@"

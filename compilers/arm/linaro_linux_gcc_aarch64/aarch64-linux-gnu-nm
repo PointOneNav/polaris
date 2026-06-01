@@ -1,5 +1,0 @@
-#!/bin/bash --norc
-
-exec -a aarch64-linux-gnu-nm \
-    external/org_linaro_components_toolchain_gcc_aarch64/bin/aarch64-linux-gnu-nm \
-    "$@"

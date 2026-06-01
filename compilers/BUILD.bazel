@@ -23,29 +23,17 @@ platform(
     visibility = ["//visibility:public"],
 )
 
-
-# This file group should include
-#   * all cc_toolchain targets supported
-#   * all file groups that said cc_toolchain might refer to
-filegroup(
-    name = "toolchain_fg",
-    srcs = [
-        "//compilers/arm/linaro_linux_gcc_aarch64:cc-compiler-aarch64-linux-gnu",
-        "//compilers/arm/linaro_linux_gcc_armv7:cc-compiler-armeabi-v7a",
-        "//compilers/k8:cc-compiler-k8",
-    ],
-)
-
 cc_toolchain_suite(
     name = "toolchain",
     # target_cpu | compiler
     toolchains = {
         "k8": "//compilers/k8:cc-compiler-k8",
         "k8|compiler": "//compilers/k8:cc-compiler-k8",
-        "armeabi-v7a": "//compilers/arm/linaro_linux_gcc_armv7:cc-compiler-armeabi-v7a",
-        "armeabi-v7a|gcc": "//compilers/arm/linaro_linux_gcc_armv7:cc-compiler-armeabi-v7a",
-        "aarch64-linux-gnu": "//compilers/arm/linaro_linux_gcc_aarch64:cc-compiler-aarch64-linux-gnu",
-        "aarch64-linux-gnu|gcc": "//compilers/arm/linaro_linux_gcc_aarch64:cc-compiler-aarch64-linux-gnu",
+        "k8|gcc": "//compilers/k8:cc-compiler-k8",
+        "aarch64-none-linux": "//compilers/arm/aarch64-none-linux-gnu11:aarch64_toolchain",
+        "aarch64-none-linux|gcc11": "//compilers/arm/aarch64-none-linux-gnu11:aarch64_toolchain",
+        "armv7-none-linux": "//compilers/arm/arm-none-linux-gnueabihf11:arm_toolchain",
+        "armv7-none-linux|gcc11": "//compilers/arm/arm-none-linux-gnueabihf11:arm_toolchain",
     },
     visibility = ["//visibility:public"],
 )

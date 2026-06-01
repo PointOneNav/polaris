@@ -1,0 +1,6 @@
+#!/bin/bash
+
+NAME=$(basename "$0")
+TOOLCHAIN_BINDIR=external/arm-none-linux-gnueabihf11/bin
+
+exec "${TOOLCHAIN_BINDIR}"/"${NAME}" "$@"
