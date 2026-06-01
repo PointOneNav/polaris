@@ -249,6 +249,11 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
 
 static void CloseSocket(PolarisContext_t* context, int destroy_context);
 
+static int SendData(PolarisContext_t* context, const void* buffer, size_t size);
+
+static P1_RecvSize_t ReadData(PolarisContext_t* context, void* buffer,
+                              size_t size);
+
 static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
                            int endpoint_port, const char* address,
                            const void* content, size_t content_length);
@@ -468,15 +473,7 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
 
   P1_PrintDebug("Sending access token message. [size=%u B]",
                 (unsigned)message_size);
-#if POLARIS_ENABLE_TLS
-  if (context->use_tls) {
-    ret = SSL_write(context->ssl, context->recv_buffer, message_size);
-  } else {
-#endif
-    ret = send(context->socket, context->recv_buffer, message_size, 0);
-#if POLARIS_ENABLE_TLS
-  }
-#endif
+  ret = SendData(context, context->recv_buffer, message_size);
   if (ret != message_size) {
     P1_PrintReadWriteError(context, "Error sending authentication token", ret);
     CloseSocket(context, 1);
@@ -528,15 +525,7 @@ int Polaris_ConnectWithoutAuth(PolarisContext_t* context,
 
     P1_PrintDebug("Sending unique ID message. [size=%u B]",
                   (unsigned)message_size);
-#if POLARIS_ENABLE_TLS
-    if (context->use_tls) {
-      ret = SSL_write(context->ssl, context->send_buffer, message_size);
-    } else {
-#endif
-      ret = send(context->socket, context->send_buffer, message_size, 0);
-#if POLARIS_ENABLE_TLS
-    }
-#endif
+    ret = SendData(context, context->send_buffer, message_size);
     if (ret != message_size) {
       P1_PrintReadWriteError(context, "Error sending unique ID", ret);
       CloseSocket(context, 1);
@@ -610,18 +599,7 @@ int Polaris_SendECEFPosition(PolarisContext_t* context, double x_m, double y_m,
       (unsigned)message_size, x_m, y_m, z_m);
 #endif
   P1_PrintData(context->send_buffer, message_size);
-
-  int ret = 0;
-#if POLARIS_ENABLE_TLS
-  if (context->use_tls) {
-    ret = SSL_write(context->ssl, context->send_buffer, message_size);
-  } else {
-#endif
-    ret = send(context->socket, context->send_buffer, message_size, 0);
-#if POLARIS_ENABLE_TLS
-  }
-#endif
-
+  int ret = SendData(context, context->send_buffer, message_size);
   if (ret != message_size) {
     P1_PrintReadWriteError(context, "Error sending ECEF position", ret);
     return POLARIS_SEND_ERROR;
@@ -669,18 +647,7 @@ int Polaris_SendLLAPosition(PolarisContext_t* context, double latitude_deg,
       (unsigned)message_size, latitude_deg, longitude_deg, altitude_m);
 #endif
   P1_PrintData(context->send_buffer, message_size);
-
-  int ret = 0;
-#if POLARIS_ENABLE_TLS
-  if (context->use_tls) {
-    ret = SSL_write(context->ssl, context->send_buffer, message_size);
-  } else {
-#endif
-    ret = send(context->socket, context->send_buffer, message_size, 0);
-#if POLARIS_ENABLE_TLS
-  }
-#endif
-
+  int ret = SendData(context, context->send_buffer, message_size);
   if (ret != message_size) {
     P1_PrintReadWriteError(context, "Error sending LLA position", ret);
     return POLARIS_SEND_ERROR;
@@ -713,18 +680,7 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id) {
   P1_PrintDebug("Sending beacon request. [size=%u B, beacon='%s']",
                 (unsigned)message_size, beacon_id);
   P1_PrintData(context->send_buffer, message_size);
-
-  int ret = 0;
-#if POLARIS_ENABLE_TLS
-  if (context->use_tls) {
-    ret = SSL_write(context->ssl, context->send_buffer, message_size);
-  } else {
-#endif
-    ret = send(context->socket, context->send_buffer, message_size, 0);
-#if POLARIS_ENABLE_TLS
-  }
-#endif
-
+  int ret = SendData(context, context->send_buffer, message_size);
   if (ret != message_size) {
     P1_PrintReadWriteError(context, "Error sending beacon request", ret);
     return POLARIS_SEND_ERROR;
@@ -751,18 +707,8 @@ int Polaris_Work(PolarisContext_t* context) {
 
   P1_PrintDebug("Listening for data block.");
 
-  P1_RecvSize_t bytes_read = 0;
-#if POLARIS_ENABLE_TLS
-  if (context->use_tls) {
-    bytes_read =
-        SSL_read(context->ssl, context->recv_buffer, POLARIS_RECV_BUFFER_SIZE);
-  } else {
-#endif
-    bytes_read = recv(context->socket, context->recv_buffer,
-                      POLARIS_RECV_BUFFER_SIZE, 0);
-#if POLARIS_ENABLE_TLS
-  }
-#endif
+  P1_RecvSize_t bytes_read =
+      ReadData(context, context->recv_buffer, POLARIS_RECV_BUFFER_SIZE);
 
 #ifdef P1_FREERTOS
   // FreeRTOS does not use errno for recv() errors, but instead returns the
@@ -1289,6 +1235,36 @@ void CloseSocket(PolarisContext_t* context, int destroy_context) {
 }
 
 /******************************************************************************/
+int SendData(PolarisContext_t* context, const void* buffer, size_t size) {
+  int ret = 0;
+#if POLARIS_ENABLE_TLS
+  if (context->use_tls) {
+    ret = SSL_write(context->ssl, buffer, size);
+  } else {
+    ret = send(context->socket, buffer, size, 0);
+  }
+#else   // !POLARIS_ENABLE_TLS
+  ret = send(context->socket, buffer, size, 0);
+#endif  // POLARIS_ENABLE_TLS
+  return ret;
+}
+
+/******************************************************************************/
+P1_RecvSize_t ReadData(PolarisContext_t* context, void* buffer, size_t size) {
+  P1_RecvSize_t bytes_read = 0;
+#if POLARIS_ENABLE_TLS
+  if (context->use_tls) {
+    bytes_read = SSL_read(context->ssl, buffer, size);
+  } else {
+    bytes_read = recv(context->socket, buffer, size, 0);
+  }
+#else   // !POLARIS_ENABLE_TLS
+  bytes_read = recv(context->socket, buffer, size, 0);
+#endif  // POLARIS_ENABLE_TLS
+  return bytes_read;
+}
+
+/******************************************************************************/
 static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
                            int endpoint_port, const char* address,
                            const void* content, size_t content_length) {
@@ -1360,16 +1336,7 @@ static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
   }
 
   P1_PrintDebug("Sending POST request. [size=%u B]", (unsigned)message_size);
-#if POLARIS_ENABLE_TLS
-  if (context->use_tls) {
-    ret = SSL_write(context->ssl, context->recv_buffer, message_size);
-  } else {
-#endif
-    ret = send(context->socket, context->recv_buffer, message_size, 0);
-#if POLARIS_ENABLE_TLS
-  }
-#endif
-
+  ret = SendData(context, context->recv_buffer, message_size);
   if (ret != message_size) {
     P1_PrintReadWriteError(context, "Error sending POST request", ret);
     CloseSocket(context, 1);
