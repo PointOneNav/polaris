@@ -1,0 +1,11 @@
+#!/bin/bash --norc
+
+if [[ -z "${EXT_BUILD_ROOT}" ]]; then
+  MY_PREFIX=""
+else
+  MY_PREFIX="${EXT_BUILD_ROOT}/"
+fi
+
+exec -a arm-none-linux-gnueabihf-ar \
+    ${MY_PREFIX}external/arm-none-linux-gnueabihf11/bin/arm-none-linux-gnueabihf-ar \
+    "$@"

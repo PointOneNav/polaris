@@ -1,6 +1,6 @@
-package(default_visibility = ["//visibility:public"])
-
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
+
+package(default_visibility = ["//visibility:public"])
 
 # Option to disable _all_ print messages:
 #   --//:polaris_enable_print       [enabled; default]
@@ -55,7 +55,7 @@ cc_library(
     name = "polaris_client_tls",
     srcs = glob(["src/**/*.c"]),
     hdrs = glob(["src/**/*.h"]),
-    copts = ["-DPOLARIS_USE_TLS=1"] +
+    copts = ["-DPOLARIS_ENABLE_TLS=1"] +
             select({
                 ":print_enabled": [],
                 "//conditions:default": ["-DPOLARIS_NO_PRINT"],

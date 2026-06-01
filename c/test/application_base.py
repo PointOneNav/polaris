@@ -60,9 +60,10 @@ class TestApplicationBase(object):
         self.program_args = []
 
         self.proc = None
+        self.bytes_received = 0
 
     def parse_args(self):
-        self.options = self.parser.parse_args()
+        self.options, program_args = self.parser.parse_known_args()
 
         if self.options.polaris_api_key is None:
             self.options.polaris_api_key = os.getenv('POLARIS_API_KEY')
@@ -97,6 +98,8 @@ class TestApplicationBase(object):
         if len(self.options.unique_id) > 36:
             self.options.unique_id = self.options.unique_id[:36]
             print("Unique ID too long. Truncating to '%s'." % self.options.unique_id)
+
+        self.program_args.extend(program_args)
 
         return self.options
 
@@ -238,7 +241,10 @@ class StandardApplication(TestApplicationBase):
             return super().check_pass_fail(exit_code)
 
     def on_stdout(self, line):
-        if re.match(r'.*Application received \d+ bytes.', line):
-            print('Corrections data detected.')
-            self.data_received = True
-            self.stop()
+        m = re.match(r'.*Application received (\d+) bytes.', line)
+        if m:
+            self.bytes_received += int(m.group(1))
+            if self.bytes_received >= 1024:
+                print('Corrections data detected.')
+                self.data_received = True
+                self.stop()

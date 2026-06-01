@@ -1,0 +1,5 @@
+#!/bin/bash --norc
+
+exec -a arm-none-linux-gnueabihf-ld \
+    external/arm-none-linux-gnueabihf11/bin/arm-none-linux-gnueabihf-ld \
+    "$@"

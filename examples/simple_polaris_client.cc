@@ -43,6 +43,9 @@ DEFINE_string(
     "common, and is intended primarily for development purposes. If blank, use "
     "the default hostname.");
 
+DEFINE_bool(polaris_use_tls, POLARIS_ENABLE_TLS ? true : false,
+            "Enable/disable use of secure TLS connections.");
+
 PolarisClient* polaris_client = nullptr;
 
 // Process receiver incoming messages.  This example code expects received data
@@ -82,6 +85,7 @@ int main(int argc, char* argv[]) {
       new PolarisClient(FLAGS_polaris_api_key, FLAGS_polaris_unique_id);
   polaris_client->SetPolarisEndpoint(FLAGS_polaris_hostname);
   polaris_client->SetPolarisAuthenticationServer(FLAGS_polaris_api_hostname);
+  polaris_client->UseTLS(FLAGS_polaris_use_tls);
 
   polaris_client->SetRTCMCallback(
       std::bind(&ReceivedData, std::placeholders::_1, std::placeholders::_2));

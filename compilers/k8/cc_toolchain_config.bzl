@@ -18,6 +18,7 @@
 
 """AMD K8 (x86-64) C/C++ toolchain."""
 
+load("@bazel_tools//tools/build_defs/cc:action_names.bzl", "ACTION_NAMES")
 load(
     "@bazel_tools//tools/cpp:cc_toolchain_config_lib.bzl",
     "action_config",
@@ -28,7 +29,6 @@ load(
     "tool_path",
     "with_feature_set",
 )
-load("@bazel_tools//tools/build_defs/cc:action_names.bzl", "ACTION_NAMES")
 
 def _impl(ctx):
     toolchain_identifier = "local"
@@ -76,24 +76,26 @@ def _impl(ctx):
     opt_feature = feature(name = "opt")
     dbg_feature = feature(name = "dbg")
 
+    all_compile_actions = [
+        ACTION_NAMES.assemble,
+        ACTION_NAMES.preprocess_assemble,
+        ACTION_NAMES.linkstamp_compile,
+        ACTION_NAMES.c_compile,
+        ACTION_NAMES.cpp_compile,
+        ACTION_NAMES.cpp_header_parsing,
+        ACTION_NAMES.cpp_module_compile,
+        ACTION_NAMES.cpp_module_codegen,
+        ACTION_NAMES.lto_backend,
+        ACTION_NAMES.clif_match,
+    ]
+
     # Compiler flags that are _not_ filtered by the `nocopts` rule attribute.
     unfiltered_compile_flags_feature = feature(
         name = "unfiltered_compile_flags",
         enabled = True,
         flag_sets = [
             flag_set(
-                actions = [
-                    ACTION_NAMES.assemble,
-                    ACTION_NAMES.preprocess_assemble,
-                    ACTION_NAMES.linkstamp_compile,
-                    ACTION_NAMES.c_compile,
-                    ACTION_NAMES.cpp_compile,
-                    ACTION_NAMES.cpp_header_parsing,
-                    ACTION_NAMES.cpp_module_compile,
-                    ACTION_NAMES.cpp_module_codegen,
-                    ACTION_NAMES.lto_backend,
-                    ACTION_NAMES.clif_match,
-                ],
+                actions = all_compile_actions,
                 flag_groups = [
                     flag_group(
                         flags = [
@@ -115,18 +117,7 @@ def _impl(ctx):
         enabled = True,
         flag_sets = [
             flag_set(
-                actions = [
-                    ACTION_NAMES.assemble,
-                    ACTION_NAMES.preprocess_assemble,
-                    ACTION_NAMES.linkstamp_compile,
-                    ACTION_NAMES.c_compile,
-                    ACTION_NAMES.cpp_compile,
-                    ACTION_NAMES.cpp_header_parsing,
-                    ACTION_NAMES.cpp_module_compile,
-                    ACTION_NAMES.cpp_module_codegen,
-                    ACTION_NAMES.lto_backend,
-                    ACTION_NAMES.clif_match,
-                ],
+                actions = all_compile_actions,
                 flag_groups = [
                     flag_group(
                         flags = [
@@ -143,34 +134,12 @@ def _impl(ctx):
                 ],
             ),
             flag_set(
-                actions = [
-                    ACTION_NAMES.assemble,
-                    ACTION_NAMES.preprocess_assemble,
-                    ACTION_NAMES.linkstamp_compile,
-                    ACTION_NAMES.c_compile,
-                    ACTION_NAMES.cpp_compile,
-                    ACTION_NAMES.cpp_header_parsing,
-                    ACTION_NAMES.cpp_module_compile,
-                    ACTION_NAMES.cpp_module_codegen,
-                    ACTION_NAMES.lto_backend,
-                    ACTION_NAMES.clif_match,
-                ],
+                actions = all_compile_actions,
                 flag_groups = [flag_group(flags = ["-g"])],
                 with_features = [with_feature_set(features = ["dbg"])],
             ),
             flag_set(
-                actions = [
-                    ACTION_NAMES.assemble,
-                    ACTION_NAMES.preprocess_assemble,
-                    ACTION_NAMES.linkstamp_compile,
-                    ACTION_NAMES.c_compile,
-                    ACTION_NAMES.cpp_compile,
-                    ACTION_NAMES.cpp_header_parsing,
-                    ACTION_NAMES.cpp_module_compile,
-                    ACTION_NAMES.cpp_module_codegen,
-                    ACTION_NAMES.lto_backend,
-                    ACTION_NAMES.clif_match,
-                ],
+                actions = all_compile_actions,
                 flag_groups = [
                     flag_group(
                         flags = [
@@ -184,18 +153,6 @@ def _impl(ctx):
                 ],
                 with_features = [with_feature_set(features = ["opt"])],
             ),
-            flag_set(
-                actions = [
-                    ACTION_NAMES.linkstamp_compile,
-                    ACTION_NAMES.cpp_compile,
-                    ACTION_NAMES.cpp_header_parsing,
-                    ACTION_NAMES.cpp_module_compile,
-                    ACTION_NAMES.cpp_module_codegen,
-                    ACTION_NAMES.lto_backend,
-                    ACTION_NAMES.clif_match,
-                ],
-                flag_groups = [flag_group(flags = ["-std=c++0x"])],
-            ),
         ],
     )
 
@@ -205,18 +162,7 @@ def _impl(ctx):
         enabled = True,
         flag_sets = [
             flag_set(
-                actions = [
-                    ACTION_NAMES.assemble,
-                    ACTION_NAMES.preprocess_assemble,
-                    ACTION_NAMES.linkstamp_compile,
-                    ACTION_NAMES.c_compile,
-                    ACTION_NAMES.cpp_compile,
-                    ACTION_NAMES.cpp_header_parsing,
-                    ACTION_NAMES.cpp_module_compile,
-                    ACTION_NAMES.cpp_module_codegen,
-                    ACTION_NAMES.lto_backend,
-                    ACTION_NAMES.clif_match,
-                ],
+                actions = all_compile_actions,
                 flag_groups = [
                     flag_group(
                         flags = ["%{user_compile_flags}"],
@@ -284,6 +230,25 @@ def _impl(ctx):
     supports_dynamic_linker_feature = feature(name = "supports_dynamic_linker", enabled = True)
     supports_pic_feature = feature(name = "supports_pic", enabled = True)
 
+    asan_feature = feature(
+        name = "asan",
+        flag_sets = [
+            flag_set(
+                actions = all_compile_actions,
+                flag_groups = [flag_group(flags = [
+                    "-g",
+                    "-fsanitize=address",
+                ])],
+            ),
+            flag_set(
+                actions = [ACTION_NAMES.cpp_link_executable],
+                flag_groups = [flag_group(flags = [
+                    "-fsanitize=address",
+                ])],
+            ),
+        ],
+    )
+
     # Create the list of all available build features.
     features = [
         default_compile_flags_feature,
@@ -296,16 +261,43 @@ def _impl(ctx):
         user_compile_flags_feature,
         sysroot_feature,
         unfiltered_compile_flags_feature,
+        asan_feature,
     ]
 
     # Specify the built-in include directories (set with -isystem).
     cxx_builtin_include_directories = [
-        "/usr/include/c++/4.8",
-        "/usr/include/x86_64-linux-gnu/c++/4.8",
-        "/usr/include/c++/4.8/backward",
-        "/usr/lib/gcc/x86_64-linux-gnu/4.8/include",
+        # GCC 9
+        "/usr/include/c++/9",
+        "/usr/include/x86_64-linux-gnu/c++/9",
+        "/usr/include/c++/9/backward",
+        "/usr/lib/gcc/x86_64-linux-gnu/9/include",
+        "/usr/lib/gcc/x86_64-linux-gnu/9/include-fixed",
+        # GCC 10
+        "/usr/include/c++/10",
+        "/usr/include/x86_64-linux-gnu/c++/10",
+        "/usr/include/c++/10/backward",
+        "/usr/lib/gcc/x86_64-linux-gnu/10/include",
+        "/usr/lib/gcc/x86_64-linux-gnu/10/include-fixed",
+        # GCC 11
+        "/usr/include/c++/11",
+        "/usr/include/x86_64-linux-gnu/c++/11",
+        "/usr/include/c++/11/backward",
+        "/usr/lib/gcc/x86_64-linux-gnu/11/include",
+        "/usr/lib/gcc/x86_64-linux-gnu/11/include-fixed",
+        # GCC 12
+        "/usr/include/c++/12",
+        "/usr/include/x86_64-linux-gnu/c++/12",
+        "/usr/include/c++/12/backward",
+        "/usr/lib/gcc/x86_64-linux-gnu/12/include",
+        "/usr/lib/gcc/x86_64-linux-gnu/12/include-fixed",
+        # GCC 13
+        "/usr/include/c++/13",
+        "/usr/include/x86_64-linux-gnu/c++/13",
+        "/usr/include/c++/13/backward",
+        "/usr/lib/gcc/x86_64-linux-gnu/13/include",
+        "/usr/lib/gcc/x86_64-linux-gnu/13/include-fixed",
+        # Fallback
         "/usr/local/include",
-        "/usr/lib/gcc/x86_64-linux-gnu/4.8/include-fixed",
         "/usr/include/x86_64-linux-gnu",
         "/usr/include",
     ]

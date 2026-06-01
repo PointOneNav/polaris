@@ -1,13 +1,21 @@
+# Use C++11 by default for increased compatibility.
+build --cxxopt=-std=c++11
+
+# Default to K8 toolchain using local GCC installation.
+build --crosstool_top=//compilers:toolchain
+
 # Cross-compilation configurations (e.g., bazel build --config=aarch64).
-build:armv7hf --crosstool_top=//compilers:toolchain
-build:armv7hf --host_crosstool_top=@bazel_tools//tools/cpp:toolchain
-build:armv7hf --cpu=armeabi-v7a --compiler=gcc
-build:armv7hf --spawn_strategy=local
-build:armv7hf --platforms=//compilers:arm_none_linux
+build:armv7 --crosstool_top=//compilers:toolchain
+build:armv7 --host_crosstool_top=@bazel_tools//tools/cpp:toolchain
+build:armv7 --cpu=armv7-none-linux --compiler=gcc11
+build:armv7 --spawn_strategy=local
+build:armv7 --platforms=//compilers:arm_none_linux
+# Legacy alias.
+build:armv7hf --config=armv7
 
 build:aarch64 --crosstool_top=//compilers:toolchain
 build:aarch64 --host_crosstool_top=@bazel_tools//tools/cpp:toolchain
-build:aarch64 --cpu=aarch64-linux-gnu --compiler=gcc
+build:aarch64 --cpu=aarch64-none-linux --compiler=gcc11
 build:aarch64 --spawn_strategy=local
 build:aarch64 --platforms=//compilers:aarch64_none_linux
 

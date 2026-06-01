@@ -137,10 +137,18 @@ class PolarisClient {
    *        corrections endpoint.
    *
    * @param endpoint_url The desired endpoint URL.
-   * @param endpoint_port The desired endpoint port.
+   * @param endpoint_port The desired endpoint port. Set to 0 to use a default
+   *        port (recommended).
    */
   void SetPolarisEndpoint(const std::string& endpoint_url = "",
                           int endpoint_port = 0);
+
+  /**
+   * @brief Specify whether to use a secure TLS connection or not.
+   *
+   * TLS is used by default if supported at compile time.
+   */
+  void UseTLS(bool use_tls);
 
   /**
    * @brief Set the maximum number of times to attempt a reconnection before
@@ -268,6 +276,11 @@ class PolarisClient {
 
   std::string endpoint_url_;
   int endpoint_port_ = 0;
+#if POLARIS_ENABLE_TLS
+  bool use_tls_ = true;
+#else   // !POLARIS_ENABLE_TLS
+  bool use_tls_ = false;
+#endif  // POLARIS_ENABLE_TLS
 
   bool auth_valid_ = false;
   bool no_auth_ = false;

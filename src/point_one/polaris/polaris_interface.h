@@ -121,6 +121,20 @@ class PolarisInterface {
   int Connect();
 
   /**
+   * @brief Enable/disable the use of a secure TLS connection (if supported).
+   *
+   * @note
+   * TLS is enabled by default when supported. To enable TLS support, the
+   * library must be compiled with `-DPOLARIS_ENABLE_TLS=1`.
+   *
+   * @param enable Set `true` to enable TLS support.
+   *
+   * @return @ref POLARIS_SUCCESS on success.
+   * @return @ref POLARIS_ERROR if TLS was requested but is not supported.
+   */
+  int UseTLS(bool enable);
+
+  /**
    * @brief Connect to the specified corrections service URL.
    *
    * @copydetails Connect()

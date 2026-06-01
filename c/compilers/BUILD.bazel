@@ -1,0 +1,39 @@
+# This is the entry point for --crosstool_top.  Toolchains are found
+# by lopping off the name of --crosstool_top and searching for
+# 'cc-compiler-${CPU}' in this BUILD file, where CPU is the target CPU
+# specified in --cpu.
+
+package(default_visibility = ["//compilers:__pkg__"])
+
+platform(
+    name = "aarch64_none_linux",
+    constraint_values = [
+        "@platforms//cpu:aarch64",
+        "@platforms//os:linux",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+platform(
+    name = "arm_none_linux",
+    constraint_values = [
+        "@platforms//cpu:arm",  # Is an alias for aarch32 in platforms
+        "@platforms//os:linux",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+cc_toolchain_suite(
+    name = "toolchain",
+    # target_cpu | compiler
+    toolchains = {
+        "k8": "//compilers/k8:cc-compiler-k8",
+        "k8|compiler": "//compilers/k8:cc-compiler-k8",
+        "k8|gcc": "//compilers/k8:cc-compiler-k8",
+        "aarch64-none-linux": "//compilers/arm/aarch64-none-linux-gnu11:aarch64_toolchain",
+        "aarch64-none-linux|gcc11": "//compilers/arm/aarch64-none-linux-gnu11:aarch64_toolchain",
+        "armv7-none-linux": "//compilers/arm/arm-none-linux-gnueabihf11:arm_toolchain",
+        "armv7-none-linux|gcc11": "//compilers/arm/arm-none-linux-gnueabihf11:arm_toolchain",
+    },
+    visibility = ["//visibility:public"],
+)

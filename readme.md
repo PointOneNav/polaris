@@ -436,7 +436,7 @@ See [Simple Polaris Client](#simple-polaris-client-1) for more details.
 
 The Bazel build flow supports cross-compilation for 32- and 64-bit ARM architectures. To build for either architecture,
 specify the `--config` argument to Bazel with one of the following values:
-- `armv7hf` - 32-bit ARM v7 (e.g., Raspberry Pi v1/2/Zero)
+- `armv7` - 32-bit ARM v7 (e.g., Raspberry Pi v1/2/Zero)
 - `aarch64` - 64-bit ARM (e.g., Raspberry Pi v3+, Nvidia Jetson/Pegasus, Variscite DART-MX8M-MINI)
 
 For example:

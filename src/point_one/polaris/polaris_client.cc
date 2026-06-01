@@ -202,15 +202,22 @@ void PolarisClient::SetPolarisEndpoint(const std::string& endpoint_url,
     endpoint_url_ = endpoint_url;
   }
 
-  if (endpoint_port == 0) {
-    endpoint_port_ =
-#ifdef POLARIS_USE_TLS
-        POLARIS_ENDPOINT_TLS_PORT;
-#else
-        POLARIS_ENDPOINT_PORT;
+  // If set to 0, a default port will be selected later when we connect.
+  endpoint_port_ = endpoint_port;
+}
+
+/******************************************************************************/
+void PolarisClient::UseTLS(bool use_tls) {
+  std::unique_lock<std::recursive_mutex> lock(mutex_);
+  if (use_tls) {
+#if POLARIS_ENABLE_TLS
+    use_tls_ = true;
+#else  // !POLARIS_ENABLE_TLS
+    LOG(ERROR) << "Secure TLS connections not supported.";
+    use_tls_ = false;
 #endif
   } else {
-    endpoint_port_ = endpoint_port;
+    use_tls_ = false;
   }
 }
 
@@ -294,6 +301,8 @@ void PolarisClient::RequestBeacon(const std::string& beacon_id) {
 
 /******************************************************************************/
 void PolarisClient::Run(double timeout_sec) {
+  polaris_.UseTLS(use_tls_);
+
   const int timeout_ms = std::lround(timeout_sec * 1e3);
   int auth_ret = POLARIS_SUCCESS;
   running_ = true;
@@ -353,20 +362,31 @@ void PolarisClient::Run(double timeout_sec) {
       }
     }
 
+    // Choose a default port if necessary.
+    int endpoint_port = endpoint_port_;
+    if (endpoint_port <= 0) {
+      if (use_tls_) {
+        endpoint_port = POLARIS_ENDPOINT_TLS_PORT;
+      } else {
+        endpoint_port = POLARIS_ENDPOINT_PORT;
+      }
+      VLOG(1) << "Using default port " << endpoint_port << ".";
+    }
+
     // We now have a valid access token. Connect to the corrections service.
     //
     // In the calls below, if the connection times out or the access token is
     // rejected, try to connect again. If it fails too many times, the access
     // token may be expired - try reauthenticating.
     VLOG(1) << "Authenticated. Connecting to Polaris... [" << endpoint_url_
-            << ":" << endpoint_port_ << "]";
+            << ":" << endpoint_port << "]";
 
     int connect_ret;
     if (no_auth_) {
-      connect_ret = polaris_.ConnectWithoutAuth(endpoint_url_, endpoint_port_,
+      connect_ret = polaris_.ConnectWithoutAuth(endpoint_url_, endpoint_port,
                                                 unique_id_);
     } else {
-      connect_ret = polaris_.ConnectTo(endpoint_url_, endpoint_port_);
+      connect_ret = polaris_.ConnectTo(endpoint_url_, endpoint_port);
     }
 
     if (connect_ret != POLARIS_SUCCESS) {

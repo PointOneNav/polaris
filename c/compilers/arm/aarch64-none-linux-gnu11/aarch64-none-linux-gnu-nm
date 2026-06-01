@@ -1,0 +1,6 @@
+#!/bin/bash
+
+NAME=$(basename "$0")
+TOOLCHAIN_BINDIR=external/aarch64-none-linux-gnu11/bin
+
+exec "${TOOLCHAIN_BINDIR}"/"${NAME}" "$@"

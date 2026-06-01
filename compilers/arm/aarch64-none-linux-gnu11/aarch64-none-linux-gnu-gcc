@@ -1,0 +1,12 @@
+#!/bin/bash --norc
+
+if [[ -z "${EXT_BUILD_ROOT}" ]]; then
+  MY_PREFIX=""
+else
+  MY_PREFIX="${EXT_BUILD_ROOT}/"
+fi
+
+PATH="${MY_PREFIX}external/aarch64-none-linux-gnu11/libexec/gcc/aarch64-linux-gnu/11.2.1:$PATH" \
+    exec \
+    ${MY_PREFIX}external/aarch64-none-linux-gnu11/bin/aarch64-none-linux-gnu-gcc \
+    "$@"
