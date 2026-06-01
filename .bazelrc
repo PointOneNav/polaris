@@ -1,3 +1,6 @@
+# Use C++11 by default for increased compatibility.
+build --cxxopt=-std=c++11
+
 # Default to K8 toolchain using local GCC installation.
 build --crosstool_top=//compilers:toolchain
 
