@@ -247,13 +247,13 @@ static int ValidateUniqueID(const char* unique_id);
 static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
                       int endpoint_port);
 
+static void CloseSocket(PolarisContext_t* context, int destroy_context);
+
 static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
                            int endpoint_port, const char* address,
                            const void* content, size_t content_length);
 
 static int GetHTTPResponse(PolarisContext_t* context);
-
-static void CloseSocket(PolarisContext_t* context, int destroy_context);
 
 /******************************************************************************/
 int Polaris_Init(PolarisContext_t* context) {
