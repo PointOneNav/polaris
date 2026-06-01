@@ -380,9 +380,9 @@ jobs:
     strategy:
       matrix:
         lang: [cpp, c]
-        arch: [x64, armv7hf, aarch64]
+        arch: [x64, armv7, aarch64]
         exclude:
-          - {lang: c, arch: armv7hf}
+          - {lang: c, arch: armv7}
           - {lang: c, arch: aarch64}
     steps:
     - name: Download artifact
