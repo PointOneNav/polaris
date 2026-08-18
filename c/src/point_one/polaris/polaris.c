@@ -413,19 +413,22 @@ int Polaris_SetAuthToken(PolarisContext_t* context, const char* auth_token) {
 
 /******************************************************************************/
 int Polaris_UseTLS(PolarisContext_t* context, uint8_t enable) {
-  if (enable > 0) {
-#if POLARIS_ENABLE_TLS
-    context->use_tls = 1;
-    return POLARIS_SUCCESS;
-#else  // !POLARIS_ENABLE_TLS
-    P1_PrintError("Secure TLS connections not supported.");
-    context->use_tls = 0;
+  // Store the request even when we cannot honor it. Clearing the flag here
+  // would silently downgrade the connection to plaintext for a caller that
+  // asked for TLS and did not check the return value, so instead we keep the
+  // request and refuse to connect. See @ref OpenSocket().
+  context->use_tls = (enable > 0);
+
+#if !POLARIS_ENABLE_TLS
+  if (context->use_tls) {
+    P1_PrintError(
+        "Secure TLS connections not supported. Rebuild with "
+        "POLARIS_ENABLE_TLS=1.");
     return POLARIS_ERROR;
-#endif
-  } else {
-    context->use_tls = 0;
-    return POLARIS_SUCCESS;
   }
+#endif
+
+  return POLARIS_SUCCESS;
 }
 
 /******************************************************************************/
@@ -1396,7 +1399,16 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
     P1_PrintError("Error: socket already open.");
     return POLARIS_ERROR;
   }
-#if POLARIS_ENABLE_TLS
+#if !POLARIS_ENABLE_TLS
+  // Refuse rather than fall back to an unencrypted connection the caller did
+  // not ask for.
+  else if (context->use_tls) {
+    P1_PrintError(
+        "Error: TLS requested but not supported. Rebuild with "
+        "POLARIS_ENABLE_TLS=1.");
+    return POLARIS_ERROR;
+  }
+#else
   else if (context->use_tls &&
            (context->ssl_ctx != NULL || context->ssl != NULL)) {
     P1_PrintError("Error: SSL context not freed.");

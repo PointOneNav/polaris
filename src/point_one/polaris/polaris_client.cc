@@ -210,16 +210,17 @@ void PolarisClient::SetPolarisEndpoint(const std::string& endpoint_url,
 /******************************************************************************/
 void PolarisClient::UseTLS(bool use_tls) {
   std::unique_lock<std::recursive_mutex> lock(mutex_);
+  // Note that we store the request even if TLS is not supported. This function
+  // has no return value, so downgrading to plaintext here would leave the
+  // caller with no way to tell that it did not get the secure connection it
+  // asked for. Instead @ref Run() will fail to connect.
+  use_tls_ = use_tls;
+#if !POLARIS_ENABLE_TLS
   if (use_tls) {
-#if POLARIS_ENABLE_TLS
-    use_tls_ = true;
-#else  // !POLARIS_ENABLE_TLS
-    LOG(ERROR) << "Secure TLS connections not supported.";
-    use_tls_ = false;
-#endif
-  } else {
-    use_tls_ = false;
+    LOG(ERROR) << "Secure TLS connections not supported. Rebuild with "
+                  "POLARIS_ENABLE_TLS=1.";
   }
+#endif
 }
 
 /******************************************************************************/
