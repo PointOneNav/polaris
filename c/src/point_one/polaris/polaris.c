@@ -568,7 +568,9 @@ void Polaris_Disconnect(PolarisContext_t* context) {
     P1_PrintDebug("Closing Polaris connection.");
     context->disconnected = 1;
 #if POLARIS_ENABLE_TLS
-    if (context->use_tls) {
+    // The TLS session does not exist yet if the TCP connection is still being
+    // established, in which case there is nothing to shut down.
+    if (context->use_tls && context->ssl != NULL) {
       SSL_shutdown(context->ssl);
     }
 #endif
