@@ -395,6 +395,14 @@ void PolarisClient::Run(double timeout_sec) {
       polaris_.Disconnect();
       continue;
     }
+
+    // Disconnect() may have been called while we were connecting.
+    if (!running_) {
+      connected_ = false;
+      polaris_.Disconnect();
+      break;
+    }
+
     // Now release the mutex and start processing data.
     lock.unlock();
     int run_ret = polaris_.Run(timeout_ms);
@@ -446,14 +454,10 @@ void PolarisClient::RunAsync(double timeout_sec) {
 
 /******************************************************************************/
 void PolarisClient::Disconnect() {
-  std::unique_lock<std::recursive_mutex> lock(mutex_);
-
-  if (connected_) {
-    VLOG(1) << "Disconnecting from Polaris...";
-  } else {
-    VLOG(1) << "Already disconnected.";
-  }
-
+  // Signal the run thread and interrupt whatever it is blocked on before taking
+  // mutex_. Run() holds mutex_ while authenticating and connecting, so waiting
+  // for the lock first would delay the disconnect for as long as that takes.
+  //
   // backoff_mutex_ is held while clearing running_ so that a WaitForRetry()
   // call in progress cannot miss the notification below.
   {
@@ -462,8 +466,17 @@ void PolarisClient::Disconnect() {
   }
   backoff_cv_.notify_all();
 
-  connected_ = false;
   polaris_.Disconnect();
+
+  std::unique_lock<std::recursive_mutex> lock(mutex_);
+
+  if (connected_) {
+    VLOG(1) << "Disconnecting from Polaris...";
+  } else {
+    VLOG(1) << "Already disconnected.";
+  }
+
+  connected_ = false;
   lock.unlock();
 
   if (run_thread_) {
