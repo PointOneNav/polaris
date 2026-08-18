@@ -14,8 +14,7 @@
 #include <string.h>    // For memmove()
 
 #ifndef P1_FREERTOS
-#  include <fcntl.h>  // For fcntl()
-#  include <time.h>   // For struct tm
+#  include <time.h>  // For struct tm
 #endif
 
 #if POLARIS_ENABLE_TLS
@@ -253,6 +252,7 @@ static int SendData(PolarisContext_t* context, const void* buffer, size_t size);
 
 static P1_RecvSize_t ReadData(PolarisContext_t* context, void* buffer,
                               size_t size);
+
 
 static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
                            int endpoint_port, const char* address,
@@ -1017,45 +1017,200 @@ static int ValidateUniqueID(const char* unique_id) {
 }
 
 /******************************************************************************/
+/**
+ * @brief Apply the configured send and receive timeouts to the open socket.
+ *
+ * @param context The Polaris context to be used.
+ */
+static void ConfigureSocket(PolarisContext_t* context) {
+  P1_PrintDebug(
+      "Configuring socket. [socket=%d, read_timeout=%d ms, send_timeout=%d "
+      "ms]",
+      context->socket, POLARIS_RECV_TIMEOUT_MS, POLARIS_SEND_TIMEOUT_MS);
+
+  P1_TimeValue_t timeout;
+  P1_SetTimeMS(POLARIS_RECV_TIMEOUT_MS, &timeout);
+  setsockopt(context->socket, SOL_SOCKET, SO_RCVTIMEO, &timeout,
+             sizeof(timeout));
+  P1_SetTimeMS(POLARIS_SEND_TIMEOUT_MS, &timeout);
+  setsockopt(context->socket, SOL_SOCKET, SO_SNDTIMEO, &timeout,
+             sizeof(timeout));
+}
+
 #ifdef P1_FREERTOS
-static inline int P1_SetAddress(const char* hostname, int port,
-                                P1_SocketAddrV4_t* result) {
-  uint32_t ip = FreeRTOS_gethostbyname(hostname);
+/******************************************************************************/
+/**
+ * @brief Resolve the endpoint hostname and open a connection to it.
+ *
+ * IPV4 only: IPv6 not currently supported on FreeRTOS.
+ *
+ * @param context The Polaris context to be used.
+ * @param endpoint_url The hostname of the desired endpoint.
+ * @param endpoint_port The port of the desired endpoint.
+ *
+ * @return @ref POLARIS_SUCCESS on success.
+ * @return @ref POLARIS_SOCKET_ERROR if the hostname could not be resolved, or
+ *         the connection could not be established.
+ */
+static int ResolveAndConnect(PolarisContext_t* context,
+                             const char* endpoint_url, int endpoint_port) {
+  // Open a socket.
+  context->socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  if (context->socket == P1_INVALID_SOCKET) {
+    P1_PrintError("Error creating socket.");
+    return POLARIS_SOCKET_ERROR;
+  }
+
+  ConfigureSocket(context);
+
+  // Look up the endpoint address.
+  P1_PrintDebug("Performing DNS lookup for '%s'.", endpoint_url);
+  uint32_t ip = FreeRTOS_gethostbyname(endpoint_url);
   if (ip == 0) {
-    return -1;
-  } else {
-    result->sin_family = AF_INET;
-    result->sin_port = FreeRTOS_htons(port);
-    result->sin_addr = ip;
-    return 0;
+    P1_PrintError("Error locating address '%s'.", endpoint_url);
+    return POLARIS_SOCKET_ERROR;
   }
+
+  P1_SocketAddrV4_t address;
+  address.sin_family = AF_INET;
+  address.sin_port = FreeRTOS_htons(endpoint_port);
+  address.sin_addr = ip;
+
+  // Connect to the server.
+  uint32_t ip_host_endian = ntohl(address.sin_addr);
+  P1_PrintDebug("Connecting to 'tcp://%d.%d.%d.%d:%d'.",
+                (ip_host_endian >> 24) & 0xFF, (ip_host_endian >> 16) & 0xFF,
+                (ip_host_endian >> 8) & 0xFF, ip_host_endian & 0xFF,
+                endpoint_port);
+  int ret =
+      connect(context->socket, (P1_SocketAddr_t*)&address, sizeof(address));
+  if (ret < 0) {
+    P1_PrintErrno("Error connecting to endpoint", ret);
+    return POLARIS_SOCKET_ERROR;
+  }
+
+  P1_PrintDebug("Connected successfully.");
+  return POLARIS_SUCCESS;
 }
-#else
-static inline int P1_SetAddress(const char* hostname, int port,
-                                P1_SocketAddrV4_t* result) {
-  struct hostent* host_info = gethostbyname(hostname);
-  if (host_info == NULL) {
-    P1_PrintError("Unable to resolve \"%s\": %s", hostname, hstrerror(h_errno));
-    return -1;
-  }
-  // IPv6 not currently supported by the API.
-  else if (host_info->h_addrtype != AF_INET) {
-    P1_PrintWarning(
-        "Warning: DNS lookup for \"%s\" returned an IPv6 address (not "
-        "supported).",
-        hostname);
-    // Explicitly set h_errno to _something_ (gethostbyname() doesn't touch
-    // h_errno on success).
-    h_errno = NO_RECOVERY;
-    return -2;
+#else   // POSIX
+/******************************************************************************/
+/**
+ * @brief Format a resolved address as a numeric string.
+ *
+ * @param address The address to be formatted.
+ * @param buffer The buffer in which the result will be stored. Must be at least
+ *        `INET6_ADDRSTRLEN` bytes.
+ * @param capacity_bytes The capacity of `buffer` (in bytes).
+ *
+ * @return `buffer`, for convenience when used as a `printf()` argument.
+ */
+static const char* FormatAddress(const P1_SocketAddr_t* address, char* buffer,
+                                 size_t capacity_bytes) {
+  const void* raw_address;
+  if (address->sa_family == AF_INET6) {
+    raw_address = &((const struct sockaddr_in6*)address)->sin6_addr;
   } else {
-    result->sin_family = AF_INET;
-    result->sin_port = htons(port);
-    memcpy(&result->sin_addr, host_info->h_addr_list[0], host_info->h_length);
-    return 0;
+    raw_address = &((const struct sockaddr_in*)address)->sin_addr;
   }
+
+  if (inet_ntop(address->sa_family, raw_address, buffer,
+                (socklen_t)capacity_bytes) == NULL) {
+    snprintf(buffer, capacity_bytes, "<unknown>");
+  }
+
+  return buffer;
 }
-#endif
+
+/******************************************************************************/
+/**
+ * @brief Resolve the endpoint hostname and open a connection to it.
+ *
+ * Both IPv4 and IPv6 addresses are considered. Each address returned by the
+ * resolver is tried in turn, in the order the system prefers, until one of them
+ * connects.
+ *
+ * @param context The Polaris context to be used.
+ * @param endpoint_url The hostname of the desired endpoint.
+ * @param endpoint_port The port of the desired endpoint.
+ *
+ * @return @ref POLARIS_SUCCESS on success.
+ * @return @ref POLARIS_SOCKET_ERROR if the hostname could not be resolved, or
+ *         the connection could not be established.
+ */
+static int ResolveAndConnect(PolarisContext_t* context,
+                             const char* endpoint_url, int endpoint_port) {
+  char port_str[6] = {0};
+  snprintf(port_str, sizeof(port_str), "%d", endpoint_port);
+
+  struct addrinfo hints;
+  memset(&hints, 0, sizeof(hints));
+  hints.ai_family = AF_UNSPEC;
+  hints.ai_socktype = SOCK_STREAM;
+  hints.ai_protocol = IPPROTO_TCP;
+
+  // Look up the endpoint addresses.
+  P1_PrintDebug("Performing DNS lookup for '%s'.", endpoint_url);
+  struct addrinfo* addresses = NULL;
+  int gai_ret = getaddrinfo(endpoint_url, port_str, &hints, &addresses);
+  if (gai_ret == EAI_SYSTEM) {
+    P1_PrintErrno("Error resolving endpoint address", -1);
+    return POLARIS_SOCKET_ERROR;
+  } else if (gai_ret != 0) {
+    P1_PrintError("Error resolving address '%s'. [error=%s (%d)]", endpoint_url,
+                  gai_strerror(gai_ret), gai_ret);
+    return POLARIS_SOCKET_ERROR;
+  }
+
+  // Try each address in turn, keeping the first one we can connect to.
+  int ret = POLARIS_SOCKET_ERROR;
+  for (struct addrinfo* entry = addresses; entry != NULL;
+       entry = entry->ai_next) {
+    // Stop early if the user asked to disconnect while we were connecting,
+    // rather than moving on to the next address.
+    if (context->disconnected) {
+      P1_PrintDebug("Connection attempt canceled by user request.");
+      break;
+    }
+
+    context->socket =
+        socket(entry->ai_family, entry->ai_socktype, entry->ai_protocol);
+    if (context->socket == P1_INVALID_SOCKET) {
+      P1_PrintErrno("Error creating socket", -1);
+      continue;
+    }
+
+    ConfigureSocket(context);
+
+    char address_str[INET6_ADDRSTRLEN];
+    if (entry->ai_family == AF_INET6) {
+      P1_PrintDebug(
+          "Connecting to 'tcp://[%s]:%d'.",
+          FormatAddress(entry->ai_addr, address_str, sizeof(address_str)),
+          endpoint_port);
+    } else {
+      P1_PrintDebug(
+          "Connecting to 'tcp://%s:%d'.",
+          FormatAddress(entry->ai_addr, address_str, sizeof(address_str)),
+          endpoint_port);
+    }
+
+    if (connect(context->socket, entry->ai_addr,
+                (socklen_t)entry->ai_addrlen) == 0) {
+      P1_PrintDebug("Connected successfully.");
+      ret = POLARIS_SUCCESS;
+      break;
+    }
+
+    P1_PrintErrno("Error connecting to endpoint", -1);
+    close(context->socket);
+    context->socket = P1_INVALID_SOCKET;
+  }
+
+  freeaddrinfo(addresses);
+
+  return ret;
+}
+#endif  // End OS selection
 
 /******************************************************************************/
 static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
@@ -1094,65 +1249,12 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
   }
 #endif
 
-  // Open a socket.
-  context->socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-  if (context->socket < 0) {
-    P1_PrintErrno("Error creating socket", context->socket);
+  // Resolve the endpoint hostname and establish a TCP connection.
+  int ret = ResolveAndConnect(context, endpoint_url, endpoint_port);
+  if (ret != POLARIS_SUCCESS) {
     CloseSocket(context, 1);
-    return POLARIS_SOCKET_ERROR;
+    return ret;
   }
-
-  P1_PrintDebug(
-      "Configuring socket. [socket=%d, read_timeout=%d ms, send_timeout=%d "
-      "ms]",
-      context->socket, POLARIS_RECV_TIMEOUT_MS, POLARIS_SEND_TIMEOUT_MS);
-
-  // Set send/receive timeouts.
-  P1_TimeValue_t timeout;
-  P1_SetTimeMS(POLARIS_RECV_TIMEOUT_MS, &timeout);
-  setsockopt(context->socket, SOL_SOCKET, SO_RCVTIMEO, &timeout,
-             sizeof(timeout));
-  P1_SetTimeMS(POLARIS_SEND_TIMEOUT_MS, &timeout);
-  setsockopt(context->socket, SOL_SOCKET, SO_SNDTIMEO, &timeout,
-             sizeof(timeout));
-
-#ifndef P1_FREERTOS
-  int flags = fcntl(context->socket, F_GETFL);
-  P1_PrintDebug("Socket flags: 0x%08x", flags);
-#endif  // P1_FREERTOS
-
-  // Lookup the IP of the endpoint used for auth requests.
-  P1_PrintDebug("Performing DNS lookup for '%s'.", endpoint_url);
-  P1_SocketAddrV4_t address;
-  if (P1_SetAddress(endpoint_url, endpoint_port, &address) < 0) {
-#ifdef P1_FREERTOS
-    P1_PrintError("Error locating address '%s'.", endpoint_url);
-#else
-    P1_PrintError("Error locating address '%s'. [error=%s (%d)]", endpoint_url,
-                  hstrerror(h_errno), h_errno);
-#endif
-    CloseSocket(context, 1);
-    return POLARIS_SOCKET_ERROR;
-  }
-
-  // Connect to the server.
-#ifdef P1_FREERTOS
-  uint32_t ip_host_endian = ntohl(address.sin_addr);
-#else
-  uint32_t ip_host_endian = ntohl(address.sin_addr.s_addr);
-#endif
-  P1_PrintDebug("Connecting to 'tcp://%d.%d.%d.%d:%d'.",
-                (ip_host_endian >> 24) & 0xFF, (ip_host_endian >> 16) & 0xFF,
-                (ip_host_endian >> 8) & 0xFF, ip_host_endian & 0xFF,
-                endpoint_port);
-  int ret =
-      connect(context->socket, (P1_SocketAddr_t*)&address, sizeof(address));
-  if (ret < 0) {
-    P1_PrintErrno("Error connecting to endpoint", ret);
-    CloseSocket(context, 1);
-    return POLARIS_SOCKET_ERROR;
-  }
-  P1_PrintDebug("Connected successfully.");
 
 #if POLARIS_ENABLE_TLS
   if (context->use_tls) {

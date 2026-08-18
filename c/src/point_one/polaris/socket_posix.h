@@ -10,8 +10,9 @@
 
 #pragma once
 
+#include <arpa/inet.h> // For inet_ntop()
 #include <netinet/in.h> // For IPPROTO_* macros and hton*()
-#include <netdb.h> // For gethostbyname() and hostent
+#include <netdb.h> // For getaddrinfo() and addrinfo
 #include <string.h> // For memcpy()
 #include <sys/socket.h>
 #include <sys/time.h>
