@@ -1026,6 +1026,47 @@ static int ValidateUniqueID(const char* unique_id) {
 
 /******************************************************************************/
 /**
+ * @brief Test whether an error code means no network connection is available.
+ *
+ * Distinguishes a missing or unusable network interface/route from a problem
+ * with the endpoint itself. The former is transient and worth retrying, and
+ * must not be reported in a way that a caller could mistake for a rejected API
+ * key or access token.
+ *
+ * @param error_code The `errno` value to be checked.
+ *
+ * @return 1 if the error indicates that no network connection is available.
+ */
+static int IsNoNetworkError(int error_code) {
+  // Note: The cases are guarded individually since a bare-metal C library may
+  // not define every POSIX network error code.
+  switch (error_code) {
+#ifdef ENETDOWN
+    case ENETDOWN:
+#endif
+#ifdef ENETUNREACH
+    case ENETUNREACH:
+#endif
+#ifdef EHOSTDOWN
+    case EHOSTDOWN:
+#endif
+#ifdef EHOSTUNREACH
+    case EHOSTUNREACH:
+#endif
+#ifdef EADDRNOTAVAIL
+    case EADDRNOTAVAIL:
+#endif
+#ifdef EAFNOSUPPORT
+    case EAFNOSUPPORT:
+#endif
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+/******************************************************************************/
+/**
  * @brief Apply the configured send and receive timeouts to the open socket.
  *
  * @param context The Polaris context to be used.
@@ -1057,6 +1098,7 @@ static void ConfigureSocket(PolarisContext_t* context) {
  * @param endpoint_port The port of the desired endpoint.
  *
  * @return @ref POLARIS_SUCCESS on success.
+ * @return @ref POLARIS_NO_NETWORK if no network connection is available.
  * @return @ref POLARIS_SOCKET_ERROR if the hostname could not be resolved, or
  *         the connection could not be established.
  */
@@ -1076,7 +1118,10 @@ static int ResolveAndConnect(PolarisContext_t* context,
   uint32_t ip = FreeRTOS_gethostbyname(endpoint_url);
   if (ip == 0) {
     P1_PrintError("Error locating address '%s'.", endpoint_url);
-    return POLARIS_SOCKET_ERROR;
+    // Note that FreeRTOS does not report why the lookup failed, so we cannot
+    // tell an unreachable DNS server from an unknown hostname. We report the
+    // transient condition since retrying is the safer of the two behaviors.
+    return POLARIS_NO_NETWORK;
   }
 
   P1_SocketAddrV4_t address;
@@ -1094,7 +1139,8 @@ static int ResolveAndConnect(PolarisContext_t* context,
       connect(context->socket, (P1_SocketAddr_t*)&address, sizeof(address));
   if (ret < 0) {
     P1_PrintErrno("Error connecting to endpoint", ret);
-    return POLARIS_SOCKET_ERROR;
+    // FreeRTOS returns the negated error condition rather than setting errno.
+    return IsNoNetworkError(-ret) ? POLARIS_NO_NETWORK : POLARIS_SOCKET_ERROR;
   }
 
   P1_PrintDebug("Connected successfully.");
@@ -1112,6 +1158,7 @@ static int ResolveAndConnect(PolarisContext_t* context,
  *
  * @return `buffer`, for convenience when used as a `printf()` argument.
  */
+#  if !P1_NO_PRINT
 static const char* FormatAddress(const P1_SocketAddr_t* address, char* buffer,
                                  size_t capacity_bytes) {
   const void* raw_address;
@@ -1128,6 +1175,7 @@ static const char* FormatAddress(const P1_SocketAddr_t* address, char* buffer,
 
   return buffer;
 }
+#  endif  // !P1_NO_PRINT
 
 /******************************************************************************/
 /**
@@ -1143,6 +1191,7 @@ static const char* FormatAddress(const P1_SocketAddr_t* address, char* buffer,
  *
  * @return @ref POLARIS_SUCCESS on success.
  * @return @ref POLARIS_TIMED_OUT if the connection was not established in time.
+ * @return @ref POLARIS_NO_NETWORK if no network connection is available.
  * @return @ref POLARIS_CONNECTION_CLOSED if @ref Polaris_Disconnect() was
  *         called while waiting for the connection.
  * @return @ref POLARIS_SOCKET_ERROR if the connection was refused or failed for
@@ -1164,7 +1213,8 @@ static int ConnectWithTimeout(PolarisContext_t* context,
   if (ret != 0) {
     if (errno != EINPROGRESS) {
       P1_PrintErrno("Error connecting to endpoint", ret);
-      return POLARIS_SOCKET_ERROR;
+      return IsNoNetworkError(errno) ? POLARIS_NO_NETWORK
+                                     : POLARIS_SOCKET_ERROR;
     }
 
     // Wait for the connection to be established.
@@ -1224,7 +1274,8 @@ static int ConnectWithTimeout(PolarisContext_t* context,
     } else if (socket_error != 0) {
       errno = socket_error;
       P1_PrintErrno("Error connecting to endpoint", -1);
-      return POLARIS_SOCKET_ERROR;
+      return IsNoNetworkError(socket_error) ? POLARIS_NO_NETWORK
+                                            : POLARIS_SOCKET_ERROR;
     }
   }
 
@@ -1252,6 +1303,7 @@ static int ConnectWithTimeout(PolarisContext_t* context,
  *
  * @return @ref POLARIS_SUCCESS on success.
  * @return @ref POLARIS_TIMED_OUT if the connection was not established in time.
+ * @return @ref POLARIS_NO_NETWORK if no network connection is available.
  * @return @ref POLARIS_CONNECTION_CLOSED if @ref Polaris_Disconnect() was
  *         called while connecting.
  * @return @ref POLARIS_SOCKET_ERROR if the hostname could not be resolved, or
@@ -1274,11 +1326,15 @@ static int ResolveAndConnect(PolarisContext_t* context,
   int gai_ret = getaddrinfo(endpoint_url, port_str, &hints, &addresses);
   if (gai_ret == EAI_SYSTEM) {
     P1_PrintErrno("Error resolving endpoint address", -1);
-    return POLARIS_SOCKET_ERROR;
+    return IsNoNetworkError(errno) ? POLARIS_NO_NETWORK : POLARIS_SOCKET_ERROR;
   } else if (gai_ret != 0) {
     P1_PrintError("Error resolving address '%s'. [error=%s (%d)]", endpoint_url,
                   gai_strerror(gai_ret), gai_ret);
-    return POLARIS_SOCKET_ERROR;
+    // A temporary resolver failure means we could not reach a DNS server at
+    // all, which is what a device with no connectivity looks like. Any other
+    // failure (e.g., an unknown hostname) is a problem with the endpoint itself
+    // and will not be fixed by retrying.
+    return gai_ret == EAI_AGAIN ? POLARIS_NO_NETWORK : POLARIS_SOCKET_ERROR;
   }
 
   // Try each address in turn, keeping the first one we can connect to.
@@ -1296,11 +1352,13 @@ static int ResolveAndConnect(PolarisContext_t* context,
         socket(entry->ai_family, entry->ai_socktype, entry->ai_protocol);
     if (context->socket == P1_INVALID_SOCKET) {
       P1_PrintErrno("Error creating socket", -1);
+      ret = IsNoNetworkError(errno) ? POLARIS_NO_NETWORK : POLARIS_SOCKET_ERROR;
       continue;
     }
 
     ConfigureSocket(context);
 
+#  if !P1_NO_PRINT
     char address_str[INET6_ADDRSTRLEN];
     if (entry->ai_family == AF_INET6) {
       P1_PrintDebug(
@@ -1313,6 +1371,7 @@ static int ResolveAndConnect(PolarisContext_t* context,
           FormatAddress(entry->ai_addr, address_str, sizeof(address_str)),
           endpoint_port);
     }
+#  endif  // !P1_NO_PRINT
 
     ret = ConnectWithTimeout(context, entry->ai_addr, entry->ai_addrlen);
     if (ret == POLARIS_SUCCESS) {

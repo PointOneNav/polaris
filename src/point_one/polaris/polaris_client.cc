@@ -332,6 +332,12 @@ void PolarisClient::Run(double timeout_sec) {
         LOG(ERROR) << "Invalid API key/unique ID specified.";
         running_ = false;
         break;
+      } else if (auth_ret == POLARIS_NO_NETWORK) {
+        LOG(WARNING) << "No network connection available. Retrying "
+                        "authentication.";
+        // See note below about setting this.
+        auth_ret = POLARIS_SUCCESS;
+        continue;
       } else if (auth_ret != POLARIS_SUCCESS) {
         LOG(WARNING) << "Authentication failed. Retrying. [error=" << auth_ret
                      << "]";
@@ -380,8 +386,12 @@ void PolarisClient::Run(double timeout_sec) {
       // Staying quiet if Disconnect() was called while we were connecting. The
       // attempt did not fail, and we are about to exit rather than retry.
       if (running_) {
-        LOG(ERROR)
-            << "Error connecting to Polaris corrections stream. Retrying.";
+        if (connect_ret == POLARIS_NO_NETWORK) {
+          LOG(WARNING) << "No network connection available. Retrying.";
+        } else {
+          LOG(ERROR)
+              << "Error connecting to Polaris corrections stream. Retrying.";
+        }
       }
       continue;
     }
