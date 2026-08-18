@@ -1314,7 +1314,9 @@ static int ConnectWithTimeout(PolarisContext_t* context,
  */
 static int ResolveAndConnect(PolarisContext_t* context,
                              const char* endpoint_url, int endpoint_port) {
-  char port_str[6] = {0};
+  // Sized to hold any int, not just a valid port number, since the value comes
+  // from the caller unchecked.
+  char port_str[12] = {0};
   snprintf(port_str, sizeof(port_str), "%d", endpoint_port);
 
   struct addrinfo hints;
