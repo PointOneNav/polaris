@@ -389,11 +389,12 @@ void PolarisClient::Run(double timeout_sec) {
       connect_ret = polaris_.ConnectTo(endpoint_url_, endpoint_port);
     }
 
+    // Note that a failure to establish the connection does not count against
+    // the reconnect limit. That limit exists to trigger reauthentication when
+    // the access token may have expired, and we never got far enough to find
+    // out whether the token is any good.
     if (connect_ret != POLARIS_SUCCESS) {
       LOG(ERROR) << "Error connecting to Polaris corrections stream. Retrying.";
-      if (connect_ret != POLARIS_SOCKET_ERROR) {
-        IncrementRetryCount();
-      }
       continue;
     }
 
@@ -409,9 +410,6 @@ void PolarisClient::Run(double timeout_sec) {
           << "Error resending position update/beacon request. Reconnecting.";
       connected_ = false;
       polaris_.Disconnect();
-      if (send_ret != POLARIS_SOCKET_ERROR) {
-        IncrementRetryCount();
-      }
       continue;
     }
     // Now release the mutex and start processing data.
