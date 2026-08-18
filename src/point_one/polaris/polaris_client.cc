@@ -377,7 +377,12 @@ void PolarisClient::Run(double timeout_sec) {
     // the access token may have expired, and we never got far enough to find
     // out whether the token is any good.
     if (connect_ret != POLARIS_SUCCESS) {
-      LOG(ERROR) << "Error connecting to Polaris corrections stream. Retrying.";
+      // Staying quiet if Disconnect() was called while we were connecting. The
+      // attempt did not fail, and we are about to exit rather than retry.
+      if (running_) {
+        LOG(ERROR)
+            << "Error connecting to Polaris corrections stream. Retrying.";
+      }
       continue;
     }
 

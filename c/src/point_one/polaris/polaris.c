@@ -14,7 +14,9 @@
 #include <string.h>    // For memmove()
 
 #ifndef P1_FREERTOS
-#  include <time.h>  // For struct tm
+#  include <fcntl.h>  // For fcntl()
+#  include <poll.h>   // For poll()
+#  include <time.h>   // For struct tm
 #endif
 
 #if POLARIS_ENABLE_TLS
@@ -455,8 +457,11 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
   context->data_request_sent = 0;
   int ret = OpenSocket(context, endpoint_url, endpoint_port);
   if (ret != POLARIS_SUCCESS) {
-    P1_PrintError("Error connecting to corrections endpoint: tcp://%s:%d.",
-                  endpoint_url, endpoint_port);
+    // Staying quiet if the user canceled the attempt, which is not a failure.
+    if (!context->disconnected) {
+      P1_PrintError("Error connecting to corrections endpoint: tcp://%s:%d.",
+                    endpoint_url, endpoint_port);
+    }
     return ret;
   }
 
@@ -510,8 +515,11 @@ int Polaris_ConnectWithoutAuth(PolarisContext_t* context,
   context->data_request_sent = 0;
   ret = OpenSocket(context, endpoint_url, endpoint_port);
   if (ret != POLARIS_SUCCESS) {
-    P1_PrintError("Error connecting to corrections endpoint: tcp://%s:%d.",
-                  endpoint_url, endpoint_port);
+    // Staying quiet if the user canceled the attempt, which is not a failure.
+    if (!context->disconnected) {
+      P1_PrintError("Error connecting to corrections endpoint: tcp://%s:%d.",
+                    endpoint_url, endpoint_port);
+    }
     return ret;
   }
 
@@ -1123,6 +1131,115 @@ static const char* FormatAddress(const P1_SocketAddr_t* address, char* buffer,
 
 /******************************************************************************/
 /**
+ * @brief Connect the open socket to the specified address.
+ *
+ * Unlike a plain `connect()` call, this function gives up after @ref
+ * POLARIS_CONNECT_TIMEOUT_MS. The operating system default connection timeout
+ * can be a minute or more, which the calling code has no way to interrupt.
+ *
+ * @param context The Polaris context to be used.
+ * @param address The address of the desired endpoint.
+ * @param address_length The size of `address` (in bytes).
+ *
+ * @return @ref POLARIS_SUCCESS on success.
+ * @return @ref POLARIS_TIMED_OUT if the connection was not established in time.
+ * @return @ref POLARIS_CONNECTION_CLOSED if @ref Polaris_Disconnect() was
+ *         called while waiting for the connection.
+ * @return @ref POLARIS_SOCKET_ERROR if the connection was refused or failed for
+ *         any other reason.
+ */
+static int ConnectWithTimeout(PolarisContext_t* context,
+                              const P1_SocketAddr_t* address,
+                              size_t address_length) {
+  // Switch to non-blocking mode so connect() returns immediately and we can
+  // impose our own timeout below.
+  int flags = fcntl(context->socket, F_GETFL, 0);
+  if (flags < 0 || fcntl(context->socket, F_SETFL, flags | O_NONBLOCK) < 0) {
+    P1_PrintErrno("Error configuring socket for non-blocking connect", -1);
+    return POLARIS_SOCKET_ERROR;
+  }
+
+  // Start the connection.
+  int ret = connect(context->socket, address, (socklen_t)address_length);
+  if (ret != 0) {
+    if (errno != EINPROGRESS) {
+      P1_PrintErrno("Error connecting to endpoint", ret);
+      return POLARIS_SOCKET_ERROR;
+    }
+
+    // Wait for the connection to be established.
+    struct pollfd poll_info;
+    poll_info.fd = context->socket;
+    poll_info.events = POLLOUT;
+
+    P1_TimeValue_t start_time;
+    P1_GetCurrentTime(&start_time);
+    int remaining_ms = POLARIS_CONNECT_TIMEOUT_MS;
+    while (1) {
+      poll_info.revents = 0;
+      ret = poll(&poll_info, 1, remaining_ms);
+
+      // Give up quietly if the user asked us to disconnect. Disconnecting
+      // closes the socket, so the poll may report an interruption, an invalid
+      // descriptor, or a failed connection depending on the timing. None of
+      // those are errors worth reporting.
+      if (context->disconnected) {
+        P1_PrintDebug("Connection attempt canceled by user request.");
+        return POLARIS_CONNECTION_CLOSED;
+      }
+
+      if (ret >= 0) {
+        break;
+      } else if (errno != EINTR) {
+        P1_PrintErrno("Error waiting for connection to be established", ret);
+        return POLARIS_SOCKET_ERROR;
+      }
+
+      // Interrupted by an unrelated signal. Keep waiting for whatever time is
+      // left of the timeout.
+      P1_TimeValue_t now;
+      P1_GetCurrentTime(&now);
+      remaining_ms =
+          POLARIS_CONNECT_TIMEOUT_MS - P1_GetElapsedMS(&start_time, &now);
+      if (remaining_ms <= 0) {
+        ret = 0;
+        break;
+      }
+    }
+
+    if (ret == 0) {
+      P1_PrintWarning("Warning: Timed out connecting to endpoint after %d ms.",
+                      POLARIS_CONNECT_TIMEOUT_MS);
+      return POLARIS_TIMED_OUT;
+    }
+
+    // The socket becomes writable whether the connection succeeded or failed,
+    // so we have to ask for the result explicitly.
+    int socket_error = 0;
+    socklen_t socket_error_length = sizeof(socket_error);
+    if (getsockopt(context->socket, SOL_SOCKET, SO_ERROR, &socket_error,
+                   &socket_error_length) < 0) {
+      P1_PrintErrno("Error querying connection status", -1);
+      return POLARIS_SOCKET_ERROR;
+    } else if (socket_error != 0) {
+      errno = socket_error;
+      P1_PrintErrno("Error connecting to endpoint", -1);
+      return POLARIS_SOCKET_ERROR;
+    }
+  }
+
+  // Restore blocking mode so the configured send and receive timeouts govern
+  // the reads and writes that follow.
+  if (fcntl(context->socket, F_SETFL, flags) < 0) {
+    P1_PrintErrno("Error restoring socket flags", -1);
+    return POLARIS_SOCKET_ERROR;
+  }
+
+  P1_PrintDebug("Connected successfully.");
+  return POLARIS_SUCCESS;
+}
+
+/**
  * @brief Resolve the endpoint hostname and open a connection to it.
  *
  * Both IPv4 and IPv6 addresses are considered. Each address returned by the
@@ -1134,6 +1251,9 @@ static const char* FormatAddress(const P1_SocketAddr_t* address, char* buffer,
  * @param endpoint_port The port of the desired endpoint.
  *
  * @return @ref POLARIS_SUCCESS on success.
+ * @return @ref POLARIS_TIMED_OUT if the connection was not established in time.
+ * @return @ref POLARIS_CONNECTION_CLOSED if @ref Polaris_Disconnect() was
+ *         called while connecting.
  * @return @ref POLARIS_SOCKET_ERROR if the hostname could not be resolved, or
  *         the connection could not be established.
  */
@@ -1194,14 +1314,11 @@ static int ResolveAndConnect(PolarisContext_t* context,
           endpoint_port);
     }
 
-    if (connect(context->socket, entry->ai_addr,
-                (socklen_t)entry->ai_addrlen) == 0) {
-      P1_PrintDebug("Connected successfully.");
-      ret = POLARIS_SUCCESS;
+    ret = ConnectWithTimeout(context, entry->ai_addr, entry->ai_addrlen);
+    if (ret == POLARIS_SUCCESS) {
       break;
     }
 
-    P1_PrintErrno("Error connecting to endpoint", -1);
     close(context->socket);
     context->socket = P1_INVALID_SOCKET;
   }
