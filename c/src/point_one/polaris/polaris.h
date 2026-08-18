@@ -72,6 +72,23 @@
 #endif
 
 /**
+ * @brief The maximum amount of time (in ms) to wait for a TCP connection to be
+ *        established.
+ *
+ * @note
+ * This timeout is enforced by the library and is typically much shorter than
+ * the operating system default, which can be a minute or more. A long
+ * connection attempt is indistinguishable from a hang to the calling code,
+ * which cannot interrupt it.
+ *
+ * Not currently used on FreeRTOS, which does not support a non-blocking
+ * connect.
+ */
+#ifndef POLARIS_CONNECT_TIMEOUT_MS
+# define POLARIS_CONNECT_TIMEOUT_MS 5000
+#endif
+
+/**
  * @brief The maximum length of a message when a print callback is registered.
  *
  * See @ref Polaris_SetPrintCallback().
@@ -335,6 +352,8 @@ int Polaris_SetCACertificates(PolarisContext_t* context, const char* ca_file,
  * @return @ref POLARIS_SUCCESS on success.
  * @return @ref POLARIS_SOCKET_ERROR if a connection could not be established
  *         with the Polaris corrections server.
+ * @return @ref POLARIS_TIMED_OUT if the connection could not be established
+ *         within @ref POLARIS_CONNECT_TIMEOUT_MS.
  * @return @ref POLARIS_AUTH_ERROR if an authentication token was not provided.
  * @return @ref POLARIS_SEND_ERROR if an error occurred while sending the
  *         authentication token.
@@ -370,6 +389,8 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
  * @return @ref POLARIS_ERROR if the unique ID is not valid.
  * @return @ref POLARIS_SOCKET_ERROR if a connection could not be established
  *         with the Polaris corrections server.
+ * @return @ref POLARIS_TIMED_OUT if the connection could not be established
+ *         within @ref POLARIS_CONNECT_TIMEOUT_MS.
  * @return @ref POLARIS_SEND_ERROR if an error occurred while sending the
  *         unique ID.
  */
