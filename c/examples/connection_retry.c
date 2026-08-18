@@ -137,6 +137,9 @@ int main(int argc, const char* argv[]) {
         P1_printf("Authentication rejected. Is your API key valid?\n");
         exit_code = 3;
         break;
+      } else if (ret == POLARIS_NO_NETWORK) {
+        P1_printf("No network connection available. Retrying.\n");
+        continue;
       } else if (ret != POLARIS_SUCCESS) {
         P1_printf("Authentication failed. Retrying.\n");
         continue;
@@ -157,7 +160,10 @@ int main(int argc, const char* argv[]) {
     P1_printf("Authenticated. Connecting to Polaris...\n");
 
     int ret = Polaris_Connect(&context);
-    if (ret != POLARIS_SUCCESS) {
+    if (ret == POLARIS_NO_NETWORK) {
+      P1_printf("No network connection available. Retrying.\n");
+      continue;
+    } else if (ret != POLARIS_SUCCESS) {
       P1_printf("Error connecting to Polaris corrections stream. Retrying.\n");
       continue;
     }
