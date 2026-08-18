@@ -10,6 +10,16 @@
 
 #include "point_one/polaris/socket.h"
 
+// The `POLARIS_NO_PRINT` macro disables all print statements in the library. If
+// it is not defined and the alternative `P1_NO_PRINT` is, defer to that.
+#if !defined(POLARIS_NO_PRINT)
+#  if defined(P1_NO_PRINT)
+#    define POLARIS_NO_PRINT P1_NO_PRINT
+#  else
+#    define POLARIS_NO_PRINT 0
+#  endif
+#endif
+
 #define POLARIS_API_URL "api.pointonenav.com"
 
 #define POLARIS_ENDPOINT_URL "polaris.pointonenav.com"
