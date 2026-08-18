@@ -108,19 +108,18 @@
 #endif
 
 /**
- * @brief Set `POLARIS_ENABLE_TLS=1` to enable TLS support (on by default).
+ * @brief Compile in/out support for secure TLS connections (enabled by
+ *        default).
  *
  * @note
- * If `POLARIS_ENABLE_TLS` is not defined, it will fall back to the deprecated
- * `POLARIS_USE_TLS` macro.
+ * The deprecated `POLARIS_USE_TLS` macro is subsumed by this one: defining it
+ * has the same effect as `POLARIS_ENABLE_TLS=1`, which is now the default. To
+ * disable TLS, you must explicitly set `POLARIS_ENABLE_TLS=0` (not
+ * recommended).
  */
 #ifndef POLARIS_ENABLE_TLS
-#  ifdef POLARIS_USE_TLS
-#    define POLARIS_ENABLE_TLS 1
-#  else  // !POLARIS_USE_TLS
-#    define POLARIS_ENABLE_TLS 0
-#  endif  // POLARIS_USE_TLS
-#endif    // POLARIS_ENABLE_TLS
+#  define POLARIS_ENABLE_TLS 1
+#endif
 
 /**
  * @name Polaris Return Codes

@@ -70,7 +70,8 @@ cc_library(
     name = "polaris_client_no_tls",
     srcs = glob(["src/**/*.c"]),
     hdrs = glob(["src/**/*.h"]),
-    copts = select({
+    copts = ["-DPOLARIS_ENABLE_TLS=0"] +
+            select({
         ":print_enabled": [],
         "//conditions:default": ["-DPOLARIS_NO_PRINT"],
     }),

@@ -58,6 +58,8 @@ if (POLARIS_ENABLE_TLS)
     target_compile_definitions(polaris_client PUBLIC POLARIS_ENABLE_TLS=1)
     target_include_directories(polaris_client PRIVATE ${OPENSSL_INCLUDE_DIR})
     target_link_libraries(polaris_client PUBLIC ${OPENSSL_LIBRARIES})
+else()
+    target_compile_definitions(polaris_client PUBLIC POLARIS_ENABLE_TLS=0)
 endif()
 
 # Install targets.
