@@ -11,6 +11,20 @@ on:
       - 'v*'
 
 jobs:
+  # Run the library unit tests.
+  #
+  # Unlike the example application tests further down, these do not require a
+  # Polaris API key or network access.
+  unit_tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Run Unit Tests
+      run: |
+        bazel test -c opt --test_output=errors //test:all
+
   # Build the C++ example applications.
   build_cpp:
     name: Build C++ Applications
@@ -162,14 +176,14 @@ jobs:
         bazel build -c opt --config=${{ matrix.arch }} //:polaris_client
         bazel build -c opt --config=${{ matrix.arch }} //examples:*
 
-    # Run unit tests.
-    - name: Run Unit Tests
+    # Run integration tests with the example apps.
+    - name: Run Integration Tests
       if: matrix.arch == 'x64'
       env:
         POLARIS_API_KEY: ${{ secrets.POLARIS_API_KEY }}
       run: |
         ./test/run_unit_tests.sh --tool=${{ env.TOOL }} --unique-id-prefix=${{ env.TOOL }}_cpp
-    - name: Run Unit Tests With Installed Libraries (CMake, Linux)
+    - name: Run Integration Tests With Installed Libraries (CMake, Linux)
       if: matrix.arch == 'x64' && matrix.tool == 'cmake' && matrix.os == 'ubuntu-latest'
       env:
         POLARIS_API_KEY: ${{ secrets.POLARIS_API_KEY }}
@@ -317,14 +331,14 @@ jobs:
         bazel build -c opt --config=${{ matrix.arch }} //:polaris_client
         bazel build -c opt --config=${{ matrix.arch }} //examples:*
 
-    # Run unit tests.
-    - name: Run Unit Tests
+    # Run integration tests with the example apps.
+    - name: Run Integration Tests
       if: matrix.arch == 'x64'
       env:
         POLARIS_API_KEY: ${{ secrets.POLARIS_API_KEY }}
       run: |
         ./test/run_unit_tests.sh --tool=${{ env.TOOL }} --unique-id-prefix=${{ env.TOOL }}_c_
-    - name: Run Unit Tests With Installed Libraries (CMake, Linux)
+    - name: Run Integration Tests With Installed Libraries (CMake, Linux)
       if: matrix.arch == 'x64' && matrix.tool == 'cmake' && matrix.os == 'ubuntu-latest'
       env:
         POLARIS_API_KEY: ${{ secrets.POLARIS_API_KEY }}
@@ -357,7 +371,7 @@ jobs:
   release:
     name: Create Release
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [build_cpp, build_c]
+    needs: [build_cpp, build_c, unit_tests]
     runs-on: ubuntu-latest
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
