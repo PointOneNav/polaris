@@ -8,6 +8,7 @@
 
 #include <atomic>
 #include <cmath> // For NAN
+#include <condition_variable>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -289,6 +290,21 @@ class PolarisClient {
   int connect_count_ = 0;
   size_t bytes_received_ = 0;
 
+  /**
+   * The delay before the next reconnect attempt (in ms), or 0 if the next
+   * attempt should not be delayed. Grows exponentially on each successive
+   * failure and is reset once corrections data starts arriving again.
+   */
+  int retry_delay_ms_ = 0;
+
+  /**
+   * backoff_mutex_ guards updates to @ref running_ that @ref WaitForRetry()
+   * waits on, so that a disconnect request issued during the wait cannot be
+   * missed. It is never held while mutex_ is held.
+   */
+  std::mutex backoff_mutex_;
+  std::condition_variable backoff_cv_;
+
   std::string api_key_;
   std::string unique_id_;
 
@@ -308,6 +324,16 @@ class PolarisClient {
    *        authentication if max reconnects is exceeded.
    */
   void IncrementRetryCount();
+
+  /**
+   * @brief Wait for the current backoff delay to elapse before reconnecting.
+   *
+   * Returns early if @ref Disconnect() is called while waiting.
+   *
+   * @return `true` if the caller should attempt to reconnect, or `false` if a
+   *         disconnect was requested.
+   */
+  bool WaitForRetry();
 
   /**
    * @brief Resend the current position/beacon request on reconnect.

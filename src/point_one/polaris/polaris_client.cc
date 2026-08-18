@@ -141,6 +141,7 @@ PolarisClient::PolarisClient(const std::string& api_key,
     // before declaring the connection successful.
     if (bytes_received_ > 270) {
       connect_count_ = 0;
+      retry_delay_ms_ = 0;
     }
 
     if (callback_) {
@@ -306,29 +307,11 @@ void PolarisClient::Run(double timeout_sec) {
   const int timeout_ms = std::lround(timeout_sec * 1e3);
   int auth_ret = POLARIS_SUCCESS;
   running_ = true;
-  // Exponential backoff delay in milliseconds. Starts at 0 (no delay on the
-  // first attempt), then increases to 1s, 2s, 4s, ..., up to 20s maximum.
-  int retry_delay_ms = 0;
-  static constexpr int MAX_RETRY_DELAY_MS = 20000;
   while (running_) {
     // Pause before a failed reconnect attempt, with exponential backoff.
-    if (retry_delay_ms > 0) {
-      // Sleep in 100 ms increments so we can react promptly to Disconnect().
-      int remaining_ms = retry_delay_ms;
-      while (running_ && remaining_ms > 0) {
-        int sleep_ms = std::min(remaining_ms, 100);
-        std::this_thread::sleep_for(std::chrono::milliseconds(sleep_ms));
-        remaining_ms -= sleep_ms;
-      }
-      if (!running_) {
-        break;
-      }
+    if (!WaitForRetry()) {
+      break;
     }
-    // Advance the backoff for the next failure: 0 -> 1000 -> 2000 -> ... ->
-    // MAX_RETRY_DELAY_MS.
-    retry_delay_ms = (retry_delay_ms == 0)
-                         ? 1000
-                         : std::min(retry_delay_ms * 2, MAX_RETRY_DELAY_MS);
 
     std::unique_lock<std::recursive_mutex> lock(mutex_);
 
@@ -422,7 +405,7 @@ void PolarisClient::Run(double timeout_sec) {
     if (run_ret == POLARIS_SUCCESS) {
       // Connection closed by a call to PolarisInterface::Disconnect().
       // Reset backoff so the next connection attempt (if any) starts fresh.
-      retry_delay_ms = 0;
+      retry_delay_ms_ = 0;
       VLOG(1) << "Connection closed by user.";
       continue;
     } else if (run_ret == POLARIS_CONNECTION_CLOSED) {
@@ -447,6 +430,7 @@ void PolarisClient::Run(double timeout_sec) {
   VLOG(1) << "Finished running.";
   current_request_type_ = RequestType::NONE;
   connect_count_ = 0;
+  retry_delay_ms_ = 0;
   if (auth_ret != POLARIS_SUCCESS) {
     LOG(WARNING) << "PolarisClient::Run() exiting on fatal error. [error="
                  << auth_ret << "]";
@@ -470,7 +454,14 @@ void PolarisClient::Disconnect() {
     VLOG(1) << "Already disconnected.";
   }
 
-  running_ = false;
+  // backoff_mutex_ is held while clearing running_ so that a WaitForRetry()
+  // call in progress cannot miss the notification below.
+  {
+    std::unique_lock<std::mutex> backoff_lock(backoff_mutex_);
+    running_ = false;
+  }
+  backoff_cv_.notify_all();
+
   connected_ = false;
   polaris_.Disconnect();
   lock.unlock();
@@ -497,6 +488,36 @@ void PolarisClient::IncrementRetryCount() {
     auth_valid_ = false;
     connect_count_ = 0;
   }
+}
+
+/******************************************************************************/
+bool PolarisClient::WaitForRetry() {
+  // Exponential backoff: no delay on the first attempt, then 1s, 2s, 4s, ...,
+  // up to MAX_RETRY_DELAY_MS. The delay is reset when corrections data starts
+  // arriving again, so a connection that recovers does not stay penalized.
+  static constexpr int MAX_RETRY_DELAY_MS = 20000;
+  int delay_ms;
+  {
+    std::unique_lock<std::recursive_mutex> lock(mutex_);
+    delay_ms = retry_delay_ms_;
+    retry_delay_ms_ = (retry_delay_ms_ == 0)
+                          ? 1000
+                          : std::min(retry_delay_ms_ * 2, MAX_RETRY_DELAY_MS);
+  }
+
+  if (delay_ms == 0) {
+    return running_;
+  }
+
+  VLOG(1) << "Waiting " << delay_ms << " ms before reconnecting.";
+
+  // Wait on a condition variable rather than sleeping so that Disconnect() can
+  // wake us up immediately.
+  std::unique_lock<std::mutex> lock(backoff_mutex_);
+  backoff_cv_.wait_for(lock, std::chrono::milliseconds(delay_ms),
+                       [this]() { return !running_; });
+
+  return running_;
 }
 
 /******************************************************************************/
