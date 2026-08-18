@@ -55,11 +55,13 @@ cc_library(
     name = "polaris_client_tls",
     srcs = glob(["src/**/*.c"]),
     hdrs = glob(["src/**/*.h"]),
-    copts = ["-DPOLARIS_ENABLE_TLS=1"] +
-            select({
-                ":print_enabled": [],
-                "//conditions:default": ["-DPOLARIS_NO_PRINT"],
-            }),
+    copts = select({
+        ":print_enabled": [],
+        "//conditions:default": ["-DPOLARIS_NO_PRINT"],
+    }),
+    # Use defines instead of copts so targets that depend on this library see
+    # the same TLS setting.
+    defines = ["POLARIS_ENABLE_TLS=1"],
     includes = ["src"],
     deps = ["@boringssl//:ssl"],
 )
@@ -74,5 +76,8 @@ cc_library(
         ":print_enabled": [],
         "//conditions:default": ["-DPOLARIS_NO_PRINT"],
     }),
+    # Use defines instead of copts so targets that depend on this library see
+    # the same TLS setting.
+    defines = ["POLARIS_ENABLE_TLS=0"],
     includes = ["src"],
 )
