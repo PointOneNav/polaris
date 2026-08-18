@@ -343,6 +343,9 @@ int Polaris_AuthenticateTo(PolarisContext_t* context, const char* api_key,
     return ret;
   }
 
+  // Clear any earlier disconnect request so that it does not cancel this one.
+  context->disconnected = 0;
+
   // Send an auth request, then wait for the response containing the access
   // token.
   //
@@ -577,9 +580,13 @@ int Polaris_ConnectWithoutAuth(PolarisContext_t* context,
 
 /******************************************************************************/
 void Polaris_Disconnect(PolarisContext_t* context) {
+  // Record the request even if no socket is open yet, e.g., while the endpoint
+  // address is still being resolved. The connection attempt in progress checks
+  // this flag before it opens a socket.
+  context->disconnected = 1;
+
   if (context->socket != P1_INVALID_SOCKET) {
     P1_PrintDebug("Closing Polaris connection.");
-    context->disconnected = 1;
 #if POLARIS_ENABLE_TLS
     // The TLS session does not exist yet if the TCP connection is still being
     // established, in which case there is nothing to shut down.
@@ -1376,6 +1383,7 @@ static int ResolveAndConnect(PolarisContext_t* context,
     // rather than moving on to the next address.
     if (context->disconnected) {
       P1_PrintDebug("Connection attempt canceled by user request.");
+      ret = POLARIS_CONNECTION_CLOSED;
       break;
     }
 
@@ -1414,6 +1422,14 @@ static int ResolveAndConnect(PolarisContext_t* context,
   }
 
   freeaddrinfo(addresses);
+
+  // If the user asked to disconnect during the last attempt, report the
+  // cancellation rather than that attempt's error, the same as if it had
+  // happened during an earlier attempt.
+  if (ret != POLARIS_SUCCESS && context->disconnected) {
+    P1_PrintDebug("Connection attempt canceled by user request.");
+    ret = POLARIS_CONNECTION_CLOSED;
+  }
 
   return ret;
 }
