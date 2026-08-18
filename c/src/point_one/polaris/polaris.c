@@ -38,7 +38,7 @@
   do {          \
   } while (0)
 
-#if P1_NO_PRINT
+#if POLARIS_NO_PRINT
 #  define P1_PrintMessage(level, x, ...) P1_NOOP
 #  define P1_PrintErrno(x, ...) P1_NOOP
 
@@ -48,7 +48,7 @@
       do {                 \
       } while (0)
 #  endif
-#else  // !P1_NO_PRINT
+#else  // !POLARIS_NO_PRINT
 static int __log_level = POLARIS_LOG_LEVEL_INFO;
 
 static PolarisPrintCallback_t __print_callback = NULL;
@@ -147,7 +147,7 @@ static void P1_PrintData(const uint8_t* buffer, size_t length);
 #  if POLARIS_ENABLE_TLS
 static void ShowCerts(SSL* ssl);
 #  endif
-#endif  // P1_NO_PRINT
+#endif  // POLARIS_NO_PRINT
 
 #define P1_PrintError(x, ...) \
   P1_PrintMessage(POLARIS_LOG_LEVEL_ERROR, x, ##__VA_ARGS__)
@@ -1158,7 +1158,7 @@ static int ResolveAndConnect(PolarisContext_t* context,
  *
  * @return `buffer`, for convenience when used as a `printf()` argument.
  */
-#  if !P1_NO_PRINT
+#  if !POLARIS_NO_PRINT
 static const char* FormatAddress(const P1_SocketAddr_t* address, char* buffer,
                                  size_t capacity_bytes) {
   const void* raw_address;
@@ -1175,7 +1175,7 @@ static const char* FormatAddress(const P1_SocketAddr_t* address, char* buffer,
 
   return buffer;
 }
-#  endif  // !P1_NO_PRINT
+#  endif  // !POLARIS_NO_PRINT
 
 /******************************************************************************/
 /**
@@ -1358,7 +1358,7 @@ static int ResolveAndConnect(PolarisContext_t* context,
 
     ConfigureSocket(context);
 
-#  if !P1_NO_PRINT
+#  if !POLARIS_NO_PRINT
     char address_str[INET6_ADDRSTRLEN];
     if (entry->ai_family == AF_INET6) {
       P1_PrintDebug(
@@ -1371,7 +1371,7 @@ static int ResolveAndConnect(PolarisContext_t* context,
           FormatAddress(entry->ai_addr, address_str, sizeof(address_str)),
           endpoint_port);
     }
-#  endif  // !P1_NO_PRINT
+#  endif  // !POLARIS_NO_PRINT
 
     ret = ConnectWithTimeout(context, entry->ai_addr, entry->ai_addrlen);
     if (ret == POLARIS_SUCCESS) {
@@ -1446,7 +1446,7 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
     // Perform SSL handhshake.
     ret = SSL_connect(context->ssl);
     if (ret != 1) {
-#  if !P1_NO_PRINT
+#  if !POLARIS_NO_PRINT
       // Note: We intentionally reuse the receive buffer to store the error
       // message to be displayed to avoid requiring additional stack here. At
       // this point we're trying to open the socket, so there should be nobody
@@ -1455,10 +1455,11 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
                "TLS handshake failed for tcp://%s:%d", endpoint_url,
                endpoint_port);
       P1_PrintSSLError(context, (char*)context->recv_buffer, ret);
-#  endif  // !P1_NO_PRINT
+#  endif  // !POLARIS_NO_PRINT
       CloseSocket(context, 1);
       return POLARIS_SOCKET_ERROR;
     }
+
 
     const SSL_CIPHER* c = SSL_get_current_cipher(context->ssl);
     if (c == NULL) {
@@ -1721,7 +1722,7 @@ static int GetHTTPResponse(PolarisContext_t* context) {
 }
 
 /******************************************************************************/
-#if !P1_NO_PRINT
+#if !POLARIS_NO_PRINT
 void P1_PrintData(const uint8_t* buffer, size_t length) {
   if (__log_level < POLARIS_LOG_LEVEL_TRACE) {
     return;
@@ -1760,7 +1761,7 @@ void P1_PrintData(const uint8_t* buffer, size_t length) {
 #endif
 
 /******************************************************************************/
-#if !P1_NO_PRINT && POLARIS_ENABLE_TLS
+#if !POLARIS_NO_PRINT && POLARIS_ENABLE_TLS
 void ShowCerts(SSL* ssl) {
   if (__log_level < POLARIS_LOG_LEVEL_DEBUG) {
     return;

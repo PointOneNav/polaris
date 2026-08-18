@@ -9,7 +9,7 @@
 #include <chrono>
 #include <iomanip>
 
-#if P1_NO_PRINT
+#if POLARIS_NO_PRINT
 #  include <iostream>
 static std::ostream null_stream(0);
 #  define LOG(severity) null_stream
@@ -60,7 +60,7 @@ static std::ostream null_stream(0);
 #  define LOG_WARNING_STREAM(filename, line) LOG(WARNING)
 #  define LOG_ERROR_STREAM(filename, line) LOG(ERROR)
 
-#else  // !P1_NO_PRINT && !POLARIS_NO_GLOG
+#else  // !POLARIS_NO_PRINT && !POLARIS_NO_GLOG
 #  include <glog/logging.h>
 
 #  if GOOGLE_STRIP_LOG == 0
@@ -84,7 +84,7 @@ static std::ostream null_stream(0);
 #    define LOG_ERROR_STREAM(filename, line) google::NullStream()
 #  endif
 
-#endif  // P1_NO_PRINT / POLARIS_NO_GLOG
+#endif  // POLARIS_NO_PRINT / POLARIS_NO_GLOG
 
 using namespace point_one::polaris;
 
