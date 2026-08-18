@@ -1348,6 +1348,7 @@ static int ResolveAndConnect(PolarisContext_t* context,
     // rather than moving on to the next address.
     if (context->disconnected) {
       P1_PrintDebug("Connection attempt canceled by user request.");
+      ret = POLARIS_CONNECTION_CLOSED;
       break;
     }
 
