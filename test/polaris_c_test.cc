@@ -98,17 +98,17 @@ TEST_F(PolarisCTest, ResolverSystemErrorIsClassifiedByErrno) {
 TEST_F(PolarisCTest, ConnectsToTheFirstAddressOffered) {
   EXPECT_EQ(POLARIS_SUCCESS,
             PolarisTest_ResolveAndConnect(&context_, "example.com", 80));
-  // The resolver offered IPv6 first, so only one attempt should have been made.
-  EXPECT_EQ(1, polaris_test_network.connect_call_count);
+  EXPECT_EQ(1, polaris_test_network.connect_call_count)
+      << "the remaining addresses should not be tried after one connects";
 }
 
 /******************************************************************************/
 TEST_F(PolarisCTest, FallsBackToTheNextAddressWhenTheFirstIsRefused) {
-  // Mimics a host that advertises IPv6 but only answers over IPv4.
+  // Mimics one of the endpoint's addresses not answering.
   polaris_test_network.connect_errno = ECONNREFUSED;
   PolarisTest_ResolveAndConnect(&context_, "example.com", 80);
   EXPECT_EQ(2, polaris_test_network.connect_call_count)
-      << "both the IPv6 and IPv4 addresses should have been tried";
+      << "every resolved address should have been tried";
 }
 
 /******************************************************************************/

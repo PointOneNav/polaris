@@ -53,42 +53,42 @@ static int TestGetSockOpt(int fd, int level, int name, void* value,
 
 /******************************************************************************/
 /*!
-@brief Build a resolver result holding one IPv6 and one IPv4 loopback address.
+@brief Allocate one resolved IPv4 loopback address.
 
-The IPv6 address comes first, which is the order the system normally prefers for
-a dual-stack hostname.
+@param port The port to store in the address.
+
+@return The newly allocated entry.
+*/
+static struct addrinfo* MakeAddress(int port) {
+  struct sockaddr_in* address = calloc(1, sizeof(struct sockaddr_in));
+  address->sin_family = AF_INET;
+  address->sin_port = htons((uint16_t)port);
+  address->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+
+  struct addrinfo* entry = calloc(1, sizeof(struct addrinfo));
+  entry->ai_family = AF_INET;
+  entry->ai_socktype = SOCK_STREAM;
+  entry->ai_protocol = IPPROTO_TCP;
+  entry->ai_addr = (struct sockaddr*)address;
+  entry->ai_addrlen = sizeof(struct sockaddr_in);
+
+  return entry;
+}
+
+/*!
+@brief Build a resolver result holding two addresses.
+
+The corrections service resolves to several A records, so the library has to be
+able to move on to the next one when an address does not answer.
 
 @param port The port to store in each address.
 
 @return The head of the newly allocated list.
 */
-static struct addrinfo* MakeDualStackResult(int port) {
-  struct sockaddr_in6* v6_address = calloc(1, sizeof(struct sockaddr_in6));
-  v6_address->sin6_family = AF_INET6;
-  v6_address->sin6_port = htons((uint16_t)port);
-  v6_address->sin6_addr = in6addr_loopback;
-
-  struct sockaddr_in* v4_address = calloc(1, sizeof(struct sockaddr_in));
-  v4_address->sin_family = AF_INET;
-  v4_address->sin_port = htons((uint16_t)port);
-  v4_address->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-
-  struct addrinfo* v4 = calloc(1, sizeof(struct addrinfo));
-  v4->ai_family = AF_INET;
-  v4->ai_socktype = SOCK_STREAM;
-  v4->ai_protocol = IPPROTO_TCP;
-  v4->ai_addr = (struct sockaddr*)v4_address;
-  v4->ai_addrlen = sizeof(struct sockaddr_in);
-
-  struct addrinfo* v6 = calloc(1, sizeof(struct addrinfo));
-  v6->ai_family = AF_INET6;
-  v6->ai_socktype = SOCK_STREAM;
-  v6->ai_protocol = IPPROTO_TCP;
-  v6->ai_addr = (struct sockaddr*)v6_address;
-  v6->ai_addrlen = sizeof(struct sockaddr_in6);
-  v6->ai_next = v4;
-
-  return v6;
+static struct addrinfo* MakeMultiAddressResult(int port) {
+  struct addrinfo* first = MakeAddress(port);
+  first->ai_next = MakeAddress(port);
+  return first;
 }
 
 /******************************************************************************/
@@ -102,7 +102,7 @@ static int TestGetAddrInfo(const char* node, const char* service,
     return polaris_test_network.getaddrinfo_result;
   }
 
-  *result = MakeDualStackResult(atoi(service));
+  *result = MakeMultiAddressResult(atoi(service));
   return 0;
 }
 
