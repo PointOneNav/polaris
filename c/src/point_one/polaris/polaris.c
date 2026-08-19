@@ -1094,7 +1094,7 @@ static void ConfigureSocket(PolarisContext_t* context) {
 /**
  * @brief Resolve the endpoint hostname and open a connection to it.
  *
- * IPV4 only: IPv6 not currently supported on FreeRTOS.
+ * FreeRTOS+TCP resolves IPv4 addresses only.
  *
  * @param context The Polaris context to be used.
  * @param endpoint_url The hostname of the desired endpoint.
@@ -1156,7 +1156,7 @@ static int ResolveAndConnect(PolarisContext_t* context,
  *
  * @param address The address to be formatted.
  * @param buffer The buffer in which the result will be stored. Must be at least
- *        `INET6_ADDRSTRLEN` bytes.
+ *        `INET_ADDRSTRLEN` bytes.
  * @param capacity_bytes The capacity of `buffer` (in bytes).
  *
  * @return `buffer`, for convenience when used as a `printf()` argument.
@@ -1164,13 +1164,7 @@ static int ResolveAndConnect(PolarisContext_t* context,
 #  if !POLARIS_NO_PRINT
 static const char* FormatAddress(const P1_SocketAddr_t* address, char* buffer,
                                  size_t capacity_bytes) {
-  const void* raw_address;
-  if (address->sa_family == AF_INET6) {
-    raw_address = &((const struct sockaddr_in6*)address)->sin6_addr;
-  } else {
-    raw_address = &((const struct sockaddr_in*)address)->sin_addr;
-  }
-
+  const void* raw_address = &((const struct sockaddr_in*)address)->sin_addr;
   if (inet_ntop(address->sa_family, raw_address, buffer,
                 (socklen_t)capacity_bytes) == NULL) {
     snprintf(buffer, capacity_bytes, "<unknown>");
@@ -1296,9 +1290,8 @@ static int ConnectWithTimeout(PolarisContext_t* context,
 /**
  * @brief Resolve the endpoint hostname and open a connection to it.
  *
- * Both IPv4 and IPv6 addresses are considered. Each address returned by the
- * resolver is tried in turn, in the order the system prefers, until one of them
- * connects.
+ * A hostname may resolve to several addresses. Each is tried in turn, in the
+ * order the resolver returns them, until one of them connects.
  *
  * @param context The Polaris context to be used.
  * @param endpoint_url The hostname of the desired endpoint.
@@ -1321,7 +1314,9 @@ static int ResolveAndConnect(PolarisContext_t* context,
 
   struct addrinfo hints;
   memset(&hints, 0, sizeof(hints));
-  hints.ai_family = AF_UNSPEC;
+  // The corrections service publishes IPv4 addresses only, so IPv6 is not
+  // requested. This also matches the FreeRTOS path, which is IPv4-only.
+  hints.ai_family = AF_INET;
   hints.ai_socktype = SOCK_STREAM;
   hints.ai_protocol = IPPROTO_TCP;
 
@@ -1365,18 +1360,11 @@ static int ResolveAndConnect(PolarisContext_t* context,
     ConfigureSocket(context);
 
 #  if !POLARIS_NO_PRINT
-    char address_str[INET6_ADDRSTRLEN];
-    if (entry->ai_family == AF_INET6) {
-      P1_PrintDebug(
-          "Connecting to 'tcp://[%s]:%d'.",
-          FormatAddress(entry->ai_addr, address_str, sizeof(address_str)),
-          endpoint_port);
-    } else {
-      P1_PrintDebug(
-          "Connecting to 'tcp://%s:%d'.",
-          FormatAddress(entry->ai_addr, address_str, sizeof(address_str)),
-          endpoint_port);
-    }
+    char address_str[INET_ADDRSTRLEN];
+    P1_PrintDebug(
+        "Connecting to 'tcp://%s:%d'.",
+        FormatAddress(entry->ai_addr, address_str, sizeof(address_str)),
+        endpoint_port);
 #  endif  // !POLARIS_NO_PRINT
 
     ret = ConnectWithTimeout(context, entry->ai_addr, entry->ai_addrlen);

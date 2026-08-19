@@ -24,8 +24,8 @@ extern "C" {
  */
 typedef struct {
   /**
-   * The value for `getaddrinfo()` to return, or 0 to resolve to one IPv6 and
-   * one IPv4 loopback address, in that order, mimicking a dual-stack hostname.
+   * The value for `getaddrinfo()` to return, or 0 to resolve to two loopback
+   * addresses, mimicking a hostname with more than one A record.
    */
   int getaddrinfo_result;
 
