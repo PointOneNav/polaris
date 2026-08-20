@@ -18,6 +18,16 @@
 #include <sys/time.h>
 #include <unistd.h> // For close()
 
+// Flag telling send() to return EPIPE instead of raising SIGPIPE when the
+// remote end has closed the connection. Apple/BSD platforms do not define it,
+// and suppress SIGPIPE per-socket via the SO_NOSIGPIPE option instead, applied
+// in ConfigureSocket().
+#ifdef MSG_NOSIGNAL
+#  define P1_MSG_NOSIGNAL MSG_NOSIGNAL
+#else
+#  define P1_MSG_NOSIGNAL 0
+#endif
+
 typedef int P1_Socket_t;
 #define P1_INVALID_SOCKET -1
 

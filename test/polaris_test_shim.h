@@ -89,6 +89,10 @@ int PolarisTest_ValidateUniqueID(const char* unique_id);
 int PolarisTest_OpenSocket(PolarisContext_t* context, const char* endpoint_url,
                            int endpoint_port);
 
+/** @brief Call the library's `SendData()`. */
+int PolarisTest_SendData(PolarisContext_t* context, const void* buffer,
+                         size_t size);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

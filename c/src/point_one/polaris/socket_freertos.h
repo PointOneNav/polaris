@@ -35,6 +35,9 @@ typedef BaseType_t P1_RecvSize_t;
 
 #define SHUT_RDWR FREERTOS_SHUT_RDWR
 
+// FreeRTOS has no POSIX signals, so there is no SIGPIPE to suppress on send().
+#define P1_MSG_NOSIGNAL 0
+
 // Aliases mapping FreeRTOS function names to Berkeley names. The APIs are the
 // same as the Berkeley definitions for all of these functions.
 #define socket FreeRTOS_socket

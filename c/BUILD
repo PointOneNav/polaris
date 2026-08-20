@@ -80,6 +80,9 @@ cc_library(
     # the same TLS setting.
     defines = ["POLARIS_ENABLE_TLS=1"],
     includes = ["src"],
+    # pthread_sigmask() is used to block SIGPIPE around TLS socket writes on
+    # Linux.
+    linkopts = ["-pthread"],
     deps = ["@boringssl//:ssl"],
 )
 
