@@ -9,7 +9,7 @@
 #include <chrono>
 #include <iomanip>
 
-#if P1_NO_PRINT
+#if POLARIS_NO_PRINT
 #  include <iostream>
 static std::ostream null_stream(0);
 #  define LOG(severity) null_stream
@@ -60,7 +60,7 @@ static std::ostream null_stream(0);
 #  define LOG_WARNING_STREAM(filename, line) LOG(WARNING)
 #  define LOG_ERROR_STREAM(filename, line) LOG(ERROR)
 
-#else  // !P1_NO_PRINT && !POLARIS_NO_GLOG
+#else  // !POLARIS_NO_PRINT && !POLARIS_NO_GLOG
 #  include <glog/logging.h>
 
 #  if GOOGLE_STRIP_LOG == 0
@@ -84,7 +84,7 @@ static std::ostream null_stream(0);
 #    define LOG_ERROR_STREAM(filename, line) google::NullStream()
 #  endif
 
-#endif  // P1_NO_PRINT / POLARIS_NO_GLOG
+#endif  // POLARIS_NO_PRINT / POLARIS_NO_GLOG
 
 using namespace point_one::polaris;
 
@@ -141,6 +141,7 @@ PolarisClient::PolarisClient(const std::string& api_key,
     // before declaring the connection successful.
     if (bytes_received_ > 270) {
       connect_count_ = 0;
+      retry_delay_ms_ = 0;
     }
 
     if (callback_) {
@@ -209,16 +210,17 @@ void PolarisClient::SetPolarisEndpoint(const std::string& endpoint_url,
 /******************************************************************************/
 void PolarisClient::UseTLS(bool use_tls) {
   std::unique_lock<std::recursive_mutex> lock(mutex_);
+  // Note that we store the request even if TLS is not supported. This function
+  // has no return value, so downgrading to plaintext here would leave the
+  // caller with no way to tell that it did not get the secure connection it
+  // asked for. Instead @ref Run() will fail to connect.
+  use_tls_ = use_tls;
+#if !POLARIS_ENABLE_TLS
   if (use_tls) {
-#if POLARIS_ENABLE_TLS
-    use_tls_ = true;
-#else  // !POLARIS_ENABLE_TLS
-    LOG(ERROR) << "Secure TLS connections not supported.";
-    use_tls_ = false;
-#endif
-  } else {
-    use_tls_ = false;
+    LOG(ERROR) << "Secure TLS connections not supported. Rebuild with "
+                  "POLARIS_ENABLE_TLS=1.";
   }
+#endif
 }
 
 /******************************************************************************/
@@ -306,29 +308,11 @@ void PolarisClient::Run(double timeout_sec) {
   const int timeout_ms = std::lround(timeout_sec * 1e3);
   int auth_ret = POLARIS_SUCCESS;
   running_ = true;
-  // Exponential backoff delay in milliseconds. Starts at 0 (no delay on the
-  // first attempt), then increases to 1s, 2s, 4s, ..., up to 20s maximum.
-  int retry_delay_ms = 0;
-  static constexpr int MAX_RETRY_DELAY_MS = 20000;
   while (running_) {
     // Pause before a failed reconnect attempt, with exponential backoff.
-    if (retry_delay_ms > 0) {
-      // Sleep in 100 ms increments so we can react promptly to Disconnect().
-      int remaining_ms = retry_delay_ms;
-      while (running_ && remaining_ms > 0) {
-        int sleep_ms = std::min(remaining_ms, 100);
-        std::this_thread::sleep_for(std::chrono::milliseconds(sleep_ms));
-        remaining_ms -= sleep_ms;
-      }
-      if (!running_) {
-        break;
-      }
+    if (!WaitForRetry()) {
+      break;
     }
-    // Advance the backoff for the next failure: 0 -> 1000 -> 2000 -> ... ->
-    // MAX_RETRY_DELAY_MS.
-    retry_delay_ms = (retry_delay_ms == 0)
-                         ? 1000
-                         : std::min(retry_delay_ms * 2, MAX_RETRY_DELAY_MS);
 
     std::unique_lock<std::recursive_mutex> lock(mutex_);
 
@@ -349,6 +333,12 @@ void PolarisClient::Run(double timeout_sec) {
         LOG(ERROR) << "Invalid API key/unique ID specified.";
         running_ = false;
         break;
+      } else if (auth_ret == POLARIS_NO_NETWORK) {
+        LOG(WARNING) << "No network connection available. Retrying "
+                        "authentication.";
+        // See note below about setting this.
+        auth_ret = POLARIS_SUCCESS;
+        continue;
       } else if (auth_ret != POLARIS_SUCCESS) {
         LOG(WARNING) << "Authentication failed. Retrying. [error=" << auth_ret
                      << "]";
@@ -389,10 +379,20 @@ void PolarisClient::Run(double timeout_sec) {
       connect_ret = polaris_.ConnectTo(endpoint_url_, endpoint_port);
     }
 
+    // Note that a failure to establish the connection does not count against
+    // the reconnect limit. That limit exists to trigger reauthentication when
+    // the access token may have expired, and we never got far enough to find
+    // out whether the token is any good.
     if (connect_ret != POLARIS_SUCCESS) {
-      LOG(ERROR) << "Error connecting to Polaris corrections stream. Retrying.";
-      if (connect_ret != POLARIS_SOCKET_ERROR) {
-        IncrementRetryCount();
+      // Staying quiet if Disconnect() was called while we were connecting. The
+      // attempt did not fail, and we are about to exit rather than retry.
+      if (running_) {
+        if (connect_ret == POLARIS_NO_NETWORK) {
+          LOG(WARNING) << "No network connection available. Retrying.";
+        } else {
+          LOG(ERROR)
+              << "Error connecting to Polaris corrections stream. Retrying.";
+        }
       }
       continue;
     }
@@ -409,11 +409,16 @@ void PolarisClient::Run(double timeout_sec) {
           << "Error resending position update/beacon request. Reconnecting.";
       connected_ = false;
       polaris_.Disconnect();
-      if (send_ret != POLARIS_SOCKET_ERROR) {
-        IncrementRetryCount();
-      }
       continue;
     }
+
+    // Disconnect() may have been called while we were connecting.
+    if (!running_) {
+      connected_ = false;
+      polaris_.Disconnect();
+      break;
+    }
+
     // Now release the mutex and start processing data.
     lock.unlock();
     int run_ret = polaris_.Run(timeout_ms);
@@ -424,7 +429,7 @@ void PolarisClient::Run(double timeout_sec) {
     if (run_ret == POLARIS_SUCCESS) {
       // Connection closed by a call to PolarisInterface::Disconnect().
       // Reset backoff so the next connection attempt (if any) starts fresh.
-      retry_delay_ms = 0;
+      retry_delay_ms_ = 0;
       VLOG(1) << "Connection closed by user.";
       continue;
     } else if (run_ret == POLARIS_CONNECTION_CLOSED) {
@@ -449,6 +454,7 @@ void PolarisClient::Run(double timeout_sec) {
   VLOG(1) << "Finished running.";
   current_request_type_ = RequestType::NONE;
   connect_count_ = 0;
+  retry_delay_ms_ = 0;
   if (auth_ret != POLARIS_SUCCESS) {
     LOG(WARNING) << "PolarisClient::Run() exiting on fatal error. [error="
                  << auth_ret << "]";
@@ -464,6 +470,20 @@ void PolarisClient::RunAsync(double timeout_sec) {
 
 /******************************************************************************/
 void PolarisClient::Disconnect() {
+  // Signal the run thread and interrupt whatever it is blocked on before taking
+  // mutex_. Run() holds mutex_ while authenticating and connecting, so waiting
+  // for the lock first would delay the disconnect for as long as that takes.
+  //
+  // backoff_mutex_ is held while clearing running_ so that a WaitForRetry()
+  // call in progress cannot miss the notification below.
+  {
+    std::unique_lock<std::mutex> backoff_lock(backoff_mutex_);
+    running_ = false;
+  }
+  backoff_cv_.notify_all();
+
+  polaris_.Disconnect();
+
   std::unique_lock<std::recursive_mutex> lock(mutex_);
 
   if (connected_) {
@@ -472,9 +492,7 @@ void PolarisClient::Disconnect() {
     VLOG(1) << "Already disconnected.";
   }
 
-  running_ = false;
   connected_ = false;
-  polaris_.Disconnect();
   lock.unlock();
 
   if (run_thread_) {
@@ -499,6 +517,36 @@ void PolarisClient::IncrementRetryCount() {
     auth_valid_ = false;
     connect_count_ = 0;
   }
+}
+
+/******************************************************************************/
+bool PolarisClient::WaitForRetry() {
+  // Exponential backoff: no delay on the first attempt, then 1s, 2s, 4s, ...,
+  // up to MAX_RETRY_DELAY_MS. The delay is reset when corrections data starts
+  // arriving again, so a connection that recovers does not stay penalized.
+  static constexpr int MAX_RETRY_DELAY_MS = 20000;
+  int delay_ms;
+  {
+    std::unique_lock<std::recursive_mutex> lock(mutex_);
+    delay_ms = retry_delay_ms_;
+    retry_delay_ms_ = (retry_delay_ms_ == 0)
+                          ? 1000
+                          : std::min(retry_delay_ms_ * 2, MAX_RETRY_DELAY_MS);
+  }
+
+  if (delay_ms == 0) {
+    return running_;
+  }
+
+  VLOG(1) << "Waiting " << delay_ms << " ms before reconnecting.";
+
+  // Wait on a condition variable rather than sleeping so that Disconnect() can
+  // wake us up immediately.
+  std::unique_lock<std::mutex> lock(backoff_mutex_);
+  backoff_cv_.wait_for(lock, std::chrono::milliseconds(delay_ms),
+                       [this]() { return !running_; });
+
+  return running_;
 }
 
 /******************************************************************************/

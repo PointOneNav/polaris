@@ -17,7 +17,7 @@ cc_library(
     ],
     copts = select({
         "//c:tls_enabled": ["-DPOLARIS_ENABLE_TLS=1"],
-        "//conditions:default": [],
+        "//conditions:default": ["-DPOLARIS_ENABLE_TLS=0"],
     }),
     includes = [
         "src",

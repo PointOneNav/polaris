@@ -10,6 +10,16 @@
 
 #include "point_one/polaris/socket.h"
 
+// The `POLARIS_NO_PRINT` macro disables all print statements in the library. If
+// it is not defined and the alternative `P1_NO_PRINT` is, defer to that.
+#if !defined(POLARIS_NO_PRINT)
+#  if defined(P1_NO_PRINT)
+#    define POLARIS_NO_PRINT P1_NO_PRINT
+#  else
+#    define POLARIS_NO_PRINT 0
+#  endif
+#endif
+
 #define POLARIS_API_URL "api.pointonenav.com"
 
 #define POLARIS_ENDPOINT_URL "polaris.pointonenav.com"
@@ -72,6 +82,23 @@
 #endif
 
 /**
+ * @brief The maximum amount of time (in ms) to wait for a TCP connection to be
+ *        established.
+ *
+ * @note
+ * This timeout is enforced by the library and is typically much shorter than
+ * the operating system default, which can be a minute or more. A long
+ * connection attempt is indistinguishable from a hang to the calling code,
+ * which cannot interrupt it.
+ *
+ * Not currently used on FreeRTOS, which does not support a non-blocking
+ * connect.
+ */
+#ifndef POLARIS_CONNECT_TIMEOUT_MS
+# define POLARIS_CONNECT_TIMEOUT_MS 5000
+#endif
+
+/**
  * @brief The maximum length of a message when a print callback is registered.
  *
  * See @ref Polaris_SetPrintCallback().
@@ -81,19 +108,18 @@
 #endif
 
 /**
- * @brief Set `POLARIS_ENABLE_TLS=1` to enable TLS support (on by default).
+ * @brief Compile in/out support for secure TLS connections (enabled by
+ *        default).
  *
  * @note
- * If `POLARIS_ENABLE_TLS` is not defined, it will fall back to the deprecated
- * `POLARIS_USE_TLS` macro.
+ * The deprecated `POLARIS_USE_TLS` macro is subsumed by this one: defining it
+ * has the same effect as `POLARIS_ENABLE_TLS=1`, which is now the default. To
+ * disable TLS, you must explicitly set `POLARIS_ENABLE_TLS=0` (not
+ * recommended).
  */
 #ifndef POLARIS_ENABLE_TLS
-#  ifdef POLARIS_USE_TLS
-#    define POLARIS_ENABLE_TLS 1
-#  else  // !POLARIS_USE_TLS
-#    define POLARIS_ENABLE_TLS 0
-#  endif  // POLARIS_USE_TLS
-#endif    // POLARIS_ENABLE_TLS
+#  define POLARIS_ENABLE_TLS 1
+#endif
 
 /**
  * @name Polaris Return Codes
@@ -108,6 +134,11 @@
 #define POLARIS_FORBIDDEN -6
 #define POLARIS_CONNECTION_CLOSED -7
 #define POLARIS_TIMED_OUT -8
+/**
+ * The endpoint could not be reached because the device does not currently have
+ * a usable network connection.
+ */
+#define POLARIS_NO_NETWORK -9
 /** @} */
 
 /**
@@ -249,6 +280,7 @@ void Polaris_SetPrintCallback(PolarisPrintCallback_t callback);
  * @return @ref POLARIS_AUTH_ERROR if the authentication failed.
  * @return @ref POLARIS_SOCKET_ERROR if a connection could not be established
  *         with the Polaris authentication server.
+ * @return @ref POLARIS_NO_NETWORK if no network connection is available.
  * @return @ref POLARIS_SEND_ERROR if the request could not be sent.
  */
 int Polaris_Authenticate(PolarisContext_t* context, const char* api_key,
@@ -305,6 +337,9 @@ int Polaris_UseTLS(PolarisContext_t* context, uint8_t enable);
  * @return @ref POLARIS_SUCCESS on success.
  * @return @ref POLARIS_SOCKET_ERROR if a connection could not be established
  *         with the Polaris corrections server.
+ * @return @ref POLARIS_NO_NETWORK if no network connection is available.
+ * @return @ref POLARIS_TIMED_OUT if the connection could not be established
+ *         within @ref POLARIS_CONNECT_TIMEOUT_MS.
  * @return @ref POLARIS_AUTH_ERROR if an authentication token was not provided.
  * @return @ref POLARIS_SEND_ERROR if an error occurred while sending the
  *         authentication token.
@@ -340,6 +375,9 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
  * @return @ref POLARIS_ERROR if the unique ID is not valid.
  * @return @ref POLARIS_SOCKET_ERROR if a connection could not be established
  *         with the Polaris corrections server.
+ * @return @ref POLARIS_NO_NETWORK if no network connection is available.
+ * @return @ref POLARIS_TIMED_OUT if the connection could not be established
+ *         within @ref POLARIS_CONNECT_TIMEOUT_MS.
  * @return @ref POLARIS_SEND_ERROR if an error occurred while sending the
  *         unique ID.
  */
