@@ -189,3 +189,17 @@ int PolarisTest_SendData(PolarisContext_t* context, const void* buffer,
                          size_t size) {
   return SendData(context, buffer, size);
 }
+
+#if POLARIS_ENABLE_TLS
+/******************************************************************************/
+void PolarisTest_AttachClientTLS(PolarisContext_t* context, int fd) {
+  SSL_CTX* ssl_ctx = SSL_CTX_new(TLS_client_method());
+  SSL* ssl = SSL_new(ssl_ctx);
+  SSL_set_fd(ssl, fd);
+  SSL_set_connect_state(ssl);
+
+  context->ssl_ctx = ssl_ctx;
+  context->ssl = ssl;
+  context->use_tls = 1;
+}
+#endif  // POLARIS_ENABLE_TLS

@@ -93,6 +93,26 @@ int PolarisTest_OpenSocket(PolarisContext_t* context, const char* endpoint_url,
 int PolarisTest_SendData(PolarisContext_t* context, const void* buffer,
                          size_t size);
 
+#if POLARIS_ENABLE_TLS
+/**
+ * @brief Configure `context` to send through a TLS session on `fd`.
+ *
+ * The handshake is deliberately not performed. `SSL_write()` writes the
+ * ClientHello to the socket, and that write is made by the TLS library itself,
+ * which is the case the SIGPIPE suppression in `SendData()` has to cover.
+ * Whether the bytes are a handshake record or application data makes no
+ * difference to it.
+ *
+ * This lives here rather than in the test because the TLS headers are only
+ * usable from C, matching how the library is built. See the note on `ssl_ctx`
+ * in polaris.h.
+ *
+ * @param context The Polaris context to configure.
+ * @param fd The socket to attach the session to.
+ */
+void PolarisTest_AttachClientTLS(PolarisContext_t* context, int fd);
+#endif  // POLARIS_ENABLE_TLS
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif
