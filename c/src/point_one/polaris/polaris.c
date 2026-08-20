@@ -24,6 +24,19 @@
 #  include <openssl/ssl.h>
 #endif
 
+// Blocking SIGPIPE around TLS writes is only needed on Linux. See @ref
+// SendData().
+#if POLARIS_ENABLE_TLS && defined(__linux__) && !defined(P1_FREERTOS)
+#  define P1_BLOCK_SIGPIPE 1
+#else
+#  define P1_BLOCK_SIGPIPE 0
+#endif
+
+#if P1_BLOCK_SIGPIPE
+#  include <pthread.h>  // For pthread_sigmask()
+#  include <signal.h>   // For sigtimedwait()
+#endif
+
 #include "point_one/polaris/polaris_internal.h"
 #include "point_one/polaris/portability.h"
 
@@ -254,7 +267,6 @@ static int SendData(PolarisContext_t* context, const void* buffer, size_t size);
 
 static P1_RecvSize_t ReadData(PolarisContext_t* context, void* buffer,
                               size_t size);
-
 
 static int SendPOSTRequest(PolarisContext_t* context, const char* endpoint_url,
                            int endpoint_port, const char* address,
@@ -1072,6 +1084,10 @@ static int IsNoNetworkError(int error_code) {
 /**
  * @brief Apply the configured send and receive timeouts to the open socket.
  *
+ * On platforms that support it, this also disables SIGPIPE for the socket to
+ * avoid aborting the application if the pipe fails during a write, e.g.,
+ * because the network interface disappeared after a wifi disconnect.
+ *
  * @param context The Polaris context to be used.
  */
 static void ConfigureSocket(PolarisContext_t* context) {
@@ -1087,6 +1103,15 @@ static void ConfigureSocket(PolarisContext_t* context) {
   P1_SetTimeMS(POLARIS_SEND_TIMEOUT_MS, &timeout);
   setsockopt(context->socket, SOL_SOCKET, SO_SNDTIMEO, &timeout,
              sizeof(timeout));
+
+#ifdef SO_NOSIGPIPE
+  // Apple/BSD platforms suppress SIGPIPE per-socket. This covers every write
+  // to the socket, including the ones the TLS library performs internally, so
+  // no further handling is needed in SendData().
+  int no_sigpipe = 1;
+  setsockopt(context->socket, SOL_SOCKET, SO_NOSIGPIPE, &no_sigpipe,
+             sizeof(no_sigpipe));
+#endif
 }
 
 #ifdef P1_FREERTOS
@@ -1149,7 +1174,7 @@ static int ResolveAndConnect(PolarisContext_t* context,
   P1_PrintDebug("Connected successfully.");
   return POLARIS_SUCCESS;
 }
-#else   // POSIX
+#else  // POSIX
 /******************************************************************************/
 /**
  * @brief Format a resolved address as a numeric string.
@@ -1380,7 +1405,7 @@ static int ResolveAndConnect(PolarisContext_t* context,
 
   return ret;
 }
-#endif  // End OS selection
+#endif    // End OS selection
 
 /******************************************************************************/
 static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
@@ -1463,7 +1488,6 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
       return POLARIS_SOCKET_ERROR;
     }
 
-
     const SSL_CIPHER* c = SSL_get_current_cipher(context->ssl);
     if (c == NULL) {
       P1_PrintError(
@@ -1516,17 +1540,101 @@ void CloseSocket(PolarisContext_t* context, int destroy_context) {
   // _after_ Polaris_Work() has returned and may have closed the socket.
 }
 
+#if P1_BLOCK_SIGPIPE
+/******************************************************************************/
+/**
+ * @brief Block SIGPIPE for the calling thread.
+ *
+ * @param original_set The signal mask to be restored by @ref UnblockSigPipe().
+ *
+ * @return 1 if SIGPIPE was blocked and @ref UnblockSigPipe() must be called to
+ *         restore the mask.
+ * @return 0 if the signal mask could not be changed.
+ */
+static int BlockSigPipe(sigset_t* original_set) {
+  sigset_t pipe_set;
+  sigemptyset(&pipe_set);
+  sigaddset(&pipe_set, SIGPIPE);
+  return pthread_sigmask(SIG_BLOCK, &pipe_set, original_set) == 0;
+}
+
+/******************************************************************************/
+/**
+ * @brief Discard a pending SIGPIPE and restore the previous signal mask.
+ *
+ * A write to a socket whose peer has closed raises SIGPIPE on the thread
+ * performing the write. Since the signal is blocked it stays pending, so it
+ * must be consumed here to keep it from being delivered once the mask is
+ * restored.
+ *
+ * @param original_set The signal mask saved by @ref BlockSigPipe().
+ */
+static void UnblockSigPipe(const sigset_t* original_set) {
+  // Preserve errno for the caller, which reports it when SSL_write() fails
+  // with SSL_ERROR_SYSCALL. Both calls below can overwrite it, and
+  // sigtimedwait() sets EAGAIN on every write that did not raise SIGPIPE.
+  int saved_errno = errno;
+
+  sigset_t pipe_set;
+  sigemptyset(&pipe_set);
+  sigaddset(&pipe_set, SIGPIPE);
+
+  // Note the zero timeout: if the write succeeded, or the application already
+  // ignores SIGPIPE, nothing is pending and this must not block.
+  //
+  // A SIGPIPE raised by the write is generated synchronously for this thread,
+  // so it is already pending by the time we get here and is returned on the
+  // first call. sigtimedwait() cannot report EINTR while a signal in the set
+  // is pending, so there is nothing to retry.
+  const struct timespec no_wait = {0, 0};
+  sigtimedwait(&pipe_set, NULL, &no_wait);
+
+  pthread_sigmask(SIG_SETMASK, original_set, NULL);
+
+  errno = saved_errno;
+}
+#endif  // P1_BLOCK_SIGPIPE
+
 /******************************************************************************/
 int SendData(PolarisContext_t* context, const void* buffer, size_t size) {
+  // Note: If the connection has closed remotely, either because the server
+  // disconnected without properly ending the TCP connection or the local
+  // computer's internet connectivity changed (e.g., wifi disconnected), send()
+  // may encounter a pipe failure. When that happens on POSIX, send() will first
+  // raise a SIGPIPE to the application, and then return EPIPE. If the
+  // application does not ignore SIGPIPE, it will abort unexpectedly, and we
+  // will not get a chance to handle the EPIPE gracefully here.
+  //
+  // To address this, we pass the MSG_NOSIGNAL flag to send() to disable SIGPIPE
+  // since a pipe failure is a normal condition and we do not want to crash the
+  // application when it happens. When using TLS, the TLS library SSL_write()
+  // API writes to the socket internally, so unlike a direct send() call it
+  // cannot be passed MSG_NOSIGNAL. On Apple/BSD, we can set SO_NOSIGPIPE
+  // globally on the socket to disable SIGPIPE. Linux does not have a
+  // SO_NOSIGPIPE socket option, so instead we need to block SIGPIPE explicitly
+  // around the write.
+  //
+  // This does not apply for FreeRTOS, which does not use POSIX signals.
   int ret = 0;
 #if POLARIS_ENABLE_TLS
   if (context->use_tls) {
+#  if P1_BLOCK_SIGPIPE
+    sigset_t original_set;
+    int sigpipe_blocked = BlockSigPipe(&original_set);
+#  endif
+
     ret = SSL_write(context->ssl, buffer, size);
+
+#  if P1_BLOCK_SIGPIPE
+    if (sigpipe_blocked) {
+      UnblockSigPipe(&original_set);
+    }
+#  endif
   } else {
-    ret = send(context->socket, buffer, size, 0);
+    ret = send(context->socket, buffer, size, P1_MSG_NOSIGNAL);
   }
 #else   // !POLARIS_ENABLE_TLS
-  ret = send(context->socket, buffer, size, 0);
+  ret = send(context->socket, buffer, size, P1_MSG_NOSIGNAL);
 #endif  // POLARIS_ENABLE_TLS
   return ret;
 }

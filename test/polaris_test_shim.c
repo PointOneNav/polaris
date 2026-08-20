@@ -183,3 +183,9 @@ int PolarisTest_OpenSocket(PolarisContext_t* context, const char* endpoint_url,
                            int endpoint_port) {
   return OpenSocket(context, endpoint_url, endpoint_port);
 }
+
+/******************************************************************************/
+int PolarisTest_SendData(PolarisContext_t* context, const void* buffer,
+                         size_t size) {
+  return SendData(context, buffer, size);
+}

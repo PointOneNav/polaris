@@ -11,9 +11,18 @@
 
 #include <errno.h>
 #include <netdb.h>
+#include <signal.h>
+#include <sys/socket.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
 #include <string>
 
 #include <gtest/gtest.h>
+
+#if POLARIS_ENABLE_TLS
+#  include <openssl/ssl.h>
+#endif
 
 #include "polaris_test_shim.h"
 
@@ -246,5 +255,167 @@ TEST_F(PolarisCTest, TLSRequestIsHonoredOrRefusedButNeverDowngradedSilently) {
   EXPECT_EQ(POLARIS_SUCCESS, Polaris_UseTLS(&context_, 0));
   EXPECT_EQ(0, context_.use_tls);
 }
+
+// ---------------------------------------------------------------------------
+// Pipe failures.
+// ---------------------------------------------------------------------------
+
+/** @brief The result of a send performed in a forked child. */
+struct SendOutcome {
+  /** Whether the child was killed by SIGPIPE rather than returning normally. */
+  bool killed_by_sigpipe;
+
+  /** The value returned by the library's `SendData()`. */
+  int ret;
+
+  /** The `errno` reported once `SendData()` returned. */
+  int err;
+};
+
+/*!
+@brief Open a socket whose peer has already closed.
+
+A closed AF_UNIX peer fails the very next write, so a pipe failure can be
+produced without depending on TCP teardown timing.
+
+@return The local end of the socket pair, or -1 on failure.
+*/
+int OpenSocketWithClosedPeer() {
+  int fds[2];
+  if (socketpair(AF_UNIX, SOCK_STREAM, 0, fds) != 0) {
+    return -1;
+  }
+  close(fds[1]);
+  return fds[0];
+}
+
+#if POLARIS_ENABLE_TLS
+/*!
+@brief Configure `context` to send through a TLS session on `fd`.
+
+The handshake is deliberately not performed. `SSL_write()` writes the
+ClientHello to the socket, and that write is made by the TLS library itself,
+which is the case the suppression in `SendData()` has to cover. Whether the
+bytes are a handshake record or application data makes no difference to it.
+
+@param context The Polaris context to configure.
+@param fd The socket to attach the session to.
+*/
+void AttachClientTLS(PolarisContext_t* context, int fd) {
+  SSL_CTX* ssl_ctx = SSL_CTX_new(TLS_client_method());
+  SSL* ssl = SSL_new(ssl_ctx);
+  SSL_set_fd(ssl, fd);
+  SSL_set_connect_state(ssl);
+
+  context->ssl_ctx = ssl_ctx;
+  context->ssl = ssl;
+  context->use_tls = 1;
+}
+#endif  // POLARIS_ENABLE_TLS
+
+/*!
+@brief Send to a closed peer and report how the send behaved.
+
+The send runs in a forked child so that a SIGPIPE which is not suppressed fails
+this one test, instead of killing the test binary along with every test after
+it.
+
+@param use_tls If `true`, send through a TLS session rather than calling
+       `send()` directly.
+
+@return What happened to the send.
+*/
+SendOutcome SendToClosedPeer(bool use_tls) {
+  int results[2];
+  if (pipe(results) != 0) {
+    ADD_FAILURE() << "could not create the result pipe";
+    return SendOutcome{false, 0, 0};
+  }
+
+  const pid_t pid = fork();
+  if (pid < 0) {
+    ADD_FAILURE() << "could not fork";
+    return SendOutcome{false, 0, 0};
+  }
+
+  // In the child, perform the send and report the result back.
+  if (pid == 0) {
+    close(results[0]);
+
+    PolarisContext_t context;
+    Polaris_Init(&context);
+    Polaris_SetLogLevel(POLARIS_LOG_LEVEL_FATAL);
+    context.socket = OpenSocketWithClosedPeer();
+
+    if (use_tls) {
+#if POLARIS_ENABLE_TLS
+      AttachClientTLS(&context, context.socket);
+#endif
+    } else {
+      Polaris_UseTLS(&context, 0);
+    }
+
+    errno = 0;
+    const int ret = PolarisTest_SendData(&context, "x", 1);
+    const int child_result[2] = {ret, errno};
+    ssize_t ignored = write(results[1], child_result, sizeof(child_result));
+    (void)ignored;
+    _exit(0);
+  }
+
+  // In the parent, collect the reported result and how the child exited.
+  close(results[1]);
+  int child_result[2] = {0, 0};
+  const ssize_t bytes = read(results[0], child_result, sizeof(child_result));
+  close(results[0]);
+
+  int status = 0;
+  waitpid(pid, &status, 0);
+
+  SendOutcome outcome{};
+  outcome.killed_by_sigpipe =
+      WIFSIGNALED(status) && WTERMSIG(status) == SIGPIPE;
+  if (bytes == static_cast<ssize_t>(sizeof(child_result))) {
+    outcome.ret = child_result[0];
+    outcome.err = child_result[1];
+  }
+  return outcome;
+}
+
+/******************************************************************************/
+TEST_F(PolarisCTest, SigPipeIsFatalUnlessSuppressed) {
+  // The tests below only prove anything if SIGPIPE would otherwise kill the
+  // process. If something in this binary ignored it, they would pass without
+  // exercising the suppression at all.
+  struct sigaction current;
+  ASSERT_EQ(0, sigaction(SIGPIPE, NULL, &current));
+  EXPECT_TRUE(current.sa_handler == SIG_DFL)
+      << "SIGPIPE must be left at its default disposition for these tests";
+}
+
+/******************************************************************************/
+TEST_F(PolarisCTest, BrokenPipeIsReportedRatherThanFatalWithoutTLS) {
+  // Losing connectivity mid-drive, e.g. a vehicle leaving WiFi range, makes the
+  // next send hit a closed pipe. It has to come back as an error the caller can
+  // act on rather than a signal that takes down the application.
+  const SendOutcome outcome = SendToClosedPeer(false);
+  EXPECT_FALSE(outcome.killed_by_sigpipe)
+      << "send() raised a fatal SIGPIPE; MSG_NOSIGNAL is not taking effect";
+  EXPECT_EQ(-1, outcome.ret);
+  EXPECT_EQ(EPIPE, outcome.err);
+}
+
+#if POLARIS_ENABLE_TLS
+/******************************************************************************/
+TEST_F(PolarisCTest, BrokenPipeIsReportedRatherThanFatalWithTLS) {
+  // The TLS library writes to the socket internally, so it cannot be passed
+  // MSG_NOSIGNAL and relies on the separate handling in SendData().
+  const SendOutcome outcome = SendToClosedPeer(true);
+  EXPECT_FALSE(outcome.killed_by_sigpipe)
+      << "SSL_write() raised a fatal SIGPIPE; it is not being suppressed";
+  EXPECT_LE(outcome.ret, 0) << "the write should have reported a failure";
+  EXPECT_EQ(EPIPE, outcome.err);
+}
+#endif  // POLARIS_ENABLE_TLS
 
 }  // namespace

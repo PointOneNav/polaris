@@ -78,6 +78,9 @@ cc_library(
                 "//conditions:default": ["-DPOLARIS_NO_PRINT"],
             }),
     includes = ["src"],
+    # pthread_sigmask() is used to block SIGPIPE around TLS socket writes on
+    # Linux.
+    linkopts = ["-pthread"],
     deps = ["@boringssl//:ssl"],
 )
 
