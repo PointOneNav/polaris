@@ -15,20 +15,47 @@
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <unistd.h>
-
 #include <string>
 
 #include <gtest/gtest.h>
-
-#if POLARIS_ENABLE_TLS
-#  include <openssl/ssl.h>
-#endif
 
 #include "polaris_test_shim.h"
 
 namespace {
 
-class PolarisCTest : public ::testing::Test {
+/** @brief How TLS is configured for a run of the test suite. */
+enum class TLSMode {
+  /** Built with TLS support and left enabled. */
+  ENABLED,
+
+  /** Built with TLS support, then turned off via @ref Polaris_UseTLS(). */
+  RUNTIME_DISABLED,
+
+  /** Built without TLS support at all. */
+  COMPILE_TIME_DISABLED,
+};
+
+/*!
+@brief Name a parameterized run so failures identify the TLS mode.
+
+@param info The parameter being named.
+
+@return The suffix to append to the test name.
+*/
+std::string TLSModeName(const ::testing::TestParamInfo<TLSMode>& info) {
+  switch (info.param) {
+    case TLSMode::ENABLED:
+      return "TLSEnabled";
+    case TLSMode::RUNTIME_DISABLED:
+      return "TLSDisabledAtRuntime";
+    case TLSMode::COMPILE_TIME_DISABLED:
+      return "TLSDisabledAtCompileTime";
+  }
+  return "Unknown";
+}
+
+/** @brief Setup shared by the parameterized and build-specific fixtures. */
+class PolarisCTestBase : public ::testing::Test {
  protected:
   void SetUp() override {
     PolarisTest_ResetNetwork();
@@ -41,12 +68,55 @@ class PolarisCTest : public ::testing::Test {
   PolarisContext_t context_;
 };
 
+/**
+ * @brief Runs every test once per TLS mode the current build supports.
+ *
+ * Disabling TLS at runtime has to behave the same as never building it in, so
+ * the two are covered by the same test bodies rather than by separate copies.
+ * Which modes are available is fixed by the build, so a TLS-enabled binary
+ * contributes the enabled and runtime-disabled runs, and a binary built without
+ * TLS contributes the compile-time-disabled run.
+ */
+class PolarisCTest : public PolarisCTestBase,
+                     public ::testing::WithParamInterface<TLSMode> {
+ protected:
+  void SetUp() override {
+    PolarisCTestBase::SetUp();
+
+    if (GetParam() == TLSMode::RUNTIME_DISABLED) {
+      ASSERT_EQ(POLARIS_SUCCESS, Polaris_UseTLS(&context_, 0));
+    }
+
+    // Check the mode actually took effect before any test relies on it, so a
+    // runtime disable that silently failed shows up here rather than as a
+    // confusing failure further down.
+    ASSERT_EQ(tls_active() ? 1 : 0, context_.use_tls);
+  }
+
+  /** @brief Whether this run is expected to be sending over TLS. */
+  bool tls_active() const { return GetParam() == TLSMode::ENABLED; }
+};
+
+#if POLARIS_ENABLE_TLS
+INSTANTIATE_TEST_SUITE_P(TLSModes, PolarisCTest,
+                         ::testing::Values(TLSMode::ENABLED,
+                                           TLSMode::RUNTIME_DISABLED),
+                         TLSModeName);
+#else
+INSTANTIATE_TEST_SUITE_P(TLSModes, PolarisCTest,
+                         ::testing::Values(TLSMode::COMPILE_TIME_DISABLED),
+                         TLSModeName);
+#endif
+
+/** @brief Tests of behavior fixed by the build rather than by a TLS mode. */
+class PolarisCBuildTest : public PolarisCTestBase {};
+
 // ---------------------------------------------------------------------------
 // Error classification.
 // ---------------------------------------------------------------------------
 
 /******************************************************************************/
-TEST_F(PolarisCTest, NoNetworkErrorsAreRecognized) {
+TEST_P(PolarisCTest, NoNetworkErrorsAreRecognized) {
   EXPECT_TRUE(PolarisTest_IsNoNetworkError(ENETDOWN));
   EXPECT_TRUE(PolarisTest_IsNoNetworkError(ENETUNREACH));
   EXPECT_TRUE(PolarisTest_IsNoNetworkError(EHOSTDOWN));
@@ -56,7 +126,7 @@ TEST_F(PolarisCTest, NoNetworkErrorsAreRecognized) {
 }
 
 /******************************************************************************/
-TEST_F(PolarisCTest, EndpointErrorsAreNotTreatedAsNoNetwork) {
+TEST_P(PolarisCTest, EndpointErrorsAreNotTreatedAsNoNetwork) {
   // A refused or reset connection means we reached the network and the endpoint
   // rejected us, which retrying will not fix.
   EXPECT_FALSE(PolarisTest_IsNoNetworkError(ECONNREFUSED));
@@ -71,7 +141,7 @@ TEST_F(PolarisCTest, EndpointErrorsAreNotTreatedAsNoNetwork) {
 // ---------------------------------------------------------------------------
 
 /******************************************************************************/
-TEST_F(PolarisCTest, UnreachableResolverReportsNoNetwork) {
+TEST_P(PolarisCTest, UnreachableResolverReportsNoNetwork) {
   // A device with no connectivity cannot reach a DNS server, which the resolver
   // reports as a temporary failure.
   polaris_test_network.getaddrinfo_result = EAI_AGAIN;
@@ -80,7 +150,7 @@ TEST_F(PolarisCTest, UnreachableResolverReportsNoNetwork) {
 }
 
 /******************************************************************************/
-TEST_F(PolarisCTest, UnknownHostIsNotReportedAsNoNetwork) {
+TEST_P(PolarisCTest, UnknownHostIsNotReportedAsNoNetwork) {
   // An unknown hostname is a configuration problem, not a transient one.
   polaris_test_network.getaddrinfo_result = EAI_NONAME;
   EXPECT_EQ(POLARIS_SOCKET_ERROR,
@@ -88,7 +158,7 @@ TEST_F(PolarisCTest, UnknownHostIsNotReportedAsNoNetwork) {
 }
 
 /******************************************************************************/
-TEST_F(PolarisCTest, ResolverSystemErrorIsClassifiedByErrno) {
+TEST_P(PolarisCTest, ResolverSystemErrorIsClassifiedByErrno) {
   polaris_test_network.getaddrinfo_result = EAI_SYSTEM;
   polaris_test_network.getaddrinfo_errno = ENETUNREACH;
   EXPECT_EQ(POLARIS_NO_NETWORK,
@@ -104,7 +174,7 @@ TEST_F(PolarisCTest, ResolverSystemErrorIsClassifiedByErrno) {
 // ---------------------------------------------------------------------------
 
 /******************************************************************************/
-TEST_F(PolarisCTest, ConnectsToTheFirstAddressOffered) {
+TEST_P(PolarisCTest, ConnectsToTheFirstAddressOffered) {
   EXPECT_EQ(POLARIS_SUCCESS,
             PolarisTest_ResolveAndConnect(&context_, "example.com", 80));
   EXPECT_EQ(1, polaris_test_network.connect_call_count)
@@ -112,7 +182,7 @@ TEST_F(PolarisCTest, ConnectsToTheFirstAddressOffered) {
 }
 
 /******************************************************************************/
-TEST_F(PolarisCTest, FallsBackToTheNextAddressWhenTheFirstIsRefused) {
+TEST_P(PolarisCTest, FallsBackToTheNextAddressWhenTheFirstIsRefused) {
   // Mimics one of the endpoint's addresses not answering.
   polaris_test_network.connect_errno = ECONNREFUSED;
   PolarisTest_ResolveAndConnect(&context_, "example.com", 80);
@@ -121,21 +191,21 @@ TEST_F(PolarisCTest, FallsBackToTheNextAddressWhenTheFirstIsRefused) {
 }
 
 /******************************************************************************/
-TEST_F(PolarisCTest, UnroutableAddressReportsNoNetwork) {
+TEST_P(PolarisCTest, UnroutableAddressReportsNoNetwork) {
   polaris_test_network.connect_errno = ENETUNREACH;
   EXPECT_EQ(POLARIS_NO_NETWORK,
             PolarisTest_ResolveAndConnect(&context_, "example.com", 80));
 }
 
 /******************************************************************************/
-TEST_F(PolarisCTest, RefusedConnectionReportsSocketError) {
+TEST_P(PolarisCTest, RefusedConnectionReportsSocketError) {
   polaris_test_network.connect_errno = ECONNREFUSED;
   EXPECT_EQ(POLARIS_SOCKET_ERROR,
             PolarisTest_ResolveAndConnect(&context_, "example.com", 80));
 }
 
 /******************************************************************************/
-TEST_F(PolarisCTest, UnresponsiveEndpointTimesOut) {
+TEST_P(PolarisCTest, UnresponsiveEndpointTimesOut) {
   // The connection is accepted for delivery but never completes, which is what
   // a silently dropped SYN looks like.
   polaris_test_network.connect_errno = EINPROGRESS;
@@ -145,7 +215,7 @@ TEST_F(PolarisCTest, UnresponsiveEndpointTimesOut) {
 }
 
 /******************************************************************************/
-TEST_F(PolarisCTest, DeferredConnectFailureIsClassified) {
+TEST_P(PolarisCTest, DeferredConnectFailureIsClassified) {
   // The failure is reported later via SO_ERROR rather than by connect() itself.
   polaris_test_network.connect_errno = EINPROGRESS;
   polaris_test_network.poll_result = 1;
@@ -159,7 +229,7 @@ TEST_F(PolarisCTest, DeferredConnectFailureIsClassified) {
 }
 
 /******************************************************************************/
-TEST_F(PolarisCTest, DisconnectWhileWaitingForConnectIsNotAnError) {
+TEST_P(PolarisCTest, DisconnectWhileWaitingForConnectIsNotAnError) {
   // Polaris_Disconnect() interrupts the poll and closes the socket. The user
   // asked us to stop, so this must not be reported as a failure.
   polaris_test_network.connect_errno = EINPROGRESS;
@@ -171,7 +241,7 @@ TEST_F(PolarisCTest, DisconnectWhileWaitingForConnectIsNotAnError) {
 }
 
 /******************************************************************************/
-TEST_F(PolarisCTest, DisconnectBeforeConnectingReportsTheSameResult) {
+TEST_P(PolarisCTest, DisconnectBeforeConnectingReportsTheSameResult) {
   // Cancellation must be reported the same way wherever it lands, so that
   // callers do not have to distinguish "canceled" from "failed" by timing.
   context_.disconnected = 1;
@@ -182,7 +252,20 @@ TEST_F(PolarisCTest, DisconnectBeforeConnectingReportsTheSameResult) {
 }
 
 /******************************************************************************/
-TEST_F(PolarisCTest, DisconnectStopsBeforeTryingRemainingAddresses) {
+TEST_P(PolarisCTest, ConnectingWithoutTLSNeedsNoHandshake) {
+  // This is where use_tls actually changes what OpenSocket() does, so it is the
+  // test that shows a runtime disable reaching the same plaintext path as a
+  // build with no TLS support compiled in at all.
+  if (tls_active()) {
+    GTEST_SKIP() << "completing a TLS handshake needs a real peer";
+  }
+
+  EXPECT_EQ(POLARIS_SUCCESS,
+            PolarisTest_OpenSocket(&context_, "example.com", 80));
+}
+
+/******************************************************************************/
+TEST_P(PolarisCTest, DisconnectStopsBeforeTryingRemainingAddresses) {
   // The first address fails and the user disconnects, so the second address
   // must not be tried.
   polaris_test_network.connect_errno = ECONNREFUSED;
@@ -198,7 +281,7 @@ TEST_F(PolarisCTest, DisconnectStopsBeforeTryingRemainingAddresses) {
 // ---------------------------------------------------------------------------
 
 /******************************************************************************/
-TEST_F(PolarisCTest, UniqueIDsAreValidated) {
+TEST_P(PolarisCTest, UniqueIDsAreValidated) {
   EXPECT_EQ(POLARIS_SUCCESS, PolarisTest_ValidateUniqueID(NULL));
   EXPECT_EQ(POLARIS_SUCCESS, PolarisTest_ValidateUniqueID(""));
   EXPECT_EQ(POLARIS_SUCCESS, PolarisTest_ValidateUniqueID("abc-DEF_123"));
@@ -213,7 +296,7 @@ TEST_F(PolarisCTest, UniqueIDsAreValidated) {
 }
 
 /******************************************************************************/
-TEST_F(PolarisCTest, AuthTokensAreValidated) {
+TEST_P(PolarisCTest, AuthTokensAreValidated) {
   EXPECT_EQ(POLARIS_ERROR, Polaris_SetAuthToken(&context_, ""));
 
   const std::string too_long(POLARIS_MAX_TOKEN_SIZE + 1, 'a');
@@ -225,7 +308,7 @@ TEST_F(PolarisCTest, AuthTokensAreValidated) {
 }
 
 /******************************************************************************/
-TEST_F(PolarisCTest, SendsAreRejectedWhenNotConnected) {
+TEST_P(PolarisCTest, SendsAreRejectedWhenNotConnected) {
   context_.socket = P1_INVALID_SOCKET;
   EXPECT_EQ(POLARIS_SOCKET_ERROR,
             Polaris_SendLLAPosition(&context_, 37.0, -122.0, 0.0));
@@ -239,7 +322,8 @@ TEST_F(PolarisCTest, SendsAreRejectedWhenNotConnected) {
 // ---------------------------------------------------------------------------
 
 /******************************************************************************/
-TEST_F(PolarisCTest, TLSRequestIsHonoredOrRefusedButNeverDowngradedSilently) {
+TEST_F(PolarisCBuildTest,
+       TLSRequestIsHonoredOrRefusedButNeverDowngradedSilently) {
 #if POLARIS_ENABLE_TLS
   EXPECT_EQ(POLARIS_SUCCESS, Polaris_UseTLS(&context_, 1));
   EXPECT_EQ(1, context_.use_tls);
@@ -289,30 +373,6 @@ int OpenSocketWithClosedPeer() {
   return fds[0];
 }
 
-#if POLARIS_ENABLE_TLS
-/*!
-@brief Configure `context` to send through a TLS session on `fd`.
-
-The handshake is deliberately not performed. `SSL_write()` writes the
-ClientHello to the socket, and that write is made by the TLS library itself,
-which is the case the suppression in `SendData()` has to cover. Whether the
-bytes are a handshake record or application data makes no difference to it.
-
-@param context The Polaris context to configure.
-@param fd The socket to attach the session to.
-*/
-void AttachClientTLS(PolarisContext_t* context, int fd) {
-  SSL_CTX* ssl_ctx = SSL_CTX_new(TLS_client_method());
-  SSL* ssl = SSL_new(ssl_ctx);
-  SSL_set_fd(ssl, fd);
-  SSL_set_connect_state(ssl);
-
-  context->ssl_ctx = ssl_ctx;
-  context->ssl = ssl;
-  context->use_tls = 1;
-}
-#endif  // POLARIS_ENABLE_TLS
-
 /*!
 @brief Send to a closed peer and report how the send behaved.
 
@@ -320,12 +380,11 @@ The send runs in a forked child so that a SIGPIPE which is not suppressed fails
 this one test, instead of killing the test binary along with every test after
 it.
 
-@param use_tls If `true`, send through a TLS session rather than calling
-       `send()` directly.
+@param mode The TLS mode to configure the context for.
 
 @return What happened to the send.
 */
-SendOutcome SendToClosedPeer(bool use_tls) {
+SendOutcome SendToClosedPeer(TLSMode mode) {
   int results[2];
   if (pipe(results) != 0) {
     ADD_FAILURE() << "could not create the result pipe";
@@ -347,13 +406,14 @@ SendOutcome SendToClosedPeer(bool use_tls) {
     Polaris_SetLogLevel(POLARIS_LOG_LEVEL_FATAL);
     context.socket = OpenSocketWithClosedPeer();
 
-    if (use_tls) {
-#if POLARIS_ENABLE_TLS
-      AttachClientTLS(&context, context.socket);
-#endif
-    } else {
+    if (mode == TLSMode::RUNTIME_DISABLED) {
       Polaris_UseTLS(&context, 0);
     }
+#if POLARIS_ENABLE_TLS
+    else if (mode == TLSMode::ENABLED) {
+      PolarisTest_AttachClientTLS(&context, context.socket);
+    }
+#endif
 
     errno = 0;
     const int ret = PolarisTest_SendData(&context, "x", 1);
@@ -383,10 +443,10 @@ SendOutcome SendToClosedPeer(bool use_tls) {
 }
 
 /******************************************************************************/
-TEST_F(PolarisCTest, SigPipeIsFatalUnlessSuppressed) {
-  // The tests below only prove anything if SIGPIPE would otherwise kill the
-  // process. If something in this binary ignored it, they would pass without
-  // exercising the suppression at all.
+TEST_F(PolarisCBuildTest, SigPipeIsFatalUnlessSuppressed) {
+  // The pipe failure tests only prove anything if SIGPIPE would otherwise kill
+  // the process. If something in this binary ignored it, they would pass
+  // without exercising the suppression at all.
   struct sigaction current;
   ASSERT_EQ(0, sigaction(SIGPIPE, NULL, &current));
   EXPECT_TRUE(current.sa_handler == SIG_DFL)
@@ -394,28 +454,24 @@ TEST_F(PolarisCTest, SigPipeIsFatalUnlessSuppressed) {
 }
 
 /******************************************************************************/
-TEST_F(PolarisCTest, BrokenPipeIsReportedRatherThanFatalWithoutTLS) {
+TEST_P(PolarisCTest, BrokenPipeIsReportedRatherThanFatal) {
   // Losing connectivity mid-drive, e.g. a vehicle leaving WiFi range, makes the
   // next send hit a closed pipe. It has to come back as an error the caller can
   // act on rather than a signal that takes down the application.
-  const SendOutcome outcome = SendToClosedPeer(false);
+  //
+  // Both paths have to be covered: a direct send() takes MSG_NOSIGNAL, while
+  // the TLS library writes to the socket itself and cannot, so it relies on the
+  // separate handling in SendData().
+  const SendOutcome outcome = SendToClosedPeer(GetParam());
   EXPECT_FALSE(outcome.killed_by_sigpipe)
-      << "send() raised a fatal SIGPIPE; MSG_NOSIGNAL is not taking effect";
-  EXPECT_EQ(-1, outcome.ret);
+      << "the send raised a fatal SIGPIPE instead of reporting a failure";
   EXPECT_EQ(EPIPE, outcome.err);
-}
 
-#if POLARIS_ENABLE_TLS
-/******************************************************************************/
-TEST_F(PolarisCTest, BrokenPipeIsReportedRatherThanFatalWithTLS) {
-  // The TLS library writes to the socket internally, so it cannot be passed
-  // MSG_NOSIGNAL and relies on the separate handling in SendData().
-  const SendOutcome outcome = SendToClosedPeer(true);
-  EXPECT_FALSE(outcome.killed_by_sigpipe)
-      << "SSL_write() raised a fatal SIGPIPE; it is not being suppressed";
-  EXPECT_LE(outcome.ret, 0) << "the write should have reported a failure";
-  EXPECT_EQ(EPIPE, outcome.err);
+  if (tls_active()) {
+    EXPECT_LE(outcome.ret, 0) << "the write should have reported a failure";
+  } else {
+    EXPECT_EQ(-1, outcome.ret);
+  }
 }
-#endif  // POLARIS_ENABLE_TLS
 
 }  // namespace
