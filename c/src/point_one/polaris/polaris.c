@@ -1091,6 +1091,17 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
       P1_PrintError("SSL context failed to initialize.");
       return POLARIS_ERROR;
     }
+
+    // Verify the server certificate chain against the system trust store.
+    // With SSL_VERIFY_PEER, the handshake fails if verification fails. Hosts
+    // without system CA certificates installed will not be able to connect.
+    if (SSL_CTX_set_default_verify_paths(context->ssl_ctx) != 1) {
+      P1_PrintError("Failed to load system CA certificates.");
+      SSL_CTX_free(context->ssl_ctx);
+      context->ssl_ctx = NULL;
+      return POLARIS_ERROR;
+    }
+    SSL_CTX_set_verify(context->ssl_ctx, SSL_VERIFY_PEER, NULL);
   }
 #endif
 
@@ -1164,6 +1175,14 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
     // Enable the TLS extension for servers that use SNI, explicitly telling it
     // the hostname of the remote server.
     SSL_set_tlsext_host_name(context->ssl, endpoint_url);
+
+    // Require the certificate to match the hostname we are connecting to.
+    if (!SSL_set1_host(context->ssl, endpoint_url)) {
+      P1_PrintError("Failed to set TLS verification hostname '%s'.",
+                    endpoint_url);
+      CloseSocket(context, 1);
+      return POLARIS_ERROR;
+    }
 
     // Perform SSL handhshake.
     ret = SSL_connect(context->ssl);
