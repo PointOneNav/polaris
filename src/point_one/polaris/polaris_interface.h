@@ -135,6 +135,23 @@ class PolarisInterface {
   int UseTLS(bool enable);
 
   /**
+   * @brief Specify the CA certificates used to verify the server's TLS
+   *        certificate.
+   *
+   * See also @ref Polaris_SetCACertificates().
+   *
+   * @param ca_file Path to a PEM file containing one or more trusted
+   *        certificates, or empty string if unused.
+   * @param ca_dir Path to a directory of trusted certificates, or empty string
+   *        if unused. If both are unused, the system trust store is used.
+   *
+   * @return @ref POLARIS_SUCCESS on success.
+   * @return @ref POLARIS_ERROR if TLS is not supported.
+   */
+  int SetCACertificates(const std::string& ca_file,
+                        const std::string& ca_dir = "");
+
+  /**
    * @brief Connect to the specified corrections service URL.
    *
    * @copydetails Connect()
@@ -329,6 +346,10 @@ class PolarisInterface {
 
  protected:
   PolarisContext_t context_;
+
+  // The C context references these strings, so they must outlive it.
+  std::string ca_file_;
+  std::string ca_dir_;
 
   std::function<void(const uint8_t* buffer, size_t size_bytes)> callback_;
 

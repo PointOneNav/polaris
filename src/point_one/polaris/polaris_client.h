@@ -151,6 +151,22 @@ class PolarisClient {
   void UseTLS(bool use_tls);
 
   /**
+   * @brief Specify the CA certificates used to verify the server's TLS
+   *        certificate.
+   *
+   * By default, the system trust store is used. Use this function to verify
+   * against a specific set of trusted root certificates instead, for example to
+   * pin the roots used by Polaris.
+   *
+   * @param ca_file Path to a PEM file containing one or more trusted
+   *        certificates, or empty string if unused.
+   * @param ca_dir Path to a directory of trusted certificates, named by subject
+   *        hash (see `openssl rehash`), or empty string if unused.
+   */
+  void SetCACertificates(const std::string& ca_file,
+                         const std::string& ca_dir = "");
+
+  /**
    * @brief Set the maximum number of times to attempt a reconnection before
    *        reauthenticating.
    *
@@ -281,6 +297,8 @@ class PolarisClient {
 #else   // !POLARIS_ENABLE_TLS
   bool use_tls_ = false;
 #endif  // POLARIS_ENABLE_TLS
+  std::string ca_file_;
+  std::string ca_dir_;
 
   bool auth_valid_ = false;
   bool no_auth_ = false;

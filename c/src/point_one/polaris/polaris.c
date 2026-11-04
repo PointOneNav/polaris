@@ -281,6 +281,8 @@ int Polaris_Init(PolarisContext_t* context) {
   context->data_request_sent = 0;
   context->rtcm_callback = NULL;
   context->rtcm_callback_info = NULL;
+  context->ca_file = NULL;
+  context->ca_dir = NULL;
 
 #if POLARIS_ENABLE_TLS
   context->use_tls = 1;
@@ -424,6 +426,25 @@ int Polaris_UseTLS(PolarisContext_t* context, uint8_t enable) {
     context->use_tls = 0;
     return POLARIS_SUCCESS;
   }
+}
+
+/******************************************************************************/
+int Polaris_SetCACertificates(PolarisContext_t* context, const char* ca_file,
+                              const char* ca_dir) {
+#if POLARIS_ENABLE_TLS
+  // Treat empty strings as unspecified.
+  context->ca_file = (ca_file != NULL && ca_file[0] != '\0') ? ca_file : NULL;
+  context->ca_dir = (ca_dir != NULL && ca_dir[0] != '\0') ? ca_dir : NULL;
+  return POLARIS_SUCCESS;
+#else  // !POLARIS_ENABLE_TLS
+  (void)context;
+  (void)ca_file;
+  (void)ca_dir;
+  P1_PrintError(
+      "Library built without TLS connection support. Rebuild with "
+      "POLARIS_ENABLE_TLS=1.");
+  return POLARIS_ERROR;
+#endif
 }
 
 /******************************************************************************/
@@ -1092,11 +1113,30 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
       return POLARIS_ERROR;
     }
 
-    // Verify the server certificate chain against the system trust store.
-    // With SSL_VERIFY_PEER, the handshake fails if verification fails. Hosts
-    // without system CA certificates installed will not be able to connect.
-    if (SSL_CTX_set_default_verify_paths(context->ssl_ctx) != 1) {
-      P1_PrintError("Failed to load system CA certificates.");
+    // Verify the server certificate chain against the user-specified CA
+    // certificates if set, otherwise the system trust store. With
+    // SSL_VERIFY_PEER, the handshake fails if verification fails. Hosts
+    // without system CA certificates installed will not be able to connect
+    // unless CA certificates are specified.
+    int ca_ret;
+    if (context->ca_file != NULL || context->ca_dir != NULL) {
+      P1_PrintDebug("Loading CA certificates. [file=%s, dir=%s]",
+                    context->ca_file ? context->ca_file : "",
+                    context->ca_dir ? context->ca_dir : "");
+      ca_ret = SSL_CTX_load_verify_locations(context->ssl_ctx,
+                                             context->ca_file, context->ca_dir);
+    } else {
+      ca_ret = SSL_CTX_set_default_verify_paths(context->ssl_ctx);
+    }
+
+    if (ca_ret != 1) {
+      if (context->ca_file != NULL || context->ca_dir != NULL) {
+        P1_PrintError("Failed to load CA certificates. [file=%s, dir=%s]",
+                      context->ca_file ? context->ca_file : "",
+                      context->ca_dir ? context->ca_dir : "");
+      } else {
+        P1_PrintError("Failed to load system CA certificates.");
+      }
       SSL_CTX_free(context->ssl_ctx);
       context->ssl_ctx = NULL;
       return POLARIS_ERROR;

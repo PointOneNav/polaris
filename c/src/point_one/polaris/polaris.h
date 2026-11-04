@@ -153,6 +153,12 @@ struct PolarisContext_s {
   // header file.
   void* ssl_ctx;
   void* ssl;
+
+  // Optional CA certificate file and directory used to verify the server, set
+  // by Polaris_SetCACertificates(). If both are `NULL`, the system trust store
+  // is used.
+  const char* ca_file;
+  const char* ca_dir;
 };
 
 #ifdef __cplusplus
@@ -290,6 +296,31 @@ int Polaris_SetAuthToken(PolarisContext_t* context, const char* auth_token);
  * @return @ref POLARIS_ERROR if TLS was requested but is not supported.
  */
 int Polaris_UseTLS(PolarisContext_t* context, uint8_t enable);
+
+/**
+ * @brief Specify the CA certificates used to verify the server's TLS
+ *        certificate.
+ *
+ * By default, the server certificate is verified against the system trust
+ * store. Use this function to verify against a specific set of trusted root
+ * certificates instead, for example to pin the roots used by Polaris.
+ *
+ * @note
+ * The strings are not copied, and must remain valid for as long as the context
+ * is in use.
+ *
+ * @param context The Polaris context to be used.
+ * @param ca_file Path to a PEM file containing one or more trusted
+ *        certificates, or `NULL`/empty string if unused.
+ * @param ca_dir Path to a directory of trusted certificates, named by subject
+ *        hash (see `openssl rehash`), or `NULL`/empty string if unused. If both
+ *        `ca_file` and `ca_dir` are unused, the system trust store is used.
+ *
+ * @return @ref POLARIS_SUCCESS on success.
+ * @return @ref POLARIS_ERROR if TLS is not supported.
+ */
+int Polaris_SetCACertificates(PolarisContext_t* context, const char* ca_file,
+                              const char* ca_dir);
 
 /**
  * @brief Connect to the corrections service using the stored authentication

@@ -222,6 +222,19 @@ void PolarisClient::UseTLS(bool use_tls) {
 }
 
 /******************************************************************************/
+void PolarisClient::SetCACertificates(const std::string& ca_file,
+                                      const std::string& ca_dir) {
+  std::unique_lock<std::recursive_mutex> lock(mutex_);
+#if POLARIS_ENABLE_TLS
+  ca_file_ = ca_file;
+  ca_dir_ = ca_dir;
+#else  // !POLARIS_ENABLE_TLS
+  LOG(ERROR) << "Library built without TLS connection support. Rebuild with "
+                "POLARIS_ENABLE_TLS=1.";
+#endif
+}
+
+/******************************************************************************/
 void PolarisClient::SetMaxReconnects(int max_reconnect_attempts) {
   std::unique_lock<std::recursive_mutex> lock(mutex_);
   max_reconnect_attempts_ = max_reconnect_attempts;
@@ -301,7 +314,15 @@ void PolarisClient::RequestBeacon(const std::string& beacon_id) {
 
 /******************************************************************************/
 void PolarisClient::Run(double timeout_sec) {
-  polaris_.UseTLS(use_tls_);
+  // Apply the TLS settings. Read them under the lock, since the application may
+  // change them from another thread while RunAsync() is starting this one.
+  {
+    std::unique_lock<std::recursive_mutex> lock(mutex_);
+    polaris_.UseTLS(use_tls_);
+#if POLARIS_ENABLE_TLS
+    polaris_.SetCACertificates(ca_file_, ca_dir_);
+#endif
+  }
 
   const int timeout_ms = std::lround(timeout_sec * 1e3);
   int auth_ret = POLARIS_SUCCESS;
