@@ -1176,8 +1176,17 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
     // the hostname of the remote server.
     SSL_set_tlsext_host_name(context->ssl, endpoint_url);
 
-    // Require the certificate to match the hostname we are connecting to.
-    if (!SSL_set1_host(context->ssl, endpoint_url)) {
+    // Require the certificate to match the address we are connecting to. If
+    // the endpoint is a numeric IP address, match it against the certificate's
+    // IP addresses. Otherwise, match it against the certificate's hostnames.
+    //
+    // Note: This is equivalent to SSL_set1_host() in OpenSSL 3, which is not
+    // available in older OpenSSL versions and does not handle IP addresses in
+    // BoringSSL.
+    X509_VERIFY_PARAM* verify_param = SSL_get0_param(context->ssl);
+    if (X509_VERIFY_PARAM_set1_ip_asc(verify_param, endpoint_url) != 1 &&
+        !X509_VERIFY_PARAM_set1_host(verify_param, endpoint_url,
+                                     strlen(endpoint_url))) {
       P1_PrintError("Failed to set TLS verification hostname '%s'.",
                     endpoint_url);
       CloseSocket(context, 1);
