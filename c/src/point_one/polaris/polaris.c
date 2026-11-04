@@ -1188,14 +1188,25 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
     ret = SSL_connect(context->ssl);
     if (ret != 1) {
 #  if !P1_NO_PRINT
-      // Note: We intentionally reuse the receive buffer to store the error
-      // message to be displayed to avoid requiring additional stack here. At
-      // this point we're trying to open the socket, so there should be nobody
-      // actively using the receive buffer.
-      snprintf((char*)context->recv_buffer, POLARIS_RECV_BUFFER_SIZE,
-               "TLS handshake failed for tcp://%s:%d", endpoint_url,
-               endpoint_port);
-      P1_PrintSSLError(context, (char*)context->recv_buffer, ret);
+      // If the failure was caused by certificate verification, report why.
+      // Otherwise, report the generic SSL error.
+      long verify_result = SSL_get_verify_result(context->ssl);
+      if (verify_result != X509_V_OK) {
+        P1_PrintError(
+            "TLS certificate verification failed for tcp://%s:%d. "
+            "[error=%s (%ld)]",
+            endpoint_url, endpoint_port,
+            X509_verify_cert_error_string(verify_result), verify_result);
+      } else {
+        // Note: We intentionally reuse the receive buffer to store the error
+        // message to be displayed to avoid requiring additional stack here.
+        // At this point we're trying to open the socket, so there should be
+        // nobody actively using the receive buffer.
+        snprintf((char*)context->recv_buffer, POLARIS_RECV_BUFFER_SIZE,
+                 "TLS handshake failed for tcp://%s:%d", endpoint_url,
+                 endpoint_port);
+        P1_PrintSSLError(context, (char*)context->recv_buffer, ret);
+      }
 #  endif  // !P1_NO_PRINT
       CloseSocket(context, 1);
       return POLARIS_SOCKET_ERROR;
