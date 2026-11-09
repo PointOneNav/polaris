@@ -855,14 +855,18 @@ int Polaris_Work(PolarisContext_t* context) {
       bytes_read = original_bytes_read;
       errno = original_errno;
 #endif
+      // If the user disconnected, the read did not time out. The disconnect
+      // request interrupted it, e.g., from a signal handler, which the TLS
+      // library reports the same way as a timeout.
       if (context->disconnected) {
-        P1_DebugPrintReadWriteError(context, "Socket read timed out",
-                                    bytes_read);
-      } else {
-        P1_PrintReadWriteError(context, "Warning: Socket read timed out",
-                               bytes_read);
+        P1_DebugPrintReadWriteError(
+            context, "Connection terminated by user request", bytes_read);
+        CloseSocket(context, 1);
+        return POLARIS_CONNECTION_CLOSED;
       }
 
+      P1_PrintReadWriteError(context, "Warning: Socket read timed out",
+                             bytes_read);
       return POLARIS_TIMED_OUT;
     }
   }
