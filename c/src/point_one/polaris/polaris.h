@@ -168,6 +168,7 @@ struct PolarisContext_s {
   char auth_token[POLARIS_MAX_TOKEN_SIZE + 1];
   uint8_t authenticated;
   uint8_t disconnected;
+  int connection_state;
   size_t total_bytes_received;
   uint8_t data_request_sent;
 
@@ -419,12 +420,19 @@ int Polaris_ConnectWithoutAuth(PolarisContext_t* context,
 /**
  * @brief Disconnect from the corrections stream.
  *
- * @note
- * This function may be called asynchronously from @ref Polaris_Work() or @ref
- * Polaris_Run(), and therefore does _not_ free the existing socket or TLS
- * connection. You must call @ref Polaris_Free() to do so if neither @ref
- * Polaris_Work() or @ref Polaris_Run() is executing when this function is
- * called.
+ * This function may be called from another thread while a call using the same
+ * context is connecting, authenticating, sending, or receiving.
+ *
+ * - If no other call is using the connection, this function closes the socket
+ *   immediately.
+ * - If another thread is in the middle of a call that uses the connection
+ *   (e.g., @ref Polaris_Run()), this function interrupts it, and that call
+ *   closes the socket and frees the TLS connection before it returns.
+ *
+ * @warning
+ * If no other call is using the connection, this function does _not_ free the
+ * TLS connection. You must call @ref Polaris_Free() to do so before connecting
+ * again, or before discarding the context.
  *
  * @param context The Polaris context to be disconnected.
  */

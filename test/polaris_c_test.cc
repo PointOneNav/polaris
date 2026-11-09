@@ -11,15 +11,18 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <gtest/gtest.h>
 #include <netdb.h>
 #include <pthread.h>
 #include <signal.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include <string>
 
-#include <gtest/gtest.h>
+#include <chrono>
+#include <future>
+#include <string>
+#include <thread>
 
 #include "polaris_test_shim.h"
 
@@ -593,5 +596,202 @@ TEST_F(PolarisCBuildTest, ApplicationSigPipeIsLeftPending) {
       << "the send discarded the application's pending SIGPIPE";
 }
 #endif  // POLARIS_ENABLE_TLS && defined(__linux__)
+
+// ---------------------------------------------------------------------------
+// Disconnecting while another call is using the connection.
+// ---------------------------------------------------------------------------
+
+/*!
+@brief Attach a context to a connected peer that never sends anything.
+
+@param context The Polaris context to attach.
+@param use_tls If `true`, communicate through a TLS session. The first read
+       then starts the TLS handshake and waits for the peer's reply.
+
+@return The peer's end of the connection, which the caller must close, or -1 on
+        failure.
+*/
+int AttachSilentPeer(PolarisContext_t* context, bool use_tls) {
+  int fds[2];
+  if (socketpair(AF_UNIX, SOCK_STREAM, 0, fds) != 0) {
+    return -1;
+  }
+
+  context->socket = fds[0];
+#if POLARIS_ENABLE_TLS
+  if (use_tls) {
+    PolarisTest_AttachClientTLS(context, fds[0]);
+  }
+#endif
+  return fds[1];
+}
+
+/*!
+@brief Check whether the peer sees the connection as closed.
+
+Any data already sent to the peer, such as a TLS close notification, is
+discarded first.
+
+@param peer The peer's end of the connection.
+
+@return `true` if the connection is closed.
+*/
+bool PeerSeesClosed(int peer) {
+  char buffer[1024];
+  while (true) {
+    const ssize_t ret = recv(peer, buffer, sizeof(buffer), MSG_DONTWAIT);
+    if (ret <= 0) {
+      return ret == 0;
+    }
+  }
+}
+
+/** @brief The context disconnected by @ref DisconnectOnSignal(). */
+PolarisContext_t* signal_context = nullptr;
+
+/*!
+@brief Disconnect @ref signal_context from a signal handler.
+
+@param signal_number The signal that was raised.
+*/
+void DisconnectOnSignal(int signal_number) {
+  (void)signal_number;
+  Polaris_Disconnect(signal_context);
+}
+
+/******************************************************************************/
+TEST_P(PolarisCTest, DisconnectWhileIdleClosesTheSocketImmediately) {
+  // With no other call using the connection, the caller can rely on the socket
+  // being closed as soon as Polaris_Disconnect() returns.
+  const int peer = AttachSilentPeer(&context_, tls_active());
+  ASSERT_GE(peer, 0);
+
+  Polaris_Disconnect(&context_);
+  EXPECT_EQ(P1_INVALID_SOCKET, context_.socket);
+  EXPECT_TRUE(PeerSeesClosed(peer));
+  EXPECT_EQ(0, context_.connection_state);
+
+  Polaris_Free(&context_);
+  close(peer);
+}
+
+/******************************************************************************/
+TEST_P(PolarisCTest, DisconnectFromAnotherThreadInterruptsAndCleansUp) {
+  // A call waiting for data must return promptly when another thread
+  // disconnects. Since Polaris_Disconnect() cannot safely close the connection
+  // while the call is using it, the call must close the socket and free the TLS
+  // session itself before it returns.
+  const int peer = AttachSilentPeer(&context_, tls_active());
+  ASSERT_GE(peer, 0);
+
+  std::future<int> result = std::async(
+      std::launch::async, [this] { return Polaris_Work(&context_); });
+
+  // Wait for the call to start using the connection, then give it time to
+  // block waiting for data before disconnecting.
+  while (PolarisTest_GetNumConnectionUsers(&context_) == 0) {
+    std::this_thread::yield();
+  }
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  Polaris_Disconnect(&context_);
+
+  ASSERT_EQ(std::future_status::ready, result.wait_for(std::chrono::seconds(5)))
+      << "Polaris_Work() did not return after the disconnect";
+  EXPECT_EQ(POLARIS_CONNECTION_CLOSED, result.get());
+  EXPECT_EQ(P1_INVALID_SOCKET, context_.socket);
+#if POLARIS_ENABLE_TLS
+  EXPECT_EQ(nullptr, context_.ssl);
+  EXPECT_EQ(nullptr, context_.ssl_ctx);
+#endif
+  EXPECT_TRUE(PeerSeesClosed(peer));
+  EXPECT_EQ(0, context_.connection_state);
+
+  close(peer);
+}
+
+/******************************************************************************/
+TEST_P(PolarisCTest, DisconnectFromTheDataCallbackIsCleanedUpWhenWorkReturns) {
+  // The data callback runs while Polaris_Work() is using the connection, so a
+  // disconnect from the callback is handed off the same way as one from
+  // another thread, deterministically.
+  if (tls_active()) {
+    GTEST_SKIP() << "receiving data over TLS needs a real peer";
+  }
+
+  const int peer = AttachSilentPeer(&context_, /*use_tls=*/false);
+  ASSERT_GE(peer, 0);
+  ASSERT_EQ(1, send(peer, "x", 1, 0));
+
+  Polaris_SetRTCMCallback(
+      &context_,
+      [](void*, PolarisContext_t* context, const uint8_t*, size_t) {
+        Polaris_Disconnect(context);
+      },
+      nullptr);
+  EXPECT_EQ(POLARIS_SUCCESS, Polaris_Work(&context_));
+  EXPECT_EQ(P1_INVALID_SOCKET, context_.socket);
+  EXPECT_TRUE(PeerSeesClosed(peer));
+  EXPECT_EQ(0, context_.connection_state);
+
+  close(peer);
+}
+
+/******************************************************************************/
+TEST_P(PolarisCTest, DisconnectFromASignalHandlerInterruptsTheCall) {
+  // An application may disconnect from a signal handler, e.g., on SIGINT while
+  // Polaris_Work() is waiting for data on the same thread.
+  //
+  // This runs in a forked child so that the signal handler and timer do not
+  // affect the other tests.
+  const pid_t pid = fork();
+  ASSERT_GE(pid, 0) << "could not fork";
+
+  // In the child, wait for data until a timer signal disconnects, and exit with
+  // 0 if the call returned with the socket closed.
+  if (pid == 0) {
+    PolarisContext_t context;
+    Polaris_Init(&context);
+    Polaris_SetLogLevel(POLARIS_LOG_LEVEL_FATAL);
+    if (GetParam() == TLSMode::RUNTIME_DISABLED) {
+      Polaris_UseTLS(&context, 0);
+    }
+
+    const int peer = AttachSilentPeer(&context, tls_active());
+    if (peer < 0) {
+      _exit(2);
+    }
+
+    // Note: SA_RESTART is deliberately not set, so the blocked read returns
+    // when the signal arrives, as it would for a default SIGINT handler.
+    signal_context = &context;
+    struct sigaction action = {};
+    action.sa_handler = DisconnectOnSignal;
+    sigaction(SIGALRM, &action, nullptr);
+    alarm(1);
+
+    const int ret = Polaris_Work(&context);
+    _exit(ret == POLARIS_CONNECTION_CLOSED &&
+                  context.socket == P1_INVALID_SOCKET
+              ? 0
+              : 1);
+  }
+
+  // In the parent, wait for the child to exit, killing it if it hangs.
+  int status = 0;
+  pid_t exited = 0;
+  for (int i = 0; i < 100 && exited == 0; ++i) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    exited = waitpid(pid, &status, WNOHANG);
+  }
+
+  if (exited == 0) {
+    kill(pid, SIGKILL);
+    waitpid(pid, &status, 0);
+    FAIL() << "Polaris_Work() did not return after the disconnect";
+  }
+
+  ASSERT_TRUE(WIFEXITED(status));
+  EXPECT_EQ(0, WEXITSTATUS(status));
+}
 
 }  // namespace
