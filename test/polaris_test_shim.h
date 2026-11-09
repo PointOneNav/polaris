@@ -66,6 +66,20 @@ typedef struct {
    * resolved addresses are still being tried.
    */
   PolarisContext_t* disconnect_after_first_connect;
+
+  /**
+   * When set, `connect()` marks this context disconnected during the attempt
+   * on the last of the two resolved addresses, modelling a disconnect request
+   * that arrives when there are no more addresses left to try.
+   */
+  PolarisContext_t* disconnect_during_last_connect;
+
+  /**
+   * When set, `getaddrinfo()` calls @ref Polaris_Disconnect() on this context
+   * before resolving, modelling a disconnect request that arrives from another
+   * thread before any socket has been opened.
+   */
+  PolarisContext_t* disconnect_during_getaddrinfo;
 } PolarisTestNetwork_t;
 
 extern PolarisTestNetwork_t polaris_test_network;

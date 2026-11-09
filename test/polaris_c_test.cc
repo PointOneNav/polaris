@@ -10,7 +10,9 @@
  ******************************************************************************/
 
 #include <errno.h>
+#include <fcntl.h>
 #include <netdb.h>
+#include <pthread.h>
 #include <signal.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
@@ -63,7 +65,10 @@ class PolarisCTestBase : public ::testing::Test {
     Polaris_SetLogLevel(POLARIS_LOG_LEVEL_FATAL);
   }
 
-  void TearDown() override { context_.socket = P1_INVALID_SOCKET; }
+  void TearDown() override {
+    context_.socket = P1_INVALID_SOCKET;
+    Polaris_SetPrintCallback(nullptr);
+  }
 
   PolarisContext_t context_;
 };
@@ -205,6 +210,18 @@ TEST_P(PolarisCTest, RefusedConnectionReportsSocketError) {
 }
 
 /******************************************************************************/
+TEST_P(PolarisCTest, PrintingAnErrorDoesNotChangeItsClassification) {
+  // The application's print callback may change errno, e.g., while writing to
+  // a log file. The error must still be classified by its original errno.
+  Polaris_SetLogLevel(POLARIS_LOG_LEVEL_INFO);
+  Polaris_SetPrintCallback(
+      [](const char*, int, int, const char*) { errno = EBADF; });
+  polaris_test_network.connect_errno = ENETUNREACH;
+  EXPECT_EQ(POLARIS_NO_NETWORK,
+            PolarisTest_ResolveAndConnect(&context_, "example.com", 80));
+}
+
+/******************************************************************************/
 TEST_P(PolarisCTest, UnresponsiveEndpointTimesOut) {
   // The connection is accepted for delivery but never completes, which is what
   // a silently dropped SYN looks like.
@@ -274,6 +291,60 @@ TEST_P(PolarisCTest, DisconnectStopsBeforeTryingRemainingAddresses) {
             PolarisTest_ResolveAndConnect(&context_, "example.com", 80));
   EXPECT_EQ(1, polaris_test_network.connect_call_count)
       << "the second address should not be tried after a disconnect request";
+}
+
+/******************************************************************************/
+TEST_P(PolarisCTest, DisconnectDuringTheLastAddressIsNotAnError) {
+  // The user disconnects while the last address is being tried, and that
+  // attempt fails. There is no later attempt to notice the request, so the
+  // result itself must report the cancellation.
+  polaris_test_network.connect_errno = ECONNREFUSED;
+  polaris_test_network.disconnect_during_last_connect = &context_;
+  EXPECT_EQ(POLARIS_CONNECTION_CLOSED,
+            PolarisTest_ResolveAndConnect(&context_, "example.com", 80));
+  EXPECT_EQ(2, polaris_test_network.connect_call_count);
+}
+
+/******************************************************************************/
+TEST_P(PolarisCTest, DisconnectWhileResolvingCancelsTheAttempt) {
+  // No socket exists yet while the address is being resolved, but the request
+  // must still stop the attempt before it connects.
+  polaris_test_network.disconnect_during_getaddrinfo = &context_;
+  EXPECT_EQ(POLARIS_CONNECTION_CLOSED,
+            PolarisTest_ResolveAndConnect(&context_, "example.com", 80));
+  EXPECT_EQ(0, polaris_test_network.connect_call_count)
+      << "no connection should be attempted after a disconnect request";
+}
+
+/******************************************************************************/
+TEST_P(PolarisCTest, EarlierDisconnectDoesNotCancelAuthentication) {
+  // A disconnect request from an earlier session must not cancel the next
+  // authentication attempt. The connection is refused so that the attempt ends
+  // without needing a server.
+  int fds[2];
+  ASSERT_EQ(0, socketpair(AF_UNIX, SOCK_STREAM, 0, fds));
+  close(fds[1]);
+  context_.socket = fds[0];
+  Polaris_Disconnect(&context_);
+
+  polaris_test_network.connect_errno = ECONNREFUSED;
+  Polaris_AuthenticateTo(&context_, "key", "", "example.com");
+  EXPECT_EQ(2, polaris_test_network.connect_call_count)
+      << "authentication should have tried both addresses";
+}
+
+/******************************************************************************/
+TEST_P(PolarisCTest, DisconnectBeforeTheTLSSessionExistsIsSafe) {
+  // A disconnect can arrive while the TCP connection is still being
+  // established, before the TLS session has been created.
+  int fds[2];
+  ASSERT_EQ(0, socketpair(AF_UNIX, SOCK_STREAM, 0, fds));
+  close(fds[1]);
+  context_.socket = fds[0];
+
+  Polaris_Disconnect(&context_);
+  EXPECT_EQ(1, context_.disconnected);
+  EXPECT_EQ(P1_INVALID_SOCKET, context_.socket);
 }
 
 // ---------------------------------------------------------------------------
@@ -473,5 +544,54 @@ TEST_P(PolarisCTest, BrokenPipeIsReportedRatherThanFatal) {
     EXPECT_EQ(-1, outcome.ret);
   }
 }
+
+#if POLARIS_ENABLE_TLS && defined(__linux__)
+/******************************************************************************/
+TEST_F(PolarisCBuildTest, ApplicationSigPipeIsLeftPending) {
+  // If the application blocks SIGPIPE and one is already pending, it is the
+  // application's to handle, so a TLS send must not discard it.
+  //
+  // The send runs in a forked child so that changing the signal mask does not
+  // affect the other tests.
+  const pid_t pid = fork();
+  ASSERT_GE(pid, 0) << "could not fork";
+
+  // In the child, raise a SIGPIPE while it is blocked, send over TLS, and exit
+  // with 0 if the SIGPIPE is still pending afterward.
+  if (pid == 0) {
+    sigset_t pipe_set;
+    sigemptyset(&pipe_set);
+    sigaddset(&pipe_set, SIGPIPE);
+    pthread_sigmask(SIG_BLOCK, &pipe_set, nullptr);
+    pthread_kill(pthread_self(), SIGPIPE);
+
+    // The write succeeds, then the TLS library waits for the server's reply.
+    // The socket is non-blocking so that it gives up immediately instead.
+    int fds[2];
+    if (socketpair(AF_UNIX, SOCK_STREAM, 0, fds) != 0 ||
+        fcntl(fds[0], F_SETFL, O_NONBLOCK) != 0) {
+      _exit(2);
+    }
+
+    PolarisContext_t context;
+    Polaris_Init(&context);
+    Polaris_SetLogLevel(POLARIS_LOG_LEVEL_FATAL);
+    context.socket = fds[0];
+    PolarisTest_AttachClientTLS(&context, context.socket);
+    PolarisTest_SendData(&context, "x", 1);
+
+    sigset_t pending_set;
+    sigpending(&pending_set);
+    _exit(sigismember(&pending_set, SIGPIPE) == 1 ? 0 : 1);
+  }
+
+  // In the parent, check how the child exited.
+  int status = 0;
+  waitpid(pid, &status, 0);
+  ASSERT_TRUE(WIFEXITED(status));
+  EXPECT_EQ(0, WEXITSTATUS(status))
+      << "the send discarded the application's pending SIGPIPE";
+}
+#endif  // POLARIS_ENABLE_TLS && defined(__linux__)
 
 }  // namespace

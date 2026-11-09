@@ -95,6 +95,10 @@ static struct addrinfo* MakeMultiAddressResult(int port) {
 static int TestGetAddrInfo(const char* node, const char* service,
                            const struct addrinfo* hints,
                            struct addrinfo** result) {
+  if (polaris_test_network.disconnect_during_getaddrinfo != NULL) {
+    Polaris_Disconnect(polaris_test_network.disconnect_during_getaddrinfo);
+  }
+
   if (polaris_test_network.getaddrinfo_result != 0) {
     if (polaris_test_network.getaddrinfo_result == EAI_SYSTEM) {
       errno = polaris_test_network.getaddrinfo_errno;
@@ -123,6 +127,11 @@ static int TestConnect(int fd, const struct sockaddr* addr, socklen_t length) {
   if (polaris_test_network.disconnect_after_first_connect != NULL &&
       polaris_test_network.connect_call_count == 1) {
     polaris_test_network.disconnect_after_first_connect->disconnected = 1;
+  }
+
+  if (polaris_test_network.disconnect_during_last_connect != NULL &&
+      polaris_test_network.connect_call_count == 2) {
+    polaris_test_network.disconnect_during_last_connect->disconnected = 1;
   }
 
   if (polaris_test_network.connect_errno != 0) {
