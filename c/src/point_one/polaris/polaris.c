@@ -268,6 +268,37 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
 
 static void CloseSocket(PolarisContext_t* context, int destroy_context);
 
+#if POLARIS_ENABLE_TLS
+static void ShutdownTLS(PolarisContext_t* context);
+#endif
+
+#if P1_BLOCK_SIGPIPE
+static int BlockSigPipe(sigset_t* original_set, int* was_pending);
+
+static void UnblockSigPipe(const sigset_t* original_set, int was_pending);
+#endif
+
+// Run a TLS library call that may write to the socket, with SIGPIPE blocked
+// where needed. See SendData().
+#if P1_BLOCK_SIGPIPE
+#  define P1_CallWithSigPipeBlocked(statement)                     \
+    do {                                                           \
+      sigset_t p1_original_set;                                    \
+      int p1_sigpipe_was_pending = 0;                              \
+      int p1_sigpipe_blocked =                                     \
+          BlockSigPipe(&p1_original_set, &p1_sigpipe_was_pending); \
+      statement;                                                   \
+      if (p1_sigpipe_blocked) {                                    \
+        UnblockSigPipe(&p1_original_set, p1_sigpipe_was_pending);  \
+      }                                                            \
+    } while (0)
+#else
+#  define P1_CallWithSigPipeBlocked(statement) \
+    do {                                       \
+      statement;                               \
+    } while (0)
+#endif
+
 static int SendData(PolarisContext_t* context, const void* buffer, size_t size);
 
 static P1_RecvSize_t ReadData(PolarisContext_t* context, void* buffer,
@@ -603,7 +634,7 @@ void Polaris_Disconnect(PolarisContext_t* context) {
     // The TLS session does not exist yet if the TCP connection is still being
     // established, in which case there is nothing to shut down.
     if (context->use_tls && context->ssl != NULL) {
-      SSL_shutdown(context->ssl);
+      ShutdownTLS(context);
     }
 #endif
     shutdown(context->socket, SHUT_RDWR);
@@ -1562,7 +1593,7 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
     }
 
     // Perform SSL handhshake.
-    ret = SSL_connect(context->ssl);
+    P1_CallWithSigPipeBlocked(ret = SSL_connect(context->ssl));
     if (ret != 1) {
 #  if !POLARIS_NO_PRINT
       // If the failure was caused by certificate verification, report why.
@@ -1614,7 +1645,7 @@ void CloseSocket(PolarisContext_t* context, int destroy_context) {
   if (destroy_context && context->ssl != NULL) {
     P1_PrintDebug("Shutting down TLS context.");
     if (SSL_get_shutdown(context->ssl) == 0) {
-      SSL_shutdown(context->ssl);
+      ShutdownTLS(context);
     }
 
     SSL_free(context->ssl);
@@ -1640,6 +1671,21 @@ void CloseSocket(PolarisContext_t* context, int destroy_context) {
   // here since it is used to determine the return value in Polaris_Run()
   // _after_ Polaris_Work() has returned and may have closed the socket.
 }
+
+#if POLARIS_ENABLE_TLS
+/******************************************************************************/
+/**
+ * @brief Send a TLS close notification to the server.
+ *
+ * The write fails if the server already closed the connection. On Linux, that
+ * would also raise SIGPIPE, so it is blocked here as in @ref SendData().
+ *
+ * @param context The Polaris context to be used.
+ */
+static void ShutdownTLS(PolarisContext_t* context) {
+  P1_CallWithSigPipeBlocked(SSL_shutdown(context->ssl));
+}
+#endif  // POLARIS_ENABLE_TLS
 
 #if P1_BLOCK_SIGPIPE
 /******************************************************************************/
@@ -1742,19 +1788,7 @@ int SendData(PolarisContext_t* context, const void* buffer, size_t size) {
   int ret = 0;
 #if POLARIS_ENABLE_TLS
   if (context->use_tls) {
-#  if P1_BLOCK_SIGPIPE
-    sigset_t original_set;
-    int sigpipe_was_pending = 0;
-    int sigpipe_blocked = BlockSigPipe(&original_set, &sigpipe_was_pending);
-#  endif
-
-    ret = SSL_write(context->ssl, buffer, size);
-
-#  if P1_BLOCK_SIGPIPE
-    if (sigpipe_blocked) {
-      UnblockSigPipe(&original_set, sigpipe_was_pending);
-    }
-#  endif
+    P1_CallWithSigPipeBlocked(ret = SSL_write(context->ssl, buffer, size));
   } else {
     ret = send(context->socket, buffer, size, P1_MSG_NOSIGNAL);
   }
@@ -1769,7 +1803,10 @@ P1_RecvSize_t ReadData(PolarisContext_t* context, void* buffer, size_t size) {
   P1_RecvSize_t bytes_read = 0;
 #if POLARIS_ENABLE_TLS
   if (context->use_tls) {
-    bytes_read = SSL_read(context->ssl, buffer, size);
+    // Note that SSL_read() may also write to the socket, e.g., to complete the
+    // handshake.
+    P1_CallWithSigPipeBlocked(bytes_read =
+                                  SSL_read(context->ssl, buffer, size));
   } else {
     bytes_read = recv(context->socket, buffer, size, 0);
   }
