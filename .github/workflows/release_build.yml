@@ -85,6 +85,17 @@ jobs:
         else
           echo "TOOL=$TOOL_SPECIFIER" >> $GITHUB_ENV
         fi
+        # Give each job its own Polaris unique ID so that parallel jobs, including
+        # those in runs for other branches, never connect with the same one. The
+        # last 6 digits of the run ID are enough to tell concurrent runs apart.
+        #
+        # Unique IDs are limited to 36 characters, so abbreviate the tool name
+        # (e.g., bazel-6.5.0 -> bzl650). They also only allow letters, digits,
+        # '-', and '_', so replace the other characters (e.g., g++ -> gxx).
+        RUN_ID="${{ github.run_id }}"
+        UNIQUE_ID_PREFIX="${RUN_ID: -6}_${TOOL_SPECIFIER}_${{ matrix.compiler }}_"
+        UNIQUE_ID_PREFIX=$(echo "$UNIQUE_ID_PREFIX" | sed 's/_bazel-/_bzl/; s/_cmake_/_cmk_/; s/_make_/_mk_/; s/+/x/g; s/[^A-Za-z0-9_-]//g')
+        echo "UNIQUE_ID_PREFIX=$UNIQUE_ID_PREFIX" >> $GITHUB_ENV
 
     - name: Install msbuild (Windows)
       if: matrix.os == 'windows-latest'
@@ -182,7 +193,7 @@ jobs:
       env:
         POLARIS_API_KEY: ${{ secrets.POLARIS_API_KEY }}
       run: |
-        ./test/run_unit_tests.sh --tool=${{ env.TOOL }} --unique-id-prefix=${{ env.TOOL }}_cpp
+        ./test/run_unit_tests.sh --tool=${{ env.TOOL }} --unique-id-prefix=${{ env.UNIQUE_ID_PREFIX }}cpp_
     - name: Run Integration Tests With Installed Libraries (CMake, Linux)
       if: matrix.arch == 'x64' && matrix.tool == 'cmake' && matrix.os == 'ubuntu-latest'
       env:
@@ -190,7 +201,7 @@ jobs:
       run: |
         mv cmake_build/libpolaris_cpp_client.so cmake_build/libpolaris_cpp_client.so.bak
         mv cmake_build/c/libpolaris_client.so cmake_build/c/libpolaris_client.so.bak
-        ./test/run_unit_tests.sh --tool=${{ matrix.tool }} --unique-id-prefix=${{ matrix.tool }}_cpp  --install-prefix=cmake_build/install
+        ./test/run_unit_tests.sh --tool=${{ matrix.tool }} --unique-id-prefix=${{ env.UNIQUE_ID_PREFIX }}cpp_ --install-prefix=cmake_build/install
         mv cmake_build/libpolaris_cpp_client.so.bak cmake_build/libpolaris_cpp_client.so
         mv cmake_build/c/libpolaris_client.so.bak cmake_build/c/libpolaris_client.so
 
@@ -267,6 +278,17 @@ jobs:
         else
           echo "TOOL=$TOOL_SPECIFIER" >> $GITHUB_ENV
         fi
+        # Give each job its own Polaris unique ID so that parallel jobs, including
+        # those in runs for other branches, never connect with the same one. The
+        # last 6 digits of the run ID are enough to tell concurrent runs apart.
+        #
+        # Unique IDs are limited to 36 characters, so abbreviate the tool name
+        # (e.g., bazel-6.5.0 -> bzl650). They also only allow letters, digits,
+        # '-', and '_', so replace the other characters (e.g., g++ -> gxx).
+        RUN_ID="${{ github.run_id }}"
+        UNIQUE_ID_PREFIX="${RUN_ID: -6}_${TOOL_SPECIFIER}_${{ matrix.compiler }}_"
+        UNIQUE_ID_PREFIX=$(echo "$UNIQUE_ID_PREFIX" | sed 's/_bazel-/_bzl/; s/_cmake_/_cmk_/; s/_make_/_mk_/; s/+/x/g; s/[^A-Za-z0-9_-]//g')
+        echo "UNIQUE_ID_PREFIX=$UNIQUE_ID_PREFIX" >> $GITHUB_ENV
 
     - name: Install msbuild (Windows)
       if: matrix.os == 'windows-latest'
@@ -337,14 +359,14 @@ jobs:
       env:
         POLARIS_API_KEY: ${{ secrets.POLARIS_API_KEY }}
       run: |
-        ./test/run_unit_tests.sh --tool=${{ env.TOOL }} --unique-id-prefix=${{ env.TOOL }}_c_
+        ./test/run_unit_tests.sh --tool=${{ env.TOOL }} --unique-id-prefix=${{ env.UNIQUE_ID_PREFIX }}c_
     - name: Run Integration Tests With Installed Libraries (CMake, Linux)
       if: matrix.arch == 'x64' && matrix.tool == 'cmake' && matrix.os == 'ubuntu-latest'
       env:
         POLARIS_API_KEY: ${{ secrets.POLARIS_API_KEY }}
       run: |
         mv cmake_build/libpolaris_client.so cmake_build/libpolaris_client.so.bak
-        ./test/run_unit_tests.sh --tool=${{ matrix.tool }} --unique-id-prefix=${{ matrix.tool }}_c_ --install-prefix=cmake_build/install
+        ./test/run_unit_tests.sh --tool=${{ matrix.tool }} --unique-id-prefix=${{ env.UNIQUE_ID_PREFIX }}c_ --install-prefix=cmake_build/install
         mv cmake_build/libpolaris_client.so.bak cmake_build/libpolaris_client.so
 
     # Package artifacts (Bazel only -- no need to do this for multiple build
