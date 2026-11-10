@@ -209,16 +209,30 @@ void PolarisClient::SetPolarisEndpoint(const std::string& endpoint_url,
 /******************************************************************************/
 void PolarisClient::UseTLS(bool use_tls) {
   std::unique_lock<std::recursive_mutex> lock(mutex_);
+  // Note that we store the request even if TLS is not supported. This function
+  // has no return value, so downgrading to plaintext here would leave the
+  // caller with no way to tell that it did not get the secure connection it
+  // asked for. Instead @ref Run() will fail to connect.
+  use_tls_ = use_tls;
+#if !POLARIS_ENABLE_TLS
   if (use_tls) {
-#if POLARIS_ENABLE_TLS
-    use_tls_ = true;
-#else  // !POLARIS_ENABLE_TLS
-    LOG(ERROR) << "Secure TLS connections not supported.";
-    use_tls_ = false;
-#endif
-  } else {
-    use_tls_ = false;
+    LOG(ERROR) << "Library built without TLS connection support. Rebuild "
+                  "with POLARIS_ENABLE_TLS=1.";
   }
+#endif
+}
+
+/******************************************************************************/
+void PolarisClient::SetCACertificates(const std::string& ca_file,
+                                      const std::string& ca_dir) {
+  std::unique_lock<std::recursive_mutex> lock(mutex_);
+#if POLARIS_ENABLE_TLS
+  ca_file_ = ca_file;
+  ca_dir_ = ca_dir;
+#else  // !POLARIS_ENABLE_TLS
+  LOG(ERROR) << "Library built without TLS connection support. Rebuild with "
+                "POLARIS_ENABLE_TLS=1.";
+#endif
 }
 
 /******************************************************************************/
@@ -301,7 +315,15 @@ void PolarisClient::RequestBeacon(const std::string& beacon_id) {
 
 /******************************************************************************/
 void PolarisClient::Run(double timeout_sec) {
-  polaris_.UseTLS(use_tls_);
+  // Apply the TLS settings. Read them under the lock, since the application may
+  // change them from another thread while RunAsync() is starting this one.
+  {
+    std::unique_lock<std::recursive_mutex> lock(mutex_);
+    polaris_.UseTLS(use_tls_);
+#if POLARIS_ENABLE_TLS
+    polaris_.SetCACertificates(ca_file_, ca_dir_);
+#endif
+  }
 
   const int timeout_ms = std::lround(timeout_sec * 1e3);
   int auth_ret = POLARIS_SUCCESS;

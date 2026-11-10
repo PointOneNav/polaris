@@ -281,6 +281,8 @@ int Polaris_Init(PolarisContext_t* context) {
   context->data_request_sent = 0;
   context->rtcm_callback = NULL;
   context->rtcm_callback_info = NULL;
+  context->ca_file = NULL;
+  context->ca_dir = NULL;
 
 #if POLARIS_ENABLE_TLS
   context->use_tls = 1;
@@ -411,19 +413,41 @@ int Polaris_SetAuthToken(PolarisContext_t* context, const char* auth_token) {
 
 /******************************************************************************/
 int Polaris_UseTLS(PolarisContext_t* context, uint8_t enable) {
-  if (enable > 0) {
-#if POLARIS_ENABLE_TLS
-    context->use_tls = 1;
-    return POLARIS_SUCCESS;
-#else  // !POLARIS_ENABLE_TLS
-    P1_PrintError("Secure TLS connections not supported.");
-    context->use_tls = 0;
+  // Store the request even when we cannot honor it. Clearing the flag here
+  // would silently downgrade the connection to plaintext for a caller that
+  // asked for TLS and did not check the return value, so instead we keep the
+  // request and refuse to connect. See @ref OpenSocket().
+  context->use_tls = (enable > 0);
+
+#if !POLARIS_ENABLE_TLS
+  if (context->use_tls) {
+    P1_PrintError(
+        "Library built without TLS connection support. Rebuild with "
+        "POLARIS_ENABLE_TLS=1.");
     return POLARIS_ERROR;
-#endif
-  } else {
-    context->use_tls = 0;
-    return POLARIS_SUCCESS;
   }
+#endif
+
+  return POLARIS_SUCCESS;
+}
+
+/******************************************************************************/
+int Polaris_SetCACertificates(PolarisContext_t* context, const char* ca_file,
+                              const char* ca_dir) {
+#if POLARIS_ENABLE_TLS
+  // Treat empty strings as unspecified.
+  context->ca_file = (ca_file != NULL && ca_file[0] != '\0') ? ca_file : NULL;
+  context->ca_dir = (ca_dir != NULL && ca_dir[0] != '\0') ? ca_dir : NULL;
+  return POLARIS_SUCCESS;
+#else  // !POLARIS_ENABLE_TLS
+  (void)context;
+  (void)ca_file;
+  (void)ca_dir;
+  P1_PrintError(
+      "Library built without TLS connection support. Rebuild with "
+      "POLARIS_ENABLE_TLS=1.");
+  return POLARIS_ERROR;
+#endif
 }
 
 /******************************************************************************/
@@ -1065,7 +1089,16 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
     P1_PrintError("Error: socket already open.");
     return POLARIS_ERROR;
   }
-#if POLARIS_ENABLE_TLS
+#if !POLARIS_ENABLE_TLS
+  // Refuse rather than fall back to an unencrypted connection the caller did
+  // not ask for.
+  else if (context->use_tls) {
+    P1_PrintError(
+        "Error: TLS requested, but library built without TLS connection "
+        "support. Rebuild with POLARIS_ENABLE_TLS=1.");
+    return POLARIS_ERROR;
+  }
+#else
   else if (context->use_tls &&
            (context->ssl_ctx != NULL || context->ssl != NULL)) {
     P1_PrintError("Error: SSL context not freed.");
@@ -1091,6 +1124,36 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
       P1_PrintError("SSL context failed to initialize.");
       return POLARIS_ERROR;
     }
+
+    // Verify the server certificate chain against the user-specified CA
+    // certificates if set, otherwise the system trust store. With
+    // SSL_VERIFY_PEER, the handshake fails if verification fails. Hosts
+    // without system CA certificates installed will not be able to connect
+    // unless CA certificates are specified.
+    int ca_ret;
+    if (context->ca_file != NULL || context->ca_dir != NULL) {
+      P1_PrintDebug("Loading CA certificates. [file=%s, dir=%s]",
+                    context->ca_file ? context->ca_file : "",
+                    context->ca_dir ? context->ca_dir : "");
+      ca_ret = SSL_CTX_load_verify_locations(context->ssl_ctx,
+                                             context->ca_file, context->ca_dir);
+    } else {
+      ca_ret = SSL_CTX_set_default_verify_paths(context->ssl_ctx);
+    }
+
+    if (ca_ret != 1) {
+      if (context->ca_file != NULL || context->ca_dir != NULL) {
+        P1_PrintError("Failed to load CA certificates. [file=%s, dir=%s]",
+                      context->ca_file ? context->ca_file : "",
+                      context->ca_dir ? context->ca_dir : "");
+      } else {
+        P1_PrintError("Failed to load system CA certificates.");
+      }
+      SSL_CTX_free(context->ssl_ctx);
+      context->ssl_ctx = NULL;
+      return POLARIS_ERROR;
+    }
+    SSL_CTX_set_verify(context->ssl_ctx, SSL_VERIFY_PEER, NULL);
   }
 #endif
 
@@ -1165,18 +1228,46 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
     // the hostname of the remote server.
     SSL_set_tlsext_host_name(context->ssl, endpoint_url);
 
+    // Require the certificate to match the address we are connecting to. If
+    // the endpoint is a numeric IP address, match it against the certificate's
+    // IP addresses. Otherwise, match it against the certificate's hostnames.
+    //
+    // Note: This is equivalent to SSL_set1_host() in OpenSSL 3, which is not
+    // available in older OpenSSL versions and does not handle IP addresses in
+    // BoringSSL.
+    X509_VERIFY_PARAM* verify_param = SSL_get0_param(context->ssl);
+    if (X509_VERIFY_PARAM_set1_ip_asc(verify_param, endpoint_url) != 1 &&
+        !X509_VERIFY_PARAM_set1_host(verify_param, endpoint_url,
+                                     strlen(endpoint_url))) {
+      P1_PrintError("Failed to set TLS verification hostname '%s'.",
+                    endpoint_url);
+      CloseSocket(context, 1);
+      return POLARIS_ERROR;
+    }
+
     // Perform SSL handhshake.
     ret = SSL_connect(context->ssl);
     if (ret != 1) {
 #  if !P1_NO_PRINT
-      // Note: We intentionally reuse the receive buffer to store the error
-      // message to be displayed to avoid requiring additional stack here. At
-      // this point we're trying to open the socket, so there should be nobody
-      // actively using the receive buffer.
-      snprintf((char*)context->recv_buffer, POLARIS_RECV_BUFFER_SIZE,
-               "TLS handshake failed for tcp://%s:%d", endpoint_url,
-               endpoint_port);
-      P1_PrintSSLError(context, (char*)context->recv_buffer, ret);
+      // If the failure was caused by certificate verification, report why.
+      // Otherwise, report the generic SSL error.
+      long verify_result = SSL_get_verify_result(context->ssl);
+      if (verify_result != X509_V_OK) {
+        P1_PrintError(
+            "TLS certificate verification failed for tcp://%s:%d. "
+            "[error=%s (%ld)]",
+            endpoint_url, endpoint_port,
+            X509_verify_cert_error_string(verify_result), verify_result);
+      } else {
+        // Note: We intentionally reuse the receive buffer to store the error
+        // message to be displayed to avoid requiring additional stack here.
+        // At this point we're trying to open the socket, so there should be
+        // nobody actively using the receive buffer.
+        snprintf((char*)context->recv_buffer, POLARIS_RECV_BUFFER_SIZE,
+                 "TLS handshake failed for tcp://%s:%d", endpoint_url,
+                 endpoint_port);
+        P1_PrintSSLError(context, (char*)context->recv_buffer, ret);
+      }
 #  endif  // !P1_NO_PRINT
       CloseSocket(context, 1);
       return POLARIS_SOCKET_ERROR;

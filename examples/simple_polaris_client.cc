@@ -46,6 +46,14 @@ DEFINE_string(
 DEFINE_bool(polaris_use_tls, POLARIS_ENABLE_TLS ? true : false,
             "Enable/disable use of secure TLS connections.");
 
+DEFINE_string(polaris_ca_file, "",
+              "A PEM file of trusted CA certificates used to verify the TLS "
+              "server. If blank, use the system trust store.");
+
+DEFINE_string(polaris_ca_dir, "",
+              "A directory of trusted CA certificates used to verify the TLS "
+              "server. If blank, use the system trust store.");
+
 PolarisClient* polaris_client = nullptr;
 
 // Process receiver incoming messages.  This example code expects received data
@@ -86,6 +94,10 @@ int main(int argc, char* argv[]) {
   polaris_client->SetPolarisEndpoint(FLAGS_polaris_hostname);
   polaris_client->SetPolarisAuthenticationServer(FLAGS_polaris_api_hostname);
   polaris_client->UseTLS(FLAGS_polaris_use_tls);
+  if (!FLAGS_polaris_ca_file.empty() || !FLAGS_polaris_ca_dir.empty()) {
+    polaris_client->SetCACertificates(FLAGS_polaris_ca_file,
+                                      FLAGS_polaris_ca_dir);
+  }
 
   polaris_client->SetRTCMCallback(
       std::bind(&ReceivedData, std::placeholders::_1, std::placeholders::_2));

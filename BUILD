@@ -15,10 +15,7 @@ cc_library(
         "src/point_one/polaris/polaris_client.h",
         "src/point_one/polaris/polaris_interface.h",
     ],
-    copts = select({
-        "//c:tls_enabled": ["-DPOLARIS_ENABLE_TLS=1"],
-        "//conditions:default": [],
-    }),
+    # Note: POLARIS_ENABLE_TLS is inherited from //c:polaris_client.
     includes = [
         "src",
     ],

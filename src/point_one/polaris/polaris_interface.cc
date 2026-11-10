@@ -45,6 +45,15 @@ int PolarisInterface::UseTLS(bool enable) {
 }
 
 /******************************************************************************/
+int PolarisInterface::SetCACertificates(const std::string& ca_file,
+                                        const std::string& ca_dir) {
+  ca_file_ = ca_file;
+  ca_dir_ = ca_dir;
+  return Polaris_SetCACertificates(&context_, ca_file_.c_str(),
+                                   ca_dir_.c_str());
+}
+
+/******************************************************************************/
 int PolarisInterface::Connect() {
   return Polaris_Connect(&context_);
 }
