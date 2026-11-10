@@ -49,6 +49,23 @@ cc_library(
     }),
 )
 
+# Polaris client C library sources, exposed for the unit tests.
+#
+# The tests #include polaris.c directly so they can exercise its file-static
+# functions and interpose on the socket calls it makes. The sources are exported
+# as textual headers rather than compiled here so that including them does not
+# also link a second copy.
+cc_library(
+    name = "polaris_client_test_sources",
+    testonly = True,
+    includes = ["src"],
+    textual_hdrs = glob([
+        "src/**/*.c",
+        "src/**/*.h",
+    ]),
+    visibility = ["//visibility:public"],
+)
+
 # Polaris client C library - all messages and supporting code -  with TLS
 # enabled.
 cc_library(
@@ -63,6 +80,9 @@ cc_library(
     # the same TLS setting.
     defines = ["POLARIS_ENABLE_TLS=1"],
     includes = ["src"],
+    # pthread_sigmask() is used to block SIGPIPE around TLS socket writes on
+    # Linux.
+    linkopts = ["-pthread"],
     deps = ["@boringssl//:ssl"],
 )
 

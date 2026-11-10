@@ -10,12 +10,23 @@
 
 #pragma once
 
+#include <arpa/inet.h> // For inet_ntop()
 #include <netinet/in.h> // For IPPROTO_* macros and hton*()
-#include <netdb.h> // For gethostbyname() and hostent
+#include <netdb.h> // For getaddrinfo() and addrinfo
 #include <string.h> // For memcpy()
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <unistd.h> // For close()
+
+// Flag telling send() to return EPIPE instead of raising SIGPIPE when the
+// remote end has closed the connection. Apple/BSD platforms do not define it,
+// and suppress SIGPIPE per-socket via the SO_NOSIGPIPE option instead, applied
+// in ConfigureSocket().
+#ifdef MSG_NOSIGNAL
+#  define P1_MSG_NOSIGNAL MSG_NOSIGNAL
+#else
+#  define P1_MSG_NOSIGNAL 0
+#endif
 
 typedef int P1_Socket_t;
 #define P1_INVALID_SOCKET -1

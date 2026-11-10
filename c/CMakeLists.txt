@@ -39,6 +39,10 @@ endif()
 # Find OpenSSL (or BoringSSL).
 if (POLARIS_ENABLE_TLS)
     find_package(OpenSSL REQUIRED)
+    # Used to block SIGPIPE around TLS socket writes on Linux.
+    if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        find_package(Threads REQUIRED)
+    endif()
 endif()
 
 ################################################################################
@@ -58,6 +62,9 @@ if (POLARIS_ENABLE_TLS)
     target_compile_definitions(polaris_client PUBLIC POLARIS_ENABLE_TLS=1)
     target_include_directories(polaris_client PRIVATE ${OPENSSL_INCLUDE_DIR})
     target_link_libraries(polaris_client PUBLIC ${OPENSSL_LIBRARIES})
+    if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        target_link_libraries(polaris_client PUBLIC Threads::Threads)
+    endif()
 else()
     target_compile_definitions(polaris_client PUBLIC POLARIS_ENABLE_TLS=0)
 endif()

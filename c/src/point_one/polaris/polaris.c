@@ -15,12 +15,26 @@
 
 #ifndef P1_FREERTOS
 #  include <fcntl.h>  // For fcntl()
+#  include <poll.h>   // For poll()
 #  include <time.h>   // For struct tm
 #endif
 
 #if POLARIS_ENABLE_TLS
 #  include <openssl/err.h>
 #  include <openssl/ssl.h>
+#endif
+
+// Blocking SIGPIPE around TLS writes is only needed on Linux. See @ref
+// SendData().
+#if POLARIS_ENABLE_TLS && defined(__linux__) && !defined(P1_FREERTOS)
+#  define P1_BLOCK_SIGPIPE 1
+#else
+#  define P1_BLOCK_SIGPIPE 0
+#endif
+
+#if P1_BLOCK_SIGPIPE
+#  include <pthread.h>  // For pthread_sigmask()
+#  include <signal.h>   // For sigtimedwait()
 #endif
 
 #include "point_one/polaris/polaris_internal.h"
@@ -37,7 +51,7 @@
   do {          \
   } while (0)
 
-#if P1_NO_PRINT
+#if POLARIS_NO_PRINT
 #  define P1_PrintMessage(level, x, ...) P1_NOOP
 #  define P1_PrintErrno(x, ...) P1_NOOP
 
@@ -47,7 +61,7 @@
       do {                 \
       } while (0)
 #  endif
-#else  // !P1_NO_PRINT
+#else  // !POLARIS_NO_PRINT
 static int __log_level = POLARIS_LOG_LEVEL_INFO;
 
 static PolarisPrintCallback_t __print_callback = NULL;
@@ -106,8 +120,12 @@ static void P1_PrintToCallback(int line, int level, const char* format, ...) {
   __print_callback("polaris.c", line, level, buffer);
 }
 
+// Note: Printing may change errno, e.g., inside the user's print callback. We
+// restore it afterward so that code which checks errno after printing an error
+// still sees the original error.
 #  define P1_DoPrint(line, level, x, ...)                       \
     if (__log_level >= level) {                                 \
+      int p1_saved_errno = errno;                               \
       if (__print_callback) {                                   \
         P1_PrintToCallback(line, level, x, ##__VA_ARGS__);      \
       } else {                                                  \
@@ -115,6 +133,7 @@ static void P1_PrintToCallback(int line, int level, const char* format, ...) {
         P1_fprintf(stderr, " polaris.c:" STR(line) "] " x "\n", \
                    ##__VA_ARGS__);                              \
       }                                                         \
+      errno = p1_saved_errno;                                   \
     }
 
 #  define P1_PrintMessage(level, x, ...) \
@@ -146,7 +165,7 @@ static void P1_PrintData(const uint8_t* buffer, size_t length);
 #  if POLARIS_ENABLE_TLS
 static void ShowCerts(SSL* ssl);
 #  endif
-#endif  // P1_NO_PRINT
+#endif  // POLARIS_NO_PRINT
 
 #define P1_PrintError(x, ...) \
   P1_PrintMessage(POLARIS_LOG_LEVEL_ERROR, x, ##__VA_ARGS__)
@@ -336,6 +355,9 @@ int Polaris_AuthenticateTo(PolarisContext_t* context, const char* api_key,
     return ret;
   }
 
+  // Clear any earlier disconnect request so that it does not cancel this one.
+  context->disconnected = 0;
+
   // Send an auth request, then wait for the response containing the access
   // token.
   //
@@ -479,8 +501,11 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
   context->data_request_sent = 0;
   int ret = OpenSocket(context, endpoint_url, endpoint_port);
   if (ret != POLARIS_SUCCESS) {
-    P1_PrintError("Error connecting to corrections endpoint: tcp://%s:%d.",
-                  endpoint_url, endpoint_port);
+    // Staying quiet if the user canceled the attempt, which is not a failure.
+    if (!context->disconnected) {
+      P1_PrintError("Error connecting to corrections endpoint: tcp://%s:%d.",
+                    endpoint_url, endpoint_port);
+    }
     return ret;
   }
 
@@ -534,8 +559,11 @@ int Polaris_ConnectWithoutAuth(PolarisContext_t* context,
   context->data_request_sent = 0;
   ret = OpenSocket(context, endpoint_url, endpoint_port);
   if (ret != POLARIS_SUCCESS) {
-    P1_PrintError("Error connecting to corrections endpoint: tcp://%s:%d.",
-                  endpoint_url, endpoint_port);
+    // Staying quiet if the user canceled the attempt, which is not a failure.
+    if (!context->disconnected) {
+      P1_PrintError("Error connecting to corrections endpoint: tcp://%s:%d.",
+                    endpoint_url, endpoint_port);
+    }
     return ret;
   }
 
@@ -564,11 +592,17 @@ int Polaris_ConnectWithoutAuth(PolarisContext_t* context,
 
 /******************************************************************************/
 void Polaris_Disconnect(PolarisContext_t* context) {
+  // Record the request even if no socket is open yet, e.g., while the endpoint
+  // address is still being resolved. The connection attempt in progress checks
+  // this flag before it opens a socket.
+  context->disconnected = 1;
+
   if (context->socket != P1_INVALID_SOCKET) {
     P1_PrintDebug("Closing Polaris connection.");
-    context->disconnected = 1;
 #if POLARIS_ENABLE_TLS
-    if (context->use_tls) {
+    // The TLS session does not exist yet if the TCP connection is still being
+    // established, in which case there is nothing to shut down.
+    if (context->use_tls && context->ssl != NULL) {
       SSL_shutdown(context->ssl);
     }
 #endif
@@ -1041,45 +1075,380 @@ static int ValidateUniqueID(const char* unique_id) {
 }
 
 /******************************************************************************/
-#ifdef P1_FREERTOS
-static inline int P1_SetAddress(const char* hostname, int port,
-                                P1_SocketAddrV4_t* result) {
-  uint32_t ip = FreeRTOS_gethostbyname(hostname);
-  if (ip == 0) {
-    return -1;
-  } else {
-    result->sin_family = AF_INET;
-    result->sin_port = FreeRTOS_htons(port);
-    result->sin_addr = ip;
-    return 0;
-  }
-}
-#else
-static inline int P1_SetAddress(const char* hostname, int port,
-                                P1_SocketAddrV4_t* result) {
-  struct hostent* host_info = gethostbyname(hostname);
-  if (host_info == NULL) {
-    P1_PrintError("Unable to resolve \"%s\": %s", hostname, hstrerror(h_errno));
-    return -1;
-  }
-  // IPv6 not currently supported by the API.
-  else if (host_info->h_addrtype != AF_INET) {
-    P1_PrintWarning(
-        "Warning: DNS lookup for \"%s\" returned an IPv6 address (not "
-        "supported).",
-        hostname);
-    // Explicitly set h_errno to _something_ (gethostbyname() doesn't touch
-    // h_errno on success).
-    h_errno = NO_RECOVERY;
-    return -2;
-  } else {
-    result->sin_family = AF_INET;
-    result->sin_port = htons(port);
-    memcpy(&result->sin_addr, host_info->h_addr_list[0], host_info->h_length);
-    return 0;
-  }
-}
+/**
+ * @brief Test whether an error code means no network connection is available.
+ *
+ * Distinguishes a missing or unusable network interface/route from a problem
+ * with the endpoint itself. The former is transient and worth retrying, and
+ * must not be reported in a way that a caller could mistake for a rejected API
+ * key or access token.
+ *
+ * @param error_code The `errno` value to be checked.
+ *
+ * @return 1 if the error indicates that no network connection is available.
+ */
+static int IsNoNetworkError(int error_code) {
+  // Note: The cases are guarded individually since a bare-metal C library may
+  // not define every POSIX network error code.
+  switch (error_code) {
+#ifdef ENETDOWN
+    case ENETDOWN:
 #endif
+#ifdef ENETUNREACH
+    case ENETUNREACH:
+#endif
+#ifdef EHOSTDOWN
+    case EHOSTDOWN:
+#endif
+#ifdef EHOSTUNREACH
+    case EHOSTUNREACH:
+#endif
+#ifdef EADDRNOTAVAIL
+    case EADDRNOTAVAIL:
+#endif
+#ifdef EAFNOSUPPORT
+    case EAFNOSUPPORT:
+#endif
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+/******************************************************************************/
+/**
+ * @brief Apply the configured send and receive timeouts to the open socket.
+ *
+ * On platforms that support it, this also disables SIGPIPE for the socket to
+ * avoid aborting the application if the pipe fails during a write, e.g.,
+ * because the network interface disappeared after a wifi disconnect.
+ *
+ * @param context The Polaris context to be used.
+ */
+static void ConfigureSocket(PolarisContext_t* context) {
+  P1_PrintDebug(
+      "Configuring socket. [socket=%d, read_timeout=%d ms, send_timeout=%d "
+      "ms]",
+      context->socket, POLARIS_RECV_TIMEOUT_MS, POLARIS_SEND_TIMEOUT_MS);
+
+  P1_TimeValue_t timeout;
+  P1_SetTimeMS(POLARIS_RECV_TIMEOUT_MS, &timeout);
+  setsockopt(context->socket, SOL_SOCKET, SO_RCVTIMEO, &timeout,
+             sizeof(timeout));
+  P1_SetTimeMS(POLARIS_SEND_TIMEOUT_MS, &timeout);
+  setsockopt(context->socket, SOL_SOCKET, SO_SNDTIMEO, &timeout,
+             sizeof(timeout));
+
+#ifdef SO_NOSIGPIPE
+  // Apple/BSD platforms suppress SIGPIPE per-socket. This covers every write
+  // to the socket, including the ones the TLS library performs internally, so
+  // no further handling is needed in SendData().
+  int no_sigpipe = 1;
+  setsockopt(context->socket, SOL_SOCKET, SO_NOSIGPIPE, &no_sigpipe,
+             sizeof(no_sigpipe));
+#endif
+}
+
+#ifdef P1_FREERTOS
+/******************************************************************************/
+/**
+ * @brief Resolve the endpoint hostname and open a connection to it.
+ *
+ * FreeRTOS+TCP resolves IPv4 addresses only.
+ *
+ * @param context The Polaris context to be used.
+ * @param endpoint_url The hostname of the desired endpoint.
+ * @param endpoint_port The port of the desired endpoint.
+ *
+ * @return @ref POLARIS_SUCCESS on success.
+ * @return @ref POLARIS_NO_NETWORK if no network connection is available.
+ * @return @ref POLARIS_SOCKET_ERROR if the hostname could not be resolved, or
+ *         the connection could not be established.
+ */
+static int ResolveAndConnect(PolarisContext_t* context,
+                             const char* endpoint_url, int endpoint_port) {
+  // Open a socket.
+  context->socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  if (context->socket == P1_INVALID_SOCKET) {
+    P1_PrintError("Error creating socket.");
+    return POLARIS_SOCKET_ERROR;
+  }
+
+  ConfigureSocket(context);
+
+  // Look up the endpoint address.
+  P1_PrintDebug("Performing DNS lookup for '%s'.", endpoint_url);
+  uint32_t ip = FreeRTOS_gethostbyname(endpoint_url);
+  if (ip == 0) {
+    P1_PrintError("Error locating address '%s'.", endpoint_url);
+    // Note that FreeRTOS does not report why the lookup failed, so we cannot
+    // tell an unreachable DNS server from an unknown hostname. We report the
+    // transient condition since retrying is the safer of the two behaviors.
+    return POLARIS_NO_NETWORK;
+  }
+
+  P1_SocketAddrV4_t address;
+  address.sin_family = AF_INET;
+  address.sin_port = FreeRTOS_htons(endpoint_port);
+  address.sin_addr = ip;
+
+  // Connect to the server.
+  uint32_t ip_host_endian = ntohl(address.sin_addr);
+  P1_PrintDebug("Connecting to 'tcp://%d.%d.%d.%d:%d'.",
+                (ip_host_endian >> 24) & 0xFF, (ip_host_endian >> 16) & 0xFF,
+                (ip_host_endian >> 8) & 0xFF, ip_host_endian & 0xFF,
+                endpoint_port);
+  int ret =
+      connect(context->socket, (P1_SocketAddr_t*)&address, sizeof(address));
+  if (ret < 0) {
+    P1_PrintErrno("Error connecting to endpoint", ret);
+    // FreeRTOS returns the negated error condition rather than setting errno.
+    return IsNoNetworkError(-ret) ? POLARIS_NO_NETWORK : POLARIS_SOCKET_ERROR;
+  }
+
+  P1_PrintDebug("Connected successfully.");
+  return POLARIS_SUCCESS;
+}
+#else  // POSIX
+/******************************************************************************/
+/**
+ * @brief Format a resolved address as a numeric string.
+ *
+ * @param address The address to be formatted.
+ * @param buffer The buffer in which the result will be stored. Must be at least
+ *        `INET_ADDRSTRLEN` bytes.
+ * @param capacity_bytes The capacity of `buffer` (in bytes).
+ *
+ * @return `buffer`, for convenience when used as a `printf()` argument.
+ */
+#  if !POLARIS_NO_PRINT
+static const char* FormatAddress(const P1_SocketAddr_t* address, char* buffer,
+                                 size_t capacity_bytes) {
+  const void* raw_address = &((const struct sockaddr_in*)address)->sin_addr;
+  if (inet_ntop(address->sa_family, raw_address, buffer,
+                (socklen_t)capacity_bytes) == NULL) {
+    snprintf(buffer, capacity_bytes, "<unknown>");
+  }
+
+  return buffer;
+}
+#  endif  // !POLARIS_NO_PRINT
+
+/******************************************************************************/
+/**
+ * @brief Connect the open socket to the specified address.
+ *
+ * Unlike a plain `connect()` call, this function gives up after @ref
+ * POLARIS_CONNECT_TIMEOUT_MS. The operating system default connection timeout
+ * can be a minute or more, which the calling code has no way to interrupt.
+ *
+ * @param context The Polaris context to be used.
+ * @param address The address of the desired endpoint.
+ * @param address_length The size of `address` (in bytes).
+ *
+ * @return @ref POLARIS_SUCCESS on success.
+ * @return @ref POLARIS_TIMED_OUT if the connection was not established in time.
+ * @return @ref POLARIS_NO_NETWORK if no network connection is available.
+ * @return @ref POLARIS_CONNECTION_CLOSED if @ref Polaris_Disconnect() was
+ *         called while waiting for the connection.
+ * @return @ref POLARIS_SOCKET_ERROR if the connection was refused or failed for
+ *         any other reason.
+ */
+static int ConnectWithTimeout(PolarisContext_t* context,
+                              const P1_SocketAddr_t* address,
+                              size_t address_length) {
+  // Switch to non-blocking mode so connect() returns immediately and we can
+  // impose our own timeout below.
+  int flags = fcntl(context->socket, F_GETFL, 0);
+  if (flags < 0 || fcntl(context->socket, F_SETFL, flags | O_NONBLOCK) < 0) {
+    P1_PrintErrno("Error configuring socket for non-blocking connect", -1);
+    return POLARIS_SOCKET_ERROR;
+  }
+
+  // Start the connection.
+  int ret = connect(context->socket, address, (socklen_t)address_length);
+  if (ret != 0) {
+    if (errno != EINPROGRESS) {
+      P1_PrintErrno("Error connecting to endpoint", ret);
+      return IsNoNetworkError(errno) ? POLARIS_NO_NETWORK
+                                     : POLARIS_SOCKET_ERROR;
+    }
+
+    // Wait for the connection to be established.
+    struct pollfd poll_info;
+    poll_info.fd = context->socket;
+    poll_info.events = POLLOUT;
+
+    P1_TimeValue_t start_time;
+    P1_GetCurrentTime(&start_time);
+    int remaining_ms = POLARIS_CONNECT_TIMEOUT_MS;
+    while (1) {
+      poll_info.revents = 0;
+      ret = poll(&poll_info, 1, remaining_ms);
+
+      // Give up quietly if the user asked us to disconnect. Disconnecting
+      // closes the socket, so the poll may report an interruption, an invalid
+      // descriptor, or a failed connection depending on the timing. None of
+      // those are errors worth reporting.
+      if (context->disconnected) {
+        P1_PrintDebug("Connection attempt canceled by user request.");
+        return POLARIS_CONNECTION_CLOSED;
+      }
+
+      if (ret >= 0) {
+        break;
+      } else if (errno != EINTR) {
+        P1_PrintErrno("Error waiting for connection to be established", ret);
+        return POLARIS_SOCKET_ERROR;
+      }
+
+      // Interrupted by an unrelated signal. Keep waiting for whatever time is
+      // left of the timeout.
+      P1_TimeValue_t now;
+      P1_GetCurrentTime(&now);
+      remaining_ms =
+          POLARIS_CONNECT_TIMEOUT_MS - P1_GetElapsedMS(&start_time, &now);
+      if (remaining_ms <= 0) {
+        ret = 0;
+        break;
+      }
+    }
+
+    if (ret == 0) {
+      P1_PrintWarning("Warning: Timed out connecting to endpoint after %d ms.",
+                      POLARIS_CONNECT_TIMEOUT_MS);
+      return POLARIS_TIMED_OUT;
+    }
+
+    // The socket becomes writable whether the connection succeeded or failed,
+    // so we have to ask for the result explicitly.
+    int socket_error = 0;
+    socklen_t socket_error_length = sizeof(socket_error);
+    if (getsockopt(context->socket, SOL_SOCKET, SO_ERROR, &socket_error,
+                   &socket_error_length) < 0) {
+      P1_PrintErrno("Error querying connection status", -1);
+      return POLARIS_SOCKET_ERROR;
+    } else if (socket_error != 0) {
+      errno = socket_error;
+      P1_PrintErrno("Error connecting to endpoint", -1);
+      return IsNoNetworkError(socket_error) ? POLARIS_NO_NETWORK
+                                            : POLARIS_SOCKET_ERROR;
+    }
+  }
+
+  // Restore blocking mode so the configured send and receive timeouts govern
+  // the reads and writes that follow.
+  if (fcntl(context->socket, F_SETFL, flags) < 0) {
+    P1_PrintErrno("Error restoring socket flags", -1);
+    return POLARIS_SOCKET_ERROR;
+  }
+
+  P1_PrintDebug("Connected successfully.");
+  return POLARIS_SUCCESS;
+}
+
+/**
+ * @brief Resolve the endpoint hostname and open a connection to it.
+ *
+ * A hostname may resolve to several addresses. Each is tried in turn, in the
+ * order the resolver returns them, until one of them connects.
+ *
+ * @param context The Polaris context to be used.
+ * @param endpoint_url The hostname of the desired endpoint.
+ * @param endpoint_port The port of the desired endpoint.
+ *
+ * @return @ref POLARIS_SUCCESS on success.
+ * @return @ref POLARIS_TIMED_OUT if the connection was not established in time.
+ * @return @ref POLARIS_NO_NETWORK if no network connection is available.
+ * @return @ref POLARIS_CONNECTION_CLOSED if @ref Polaris_Disconnect() was
+ *         called while connecting.
+ * @return @ref POLARIS_SOCKET_ERROR if the hostname could not be resolved, or
+ *         the connection could not be established.
+ */
+static int ResolveAndConnect(PolarisContext_t* context,
+                             const char* endpoint_url, int endpoint_port) {
+  // Sized to hold any int, not just a valid port number, since the value comes
+  // from the caller unchecked.
+  char port_str[12] = {0};
+  snprintf(port_str, sizeof(port_str), "%d", endpoint_port);
+
+  struct addrinfo hints;
+  memset(&hints, 0, sizeof(hints));
+  // The corrections service publishes IPv4 addresses only, so IPv6 is not
+  // requested. This also matches the FreeRTOS path, which is IPv4-only.
+  hints.ai_family = AF_INET;
+  hints.ai_socktype = SOCK_STREAM;
+  hints.ai_protocol = IPPROTO_TCP;
+
+  // Look up the endpoint addresses.
+  P1_PrintDebug("Performing DNS lookup for '%s'.", endpoint_url);
+  struct addrinfo* addresses = NULL;
+  int gai_ret = getaddrinfo(endpoint_url, port_str, &hints, &addresses);
+  if (gai_ret == EAI_SYSTEM) {
+    P1_PrintErrno("Error resolving endpoint address", -1);
+    return IsNoNetworkError(errno) ? POLARIS_NO_NETWORK : POLARIS_SOCKET_ERROR;
+  } else if (gai_ret != 0) {
+    P1_PrintError("Error resolving address '%s'. [error=%s (%d)]", endpoint_url,
+                  gai_strerror(gai_ret), gai_ret);
+    // A temporary resolver failure means we could not reach a DNS server at
+    // all, which is what a device with no connectivity looks like. Any other
+    // failure (e.g., an unknown hostname) is a problem with the endpoint itself
+    // and will not be fixed by retrying.
+    return gai_ret == EAI_AGAIN ? POLARIS_NO_NETWORK : POLARIS_SOCKET_ERROR;
+  }
+
+  // Try each address in turn, keeping the first one we can connect to.
+  int ret = POLARIS_SOCKET_ERROR;
+  for (struct addrinfo* entry = addresses; entry != NULL;
+       entry = entry->ai_next) {
+    // Stop early if the user asked to disconnect while we were connecting,
+    // rather than moving on to the next address.
+    if (context->disconnected) {
+      P1_PrintDebug("Connection attempt canceled by user request.");
+      ret = POLARIS_CONNECTION_CLOSED;
+      break;
+    }
+
+    context->socket =
+        socket(entry->ai_family, entry->ai_socktype, entry->ai_protocol);
+    if (context->socket == P1_INVALID_SOCKET) {
+      P1_PrintErrno("Error creating socket", -1);
+      ret = IsNoNetworkError(errno) ? POLARIS_NO_NETWORK : POLARIS_SOCKET_ERROR;
+      continue;
+    }
+
+    ConfigureSocket(context);
+
+#  if !POLARIS_NO_PRINT
+    char address_str[INET_ADDRSTRLEN];
+    P1_PrintDebug(
+        "Connecting to 'tcp://%s:%d'.",
+        FormatAddress(entry->ai_addr, address_str, sizeof(address_str)),
+        endpoint_port);
+#  endif  // !POLARIS_NO_PRINT
+
+    ret = ConnectWithTimeout(context, entry->ai_addr, entry->ai_addrlen);
+    if (ret == POLARIS_SUCCESS) {
+      break;
+    }
+
+    close(context->socket);
+    context->socket = P1_INVALID_SOCKET;
+  }
+
+  freeaddrinfo(addresses);
+
+  // If the user asked to disconnect during the last attempt, report the
+  // cancellation rather than that attempt's error, the same as if it had
+  // happened during an earlier attempt.
+  if (ret != POLARIS_SUCCESS && context->disconnected) {
+    P1_PrintDebug("Connection attempt canceled by user request.");
+    ret = POLARIS_CONNECTION_CLOSED;
+  }
+
+  return ret;
+}
+#endif    // End OS selection
 
 /******************************************************************************/
 static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
@@ -1157,65 +1526,12 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
   }
 #endif
 
-  // Open a socket.
-  context->socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-  if (context->socket < 0) {
-    P1_PrintErrno("Error creating socket", context->socket);
+  // Resolve the endpoint hostname and establish a TCP connection.
+  int ret = ResolveAndConnect(context, endpoint_url, endpoint_port);
+  if (ret != POLARIS_SUCCESS) {
     CloseSocket(context, 1);
-    return POLARIS_SOCKET_ERROR;
+    return ret;
   }
-
-  P1_PrintDebug(
-      "Configuring socket. [socket=%d, read_timeout=%d ms, send_timeout=%d "
-      "ms]",
-      context->socket, POLARIS_RECV_TIMEOUT_MS, POLARIS_SEND_TIMEOUT_MS);
-
-  // Set send/receive timeouts.
-  P1_TimeValue_t timeout;
-  P1_SetTimeMS(POLARIS_RECV_TIMEOUT_MS, &timeout);
-  setsockopt(context->socket, SOL_SOCKET, SO_RCVTIMEO, &timeout,
-             sizeof(timeout));
-  P1_SetTimeMS(POLARIS_SEND_TIMEOUT_MS, &timeout);
-  setsockopt(context->socket, SOL_SOCKET, SO_SNDTIMEO, &timeout,
-             sizeof(timeout));
-
-#ifndef P1_FREERTOS
-  int flags = fcntl(context->socket, F_GETFL);
-  P1_PrintDebug("Socket flags: 0x%08x", flags);
-#endif  // P1_FREERTOS
-
-  // Lookup the IP of the endpoint used for auth requests.
-  P1_PrintDebug("Performing DNS lookup for '%s'.", endpoint_url);
-  P1_SocketAddrV4_t address;
-  if (P1_SetAddress(endpoint_url, endpoint_port, &address) < 0) {
-#ifdef P1_FREERTOS
-    P1_PrintError("Error locating address '%s'.", endpoint_url);
-#else
-    P1_PrintError("Error locating address '%s'. [error=%s (%d)]", endpoint_url,
-                  hstrerror(h_errno), h_errno);
-#endif
-    CloseSocket(context, 1);
-    return POLARIS_SOCKET_ERROR;
-  }
-
-  // Connect to the server.
-#ifdef P1_FREERTOS
-  uint32_t ip_host_endian = ntohl(address.sin_addr);
-#else
-  uint32_t ip_host_endian = ntohl(address.sin_addr.s_addr);
-#endif
-  P1_PrintDebug("Connecting to 'tcp://%d.%d.%d.%d:%d'.",
-                (ip_host_endian >> 24) & 0xFF, (ip_host_endian >> 16) & 0xFF,
-                (ip_host_endian >> 8) & 0xFF, ip_host_endian & 0xFF,
-                endpoint_port);
-  int ret =
-      connect(context->socket, (P1_SocketAddr_t*)&address, sizeof(address));
-  if (ret < 0) {
-    P1_PrintErrno("Error connecting to endpoint", ret);
-    CloseSocket(context, 1);
-    return POLARIS_SOCKET_ERROR;
-  }
-  P1_PrintDebug("Connected successfully.");
 
 #if POLARIS_ENABLE_TLS
   if (context->use_tls) {
@@ -1248,7 +1564,7 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
     // Perform SSL handhshake.
     ret = SSL_connect(context->ssl);
     if (ret != 1) {
-#  if !P1_NO_PRINT
+#  if !POLARIS_NO_PRINT
       // If the failure was caused by certificate verification, report why.
       // Otherwise, report the generic SSL error.
       long verify_result = SSL_get_verify_result(context->ssl);
@@ -1268,7 +1584,7 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
                  endpoint_port);
         P1_PrintSSLError(context, (char*)context->recv_buffer, ret);
       }
-#  endif  // !P1_NO_PRINT
+#  endif  // !POLARIS_NO_PRINT
       CloseSocket(context, 1);
       return POLARIS_SOCKET_ERROR;
     }
@@ -1325,17 +1641,125 @@ void CloseSocket(PolarisContext_t* context, int destroy_context) {
   // _after_ Polaris_Work() has returned and may have closed the socket.
 }
 
+#if P1_BLOCK_SIGPIPE
+/******************************************************************************/
+/**
+ * @brief Block SIGPIPE for the calling thread.
+ *
+ * @param original_set The signal mask to be restored by @ref UnblockSigPipe().
+ * @param was_pending Set to 1 if a SIGPIPE was already pending before the
+ *        write, e.g., one the application blocked and has not handled yet.
+ *        Otherwise, set to 0.
+ *
+ * @return 1 if SIGPIPE was blocked and @ref UnblockSigPipe() must be called to
+ *         restore the mask.
+ * @return 0 if the signal mask could not be changed.
+ */
+static int BlockSigPipe(sigset_t* original_set, int* was_pending) {
+  // Block SIGPIPE.
+  sigset_t pipe_set;
+  sigemptyset(&pipe_set);
+  sigaddset(&pipe_set, SIGPIPE);
+  if (pthread_sigmask(SIG_BLOCK, &pipe_set, original_set) != 0) {
+    return 0;
+  }
+
+  // Check for a SIGPIPE that is already pending, so that UnblockSigPipe() only
+  // discards one raised by our own write and leaves the application's alone.
+  sigset_t pending_set;
+  *was_pending = sigpending(&pending_set) == 0 &&
+                 sigismember(&pending_set, SIGPIPE) == 1;
+  return 1;
+}
+
+/******************************************************************************/
+/**
+ * @brief Discard a pending SIGPIPE and restore the previous signal mask.
+ *
+ * A write to a socket whose peer has closed raises SIGPIPE on the thread
+ * performing the write. Since the signal is blocked it stays pending, so it
+ * must be consumed here to keep it from being delivered once the mask is
+ * restored.
+ *
+ * If a SIGPIPE was already pending before the write, it belongs to the
+ * application, so it is left pending. Since standard signals do not queue, a
+ * SIGPIPE raised by the write in that case merges with it.
+ *
+ * @param original_set The signal mask saved by @ref BlockSigPipe().
+ * @param was_pending The value reported by @ref BlockSigPipe().
+ */
+static void UnblockSigPipe(const sigset_t* original_set, int was_pending) {
+  // Preserve errno for the caller, which reports it when SSL_write() fails
+  // with SSL_ERROR_SYSCALL. Both calls below can overwrite it, and
+  // sigtimedwait() sets EAGAIN on every write that did not raise SIGPIPE.
+  int saved_errno = errno;
+
+  sigset_t pipe_set;
+  sigemptyset(&pipe_set);
+  sigaddset(&pipe_set, SIGPIPE);
+
+  // Discard a SIGPIPE raised by the write, unless the application already had
+  // one pending.
+  //
+  // Note the zero timeout: if the write succeeded, or the application already
+  // ignores SIGPIPE, nothing is pending and this must not block.
+  //
+  // A SIGPIPE raised by the write is generated synchronously for this thread,
+  // so it is already pending by the time we get here and is returned on the
+  // first call. sigtimedwait() cannot report EINTR while a signal in the set
+  // is pending, so there is nothing to retry.
+  if (!was_pending) {
+    const struct timespec no_wait = {0, 0};
+    sigtimedwait(&pipe_set, NULL, &no_wait);
+  }
+
+  pthread_sigmask(SIG_SETMASK, original_set, NULL);
+
+  errno = saved_errno;
+}
+#endif  // P1_BLOCK_SIGPIPE
+
 /******************************************************************************/
 int SendData(PolarisContext_t* context, const void* buffer, size_t size) {
+  // Note: If the connection has closed remotely, either because the server
+  // disconnected without properly ending the TCP connection or the local
+  // computer's internet connectivity changed (e.g., wifi disconnected), send()
+  // may encounter a pipe failure. When that happens on POSIX, send() will first
+  // raise a SIGPIPE to the application, and then return EPIPE. If the
+  // application does not ignore SIGPIPE, it will abort unexpectedly, and we
+  // will not get a chance to handle the EPIPE gracefully here.
+  //
+  // To address this, we pass the MSG_NOSIGNAL flag to send() to disable SIGPIPE
+  // since a pipe failure is a normal condition and we do not want to crash the
+  // application when it happens. When using TLS, the TLS library SSL_write()
+  // API writes to the socket internally, so unlike a direct send() call it
+  // cannot be passed MSG_NOSIGNAL. On Apple/BSD, we can set SO_NOSIGPIPE
+  // globally on the socket to disable SIGPIPE. Linux does not have a
+  // SO_NOSIGPIPE socket option, so instead we need to block SIGPIPE explicitly
+  // around the write.
+  //
+  // This does not apply for FreeRTOS, which does not use POSIX signals.
   int ret = 0;
 #if POLARIS_ENABLE_TLS
   if (context->use_tls) {
+#  if P1_BLOCK_SIGPIPE
+    sigset_t original_set;
+    int sigpipe_was_pending = 0;
+    int sigpipe_blocked = BlockSigPipe(&original_set, &sigpipe_was_pending);
+#  endif
+
     ret = SSL_write(context->ssl, buffer, size);
+
+#  if P1_BLOCK_SIGPIPE
+    if (sigpipe_blocked) {
+      UnblockSigPipe(&original_set, sigpipe_was_pending);
+    }
+#  endif
   } else {
-    ret = send(context->socket, buffer, size, 0);
+    ret = send(context->socket, buffer, size, P1_MSG_NOSIGNAL);
   }
 #else   // !POLARIS_ENABLE_TLS
-  ret = send(context->socket, buffer, size, 0);
+  ret = send(context->socket, buffer, size, P1_MSG_NOSIGNAL);
 #endif  // POLARIS_ENABLE_TLS
   return ret;
 }
@@ -1534,7 +1958,7 @@ static int GetHTTPResponse(PolarisContext_t* context) {
 }
 
 /******************************************************************************/
-#if !P1_NO_PRINT
+#if !POLARIS_NO_PRINT
 void P1_PrintData(const uint8_t* buffer, size_t length) {
   if (__log_level < POLARIS_LOG_LEVEL_TRACE) {
     return;
@@ -1573,7 +1997,7 @@ void P1_PrintData(const uint8_t* buffer, size_t length) {
 #endif
 
 /******************************************************************************/
-#if !P1_NO_PRINT && POLARIS_ENABLE_TLS
+#if !POLARIS_NO_PRINT && POLARIS_ENABLE_TLS
 void ShowCerts(SSL* ssl) {
   if (__log_level < POLARIS_LOG_LEVEL_DEBUG) {
     return;

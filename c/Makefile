@@ -22,7 +22,8 @@ POLARIS_ENABLE_TLS?=1
 override CFLAGS+=-DPOLARIS_ENABLE_TLS=$(POLARIS_ENABLE_TLS)
 
 ifneq ($(POLARIS_ENABLE_TLS),0)
-override LDLIBS+=-lssl -lcrypto
+# -pthread is used to block SIGPIPE around TLS socket writes.
+override LDLIBS+=-lssl -lcrypto -pthread
 endif
 
 .PHONY: all

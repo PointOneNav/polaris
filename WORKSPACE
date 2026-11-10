@@ -37,3 +37,9 @@ polaris_examples_dependencies()
 load("//bazel:examples_dependencies.bzl", load_polaris_examples_dependencies = "load_dependencies")
 
 load_polaris_examples_dependencies()
+
+#-------------------------------------------------------------------------------
+# Import dependencies for the unit tests (not needed by the library itself).
+load("//bazel:test_repositories.bzl", polaris_test_dependencies = "dependencies")
+
+polaris_test_dependencies()
