@@ -107,6 +107,15 @@ int PolarisTest_OpenSocket(PolarisContext_t* context, const char* endpoint_url,
 int PolarisTest_SendData(PolarisContext_t* context, const void* buffer,
                          size_t size);
 
+/**
+ * @brief Get the number of API calls currently using the connection.
+ *
+ * @param context The Polaris context to be checked.
+ *
+ * @return The number of calls.
+ */
+int PolarisTest_GetNumConnectionUsers(PolarisContext_t* context);
+
 #if POLARIS_ENABLE_TLS
 /**
  * @brief Configure `context` to send through a TLS session on `fd`.

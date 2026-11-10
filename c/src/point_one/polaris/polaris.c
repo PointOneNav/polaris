@@ -44,6 +44,33 @@
 #define POLARIS_AUTHENTICATED 1
 #define POLARIS_AUTHENTICATION_SKIPPED 2
 
+// Atomic operations, used to coordinate Polaris_Disconnect() with calls using
+// the connection on other threads.
+#define P1_AtomicLoad(ptr) __atomic_load_n(ptr, __ATOMIC_SEQ_CST)
+#define P1_AtomicStore(ptr, value) \
+  __atomic_store_n(ptr, value, __ATOMIC_SEQ_CST)
+#define P1_AtomicExchange(ptr, value) \
+  __atomic_exchange_n(ptr, value, __ATOMIC_SEQ_CST)
+#define P1_AtomicCompareExchange(ptr, expected, desired)                   \
+  __atomic_compare_exchange_n(ptr, expected, desired, 0, __ATOMIC_SEQ_CST, \
+                              __ATOMIC_SEQ_CST)
+#define P1_AtomicAnd(ptr, value) \
+  __atomic_and_fetch(ptr, value, __ATOMIC_SEQ_CST)
+
+// Fields of PolarisContext_t::connection_state.
+//
+// The low bits count the API calls currently using the connection.
+#define P1_CONNECTION_USERS_MASK 0xFFFF
+// A call has exclusive access to close the connection. Other calls wait for it
+// to finish before they use the connection.
+#define P1_CONNECTION_CLOSING 0x10000
+// Polaris_Disconnect() is calling shutdown() to interrupt a call in progress.
+// The socket must not be closed until it finishes.
+#define P1_CONNECTION_SHUTTING_DOWN 0x20000
+// Polaris_Disconnect() interrupted a call in progress, so the last call to
+// finish using the connection must close it.
+#define P1_CONNECTION_CLEANUP_PENDING 0x40000
+
 #define MAKE_STR(x) #x
 #define STR(x) MAKE_STR(x)
 
@@ -268,6 +295,43 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
 
 static void CloseSocket(PolarisContext_t* context, int destroy_context);
 
+static int IsDisconnected(PolarisContext_t* context);
+
+static void BeginConnectionUse(PolarisContext_t* context);
+
+static void EndConnectionUse(PolarisContext_t* context);
+
+#if POLARIS_ENABLE_TLS
+static void ShutdownTLS(PolarisContext_t* context);
+#endif
+
+#if P1_BLOCK_SIGPIPE
+static int BlockSigPipe(sigset_t* original_set, int* was_pending);
+
+static void UnblockSigPipe(const sigset_t* original_set, int was_pending);
+#endif
+
+// Run a TLS library call that may write to the socket, with SIGPIPE blocked
+// where needed. See SendData().
+#if P1_BLOCK_SIGPIPE
+#  define P1_CallWithSigPipeBlocked(statement)                     \
+    do {                                                           \
+      sigset_t p1_original_set;                                    \
+      int p1_sigpipe_was_pending = 0;                              \
+      int p1_sigpipe_blocked =                                     \
+          BlockSigPipe(&p1_original_set, &p1_sigpipe_was_pending); \
+      statement;                                                   \
+      if (p1_sigpipe_blocked) {                                    \
+        UnblockSigPipe(&p1_original_set, p1_sigpipe_was_pending);  \
+      }                                                            \
+    } while (0)
+#else
+#  define P1_CallWithSigPipeBlocked(statement) \
+    do {                                       \
+      statement;                               \
+    } while (0)
+#endif
+
 static int SendData(PolarisContext_t* context, const void* buffer, size_t size);
 
 static P1_RecvSize_t ReadData(PolarisContext_t* context, void* buffer,
@@ -296,6 +360,7 @@ int Polaris_Init(PolarisContext_t* context) {
   context->auth_token[0] = '\0';
   context->authenticated = POLARIS_NOT_AUTHENTICATED;
   context->disconnected = 0;
+  context->connection_state = 0;
   context->total_bytes_received = 0;
   context->data_request_sent = 0;
   context->rtcm_callback = NULL;
@@ -341,8 +406,8 @@ int Polaris_Authenticate(PolarisContext_t* context, const char* api_key,
 }
 
 /******************************************************************************/
-int Polaris_AuthenticateTo(PolarisContext_t* context, const char* api_key,
-                           const char* unique_id, const char* api_url) {
+static int AuthenticateToImpl(PolarisContext_t* context, const char* api_key,
+                              const char* unique_id, const char* api_url) {
   // Sanity check the inputs.
   if (strlen(api_key) == 0) {
     P1_PrintError("API key must not be empty.");
@@ -354,9 +419,6 @@ int Polaris_AuthenticateTo(PolarisContext_t* context, const char* api_key,
     // ValidateUniqueID() will print an error.
     return ret;
   }
-
-  // Clear any earlier disconnect request so that it does not cancel this one.
-  context->disconnected = 0;
 
   // Send an auth request, then wait for the response containing the access
   // token.
@@ -415,6 +477,19 @@ int Polaris_AuthenticateTo(PolarisContext_t* context, const char* api_key,
     P1_PrintError("Unexpected authentication response (%d).", status_code);
     return POLARIS_AUTH_ERROR;
   }
+}
+
+/******************************************************************************/
+int Polaris_AuthenticateTo(PolarisContext_t* context, const char* api_key,
+                           const char* unique_id, const char* api_url) {
+  // Clear any earlier disconnect request before starting, so that one
+  // arriving from another thread during this call still cancels it.
+  P1_AtomicStore(&context->disconnected, 0);
+
+  BeginConnectionUse(context);
+  int ret = AuthenticateToImpl(context, api_key, unique_id, api_url);
+  EndConnectionUse(context);
+  return ret;
 }
 
 /******************************************************************************/
@@ -478,8 +553,8 @@ int Polaris_Connect(PolarisContext_t* context) {
 }
 
 /******************************************************************************/
-int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
-                      int endpoint_port) {
+static int ConnectToImpl(PolarisContext_t* context, const char* endpoint_url,
+                         int endpoint_port) {
   if (context->auth_token[0] == '\0') {
     P1_PrintError("Error: Auth token not specified.");
     return POLARIS_AUTH_ERROR;
@@ -495,14 +570,13 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
   }
 
   // Connect to the corrections endpoint.
-  context->disconnected = 0;
   context->authenticated = POLARIS_NOT_AUTHENTICATED;
   context->total_bytes_received = 0;
   context->data_request_sent = 0;
   int ret = OpenSocket(context, endpoint_url, endpoint_port);
   if (ret != POLARIS_SUCCESS) {
     // Staying quiet if the user canceled the attempt, which is not a failure.
-    if (!context->disconnected) {
+    if (!IsDisconnected(context)) {
       P1_PrintError("Error connecting to corrections endpoint: tcp://%s:%d.",
                     endpoint_url, endpoint_port);
     }
@@ -533,9 +607,22 @@ int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
 }
 
 /******************************************************************************/
-int Polaris_ConnectWithoutAuth(PolarisContext_t* context,
-                               const char* endpoint_url, int endpoint_port,
-                               const char* unique_id) {
+int Polaris_ConnectTo(PolarisContext_t* context, const char* endpoint_url,
+                      int endpoint_port) {
+  // Clear any earlier disconnect request before starting, so that one
+  // arriving from another thread during this call still cancels it.
+  P1_AtomicStore(&context->disconnected, 0);
+
+  BeginConnectionUse(context);
+  int ret = ConnectToImpl(context, endpoint_url, endpoint_port);
+  EndConnectionUse(context);
+  return ret;
+}
+
+/******************************************************************************/
+static int ConnectWithoutAuthImpl(PolarisContext_t* context,
+                                  const char* endpoint_url, int endpoint_port,
+                                  const char* unique_id) {
   // Sanity check the inputs.
   int ret = ValidateUniqueID(unique_id);
   if (ret != POLARIS_SUCCESS) {
@@ -553,14 +640,13 @@ int Polaris_ConnectWithoutAuth(PolarisContext_t* context,
   }
 
   // Connect to the corrections endpoint.
-  context->disconnected = 0;
   context->authenticated = POLARIS_NOT_AUTHENTICATED;
   context->total_bytes_received = 0;
   context->data_request_sent = 0;
   ret = OpenSocket(context, endpoint_url, endpoint_port);
   if (ret != POLARIS_SUCCESS) {
     // Staying quiet if the user canceled the attempt, which is not a failure.
-    if (!context->disconnected) {
+    if (!IsDisconnected(context)) {
       P1_PrintError("Error connecting to corrections endpoint: tcp://%s:%d.",
                     endpoint_url, endpoint_port);
     }
@@ -591,28 +677,79 @@ int Polaris_ConnectWithoutAuth(PolarisContext_t* context,
 }
 
 /******************************************************************************/
+int Polaris_ConnectWithoutAuth(PolarisContext_t* context,
+                               const char* endpoint_url, int endpoint_port,
+                               const char* unique_id) {
+  // Clear any earlier disconnect request before starting, so that one
+  // arriving from another thread during this call still cancels it.
+  P1_AtomicStore(&context->disconnected, 0);
+
+  BeginConnectionUse(context);
+  int ret =
+      ConnectWithoutAuthImpl(context, endpoint_url, endpoint_port, unique_id);
+  EndConnectionUse(context);
+  return ret;
+}
+
+/******************************************************************************/
 void Polaris_Disconnect(PolarisContext_t* context) {
   // Record the request even if no socket is open yet, e.g., while the endpoint
   // address is still being resolved. The connection attempt in progress checks
   // this flag before it opens a socket.
-  context->disconnected = 1;
+  P1_AtomicStore(&context->disconnected, 1);
 
-  if (context->socket != P1_INVALID_SOCKET) {
-    P1_PrintDebug("Closing Polaris connection.");
-#if POLARIS_ENABLE_TLS
-    // The TLS session does not exist yet if the TCP connection is still being
-    // established, in which case there is nothing to shut down.
-    if (context->use_tls && context->ssl != NULL) {
-      SSL_shutdown(context->ssl);
+  // Decide how to close the connection, based on whether another call is using
+  // it:
+  // - If not, take exclusive access and close the socket now.
+  // - If so, interrupt that call. The last call to finish using the connection
+  //   closes it. See EndConnectionUse().
+  //
+  // If another call is already doing either one, there is nothing left to do.
+  int state = P1_AtomicLoad(&context->connection_state);
+  int new_state;
+  do {
+    if (state & (P1_CONNECTION_CLOSING | P1_CONNECTION_SHUTTING_DOWN)) {
+      return;
+    } else if ((state & P1_CONNECTION_USERS_MASK) == 0) {
+      new_state = state | P1_CONNECTION_CLOSING;
+    } else {
+      new_state =
+          state | P1_CONNECTION_SHUTTING_DOWN | P1_CONNECTION_CLEANUP_PENDING;
     }
+  } while (
+      !P1_AtomicCompareExchange(&context->connection_state, &state, new_state));
+
+  // If no other call is using the connection, close the socket now.
+  if (new_state & P1_CONNECTION_CLOSING) {
+    if (context->socket != P1_INVALID_SOCKET) {
+      P1_PrintDebug("Closing Polaris connection.");
+#if POLARIS_ENABLE_TLS
+      // The TLS session does not exist if the TCP connection was never fully
+      // established, in which case there is nothing to shut down.
+      if (context->use_tls && context->ssl != NULL) {
+        ShutdownTLS(context);
+      }
 #endif
-    shutdown(context->socket, SHUT_RDWR);
-    // Note: We intentionally close the socket here but do _not_ destroy the SSL
-    // context since Polaris_Work() may be suspended on it and will segfault if
-    // the memory is freed. Polaris_Work() and Polaris_Run() will free it when
-    // they return. If they are not currently being called, the user should call
-    // Polaris_Free() to free the context.
-    CloseSocket(context, 0);
+      shutdown(context->socket, SHUT_RDWR);
+
+      // Note: We close the socket but do _not_ free the TLS session here. The
+      // user must call Polaris_Free() to do so.
+      CloseSocket(context, 0);
+    }
+
+    P1_AtomicAnd(&context->connection_state, ~P1_CONNECTION_CLOSING);
+  }
+  // Otherwise, interrupt the call in progress. shutdown() wakes a blocked
+  // connect(), poll(), or read, and is safe to call while another thread is
+  // using the socket, unlike the TLS functions. That call will close the socket
+  // and free the TLS session when it finishes.
+  else {
+    P1_Socket_t fd = P1_AtomicLoad(&context->socket);
+    if (fd != P1_INVALID_SOCKET) {
+      shutdown(fd, SHUT_RDWR);
+    }
+
+    P1_AtomicAnd(&context->connection_state, ~P1_CONNECTION_SHUTTING_DOWN);
   }
 }
 
@@ -624,8 +761,8 @@ void Polaris_SetRTCMCallback(PolarisContext_t* context,
 }
 
 /******************************************************************************/
-int Polaris_SendECEFPosition(PolarisContext_t* context, double x_m, double y_m,
-                             double z_m) {
+static int SendECEFPositionImpl(PolarisContext_t* context, double x_m,
+                                double y_m, double z_m) {
   if (context->socket == P1_INVALID_SOCKET) {
     P1_PrintError("Error: Polaris connection not currently open.");
     return POLARIS_SOCKET_ERROR;
@@ -668,8 +805,17 @@ int Polaris_SendECEFPosition(PolarisContext_t* context, double x_m, double y_m,
 }
 
 /******************************************************************************/
-int Polaris_SendLLAPosition(PolarisContext_t* context, double latitude_deg,
-                            double longitude_deg, double altitude_m) {
+int Polaris_SendECEFPosition(PolarisContext_t* context, double x_m, double y_m,
+                             double z_m) {
+  BeginConnectionUse(context);
+  int ret = SendECEFPositionImpl(context, x_m, y_m, z_m);
+  EndConnectionUse(context);
+  return ret;
+}
+
+/******************************************************************************/
+static int SendLLAPositionImpl(PolarisContext_t* context, double latitude_deg,
+                               double longitude_deg, double altitude_m) {
   if (context->socket == P1_INVALID_SOCKET) {
     P1_PrintError("Error: Polaris connection not currently open.");
     return POLARIS_SOCKET_ERROR;
@@ -716,7 +862,17 @@ int Polaris_SendLLAPosition(PolarisContext_t* context, double latitude_deg,
 }
 
 /******************************************************************************/
-int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id) {
+int Polaris_SendLLAPosition(PolarisContext_t* context, double latitude_deg,
+                            double longitude_deg, double altitude_m) {
+  BeginConnectionUse(context);
+  int ret =
+      SendLLAPositionImpl(context, latitude_deg, longitude_deg, altitude_m);
+  EndConnectionUse(context);
+  return ret;
+}
+
+/******************************************************************************/
+static int RequestBeaconImpl(PolarisContext_t* context, const char* beacon_id) {
   if (context->socket == P1_INVALID_SOCKET) {
     P1_PrintError("Error: Polaris connection not currently open.");
     return POLARIS_SOCKET_ERROR;
@@ -749,11 +905,19 @@ int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id) {
 }
 
 /******************************************************************************/
-int Polaris_Work(PolarisContext_t* context) {
+int Polaris_RequestBeacon(PolarisContext_t* context, const char* beacon_id) {
+  BeginConnectionUse(context);
+  int ret = RequestBeaconImpl(context, beacon_id);
+  EndConnectionUse(context);
+  return ret;
+}
+
+/******************************************************************************/
+static int WorkImpl(PolarisContext_t* context) {
   // The following should be unlikely to happen, but we call CloseSocket() just
   // in case this function is called after Polaris_Disconnect() to clean up the
   // SSL session.
-  if (context->disconnected) {
+  if (IsDisconnected(context)) {
     P1_PrintDebug("Connection terminated by user request.");
     CloseSocket(context, 1);
     return POLARIS_CONNECTION_CLOSED;
@@ -824,14 +988,18 @@ int Polaris_Work(PolarisContext_t* context) {
       bytes_read = original_bytes_read;
       errno = original_errno;
 #endif
-      if (context->disconnected) {
-        P1_DebugPrintReadWriteError(context, "Socket read timed out",
-                                    bytes_read);
-      } else {
-        P1_PrintReadWriteError(context, "Warning: Socket read timed out",
-                               bytes_read);
+      // If the user disconnected, the read did not time out. The disconnect
+      // request interrupted it, e.g., from a signal handler, which the TLS
+      // library reports the same way as a timeout.
+      if (IsDisconnected(context)) {
+        P1_DebugPrintReadWriteError(
+            context, "Connection terminated by user request", bytes_read);
+        CloseSocket(context, 1);
+        return POLARIS_CONNECTION_CLOSED;
       }
 
+      P1_PrintReadWriteError(context, "Warning: Socket read timed out",
+                             bytes_read);
       return POLARIS_TIMED_OUT;
     }
   }
@@ -847,7 +1015,7 @@ int Polaris_Work(PolarisContext_t* context) {
   //
   if (bytes_read <= 0) {
     // Was the connection closed by the user?
-    if (context->disconnected) {
+    if (IsDisconnected(context)) {
       if (bytes_read == 0) {
         P1_PrintDebug("Connection terminated by user request.");
       } else if (errno == EINTR || errno == ENOTCONN) {
@@ -914,7 +1082,7 @@ int Polaris_Work(PolarisContext_t* context) {
     }
     // Not authenticated, but response received: likely server indicated an
     // error.
-    else if (!context->disconnected && context->total_bytes_received > 0) {
+    else if (!IsDisconnected(context) && context->total_bytes_received > 0) {
       P1_PrintWarning(
           "Warning: Polaris connection closed with an error response. Is "
           "your authentication token valid?");
@@ -966,7 +1134,7 @@ int Polaris_Work(PolarisContext_t* context) {
                              context->recv_buffer, bytes_read);
     }
 
-    if (context->disconnected) {
+    if (IsDisconnected(context)) {
       P1_PrintDebug("Connection terminated by user.");
       return POLARIS_SUCCESS;
     } else {
@@ -976,11 +1144,19 @@ int Polaris_Work(PolarisContext_t* context) {
 }
 
 /******************************************************************************/
-int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
+int Polaris_Work(PolarisContext_t* context) {
+  BeginConnectionUse(context);
+  int ret = WorkImpl(context);
+  EndConnectionUse(context);
+  return ret;
+}
+
+/******************************************************************************/
+static int RunImpl(PolarisContext_t* context, int connection_timeout_ms) {
   // The following should be unlikely to happen, but we call CloseSocket() just
   // in case this function is called after Polaris_Disconnect() to clean up the
   // SSL session.
-  if (context->disconnected) {
+  if (IsDisconnected(context)) {
     P1_PrintDebug("Connection terminated by user request.");
     CloseSocket(context, 1);
     return POLARIS_SUCCESS;
@@ -998,7 +1174,7 @@ int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
   int ret = POLARIS_ERROR;
   while (1) {
     // Read the next data block.
-    ret = Polaris_Work(context);
+    ret = WorkImpl(context);
 
     // Check if the read timed out. This can happen if the client briefly loses
     // cell coverage, etc., so we do not consider short gaps an error. See if
@@ -1031,7 +1207,7 @@ int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
     else {
       P1_GetCurrentTime(&last_read_time);
 
-      if (context->disconnected) {
+      if (IsDisconnected(context)) {
         P1_PrintDebug("Connection terminated by user.");
         CloseSocket(context, 1);
         ret = POLARIS_SUCCESS;
@@ -1042,11 +1218,19 @@ int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
 
   P1_PrintDebug("Received %" PRIu64 " total bytes.",
                 (uint64_t)context->total_bytes_received);
-  if (ret == POLARIS_CONNECTION_CLOSED && context->disconnected) {
+  if (ret == POLARIS_CONNECTION_CLOSED && IsDisconnected(context)) {
     return POLARIS_SUCCESS;
   } else {
     return ret;
   }
+}
+
+/******************************************************************************/
+int Polaris_Run(PolarisContext_t* context, int connection_timeout_ms) {
+  BeginConnectionUse(context);
+  int ret = RunImpl(context, connection_timeout_ms);
+  EndConnectionUse(context);
+  return ret;
 }
 
 /******************************************************************************/
@@ -1168,7 +1352,7 @@ static void ConfigureSocket(PolarisContext_t* context) {
 static int ResolveAndConnect(PolarisContext_t* context,
                              const char* endpoint_url, int endpoint_port) {
   // Open a socket.
-  context->socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  P1_AtomicStore(&context->socket, socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
   if (context->socket == P1_INVALID_SOCKET) {
     P1_PrintError("Error creating socket.");
     return POLARIS_SOCKET_ERROR;
@@ -1290,7 +1474,7 @@ static int ConnectWithTimeout(PolarisContext_t* context,
       // closes the socket, so the poll may report an interruption, an invalid
       // descriptor, or a failed connection depending on the timing. None of
       // those are errors worth reporting.
-      if (context->disconnected) {
+      if (IsDisconnected(context)) {
         P1_PrintDebug("Connection attempt canceled by user request.");
         return POLARIS_CONNECTION_CLOSED;
       }
@@ -1403,14 +1587,15 @@ static int ResolveAndConnect(PolarisContext_t* context,
        entry = entry->ai_next) {
     // Stop early if the user asked to disconnect while we were connecting,
     // rather than moving on to the next address.
-    if (context->disconnected) {
+    if (IsDisconnected(context)) {
       P1_PrintDebug("Connection attempt canceled by user request.");
       ret = POLARIS_CONNECTION_CLOSED;
       break;
     }
 
-    context->socket =
-        socket(entry->ai_family, entry->ai_socktype, entry->ai_protocol);
+    P1_AtomicStore(
+        &context->socket,
+        socket(entry->ai_family, entry->ai_socktype, entry->ai_protocol));
     if (context->socket == P1_INVALID_SOCKET) {
       P1_PrintErrno("Error creating socket", -1);
       ret = IsNoNetworkError(errno) ? POLARIS_NO_NETWORK : POLARIS_SOCKET_ERROR;
@@ -1432,8 +1617,7 @@ static int ResolveAndConnect(PolarisContext_t* context,
       break;
     }
 
-    close(context->socket);
-    context->socket = P1_INVALID_SOCKET;
+    CloseSocket(context, 0);
   }
 
   freeaddrinfo(addresses);
@@ -1441,7 +1625,7 @@ static int ResolveAndConnect(PolarisContext_t* context,
   // If the user asked to disconnect during the last attempt, report the
   // cancellation rather than that attempt's error, the same as if it had
   // happened during an earlier attempt.
-  if (ret != POLARIS_SUCCESS && context->disconnected) {
+  if (ret != POLARIS_SUCCESS && IsDisconnected(context)) {
     P1_PrintDebug("Connection attempt canceled by user request.");
     ret = POLARIS_CONNECTION_CLOSED;
   }
@@ -1562,7 +1746,7 @@ static int OpenSocket(PolarisContext_t* context, const char* endpoint_url,
     }
 
     // Perform SSL handhshake.
-    ret = SSL_connect(context->ssl);
+    P1_CallWithSigPipeBlocked(ret = SSL_connect(context->ssl));
     if (ret != 1) {
 #  if !POLARIS_NO_PRINT
       // If the failure was caused by certificate verification, report why.
@@ -1614,7 +1798,7 @@ void CloseSocket(PolarisContext_t* context, int destroy_context) {
   if (destroy_context && context->ssl != NULL) {
     P1_PrintDebug("Shutting down TLS context.");
     if (SSL_get_shutdown(context->ssl) == 0) {
-      SSL_shutdown(context->ssl);
+      ShutdownTLS(context);
     }
 
     SSL_free(context->ssl);
@@ -1622,10 +1806,18 @@ void CloseSocket(PolarisContext_t* context, int destroy_context) {
   }
 #endif
 
-  if (context->socket != P1_INVALID_SOCKET) {
+  // Mark the socket closed before closing it. If Polaris_Disconnect() is in the
+  // middle of interrupting the socket from another thread, wait for it to
+  // finish first. Otherwise, it could shut down an unrelated descriptor that
+  // reuses the same number after the close.
+  P1_Socket_t fd = P1_AtomicExchange(&context->socket, P1_INVALID_SOCKET);
+  if (fd != P1_INVALID_SOCKET) {
+    while (P1_AtomicLoad(&context->connection_state) &
+           P1_CONNECTION_SHUTTING_DOWN) {
+    }
+
     P1_PrintDebug("Closing socket.");
-    close(context->socket);
-    context->socket = P1_INVALID_SOCKET;
+    close(fd);
   }
 
 #if POLARIS_ENABLE_TLS
@@ -1640,6 +1832,90 @@ void CloseSocket(PolarisContext_t* context, int destroy_context) {
   // here since it is used to determine the return value in Polaris_Run()
   // _after_ Polaris_Work() has returned and may have closed the socket.
 }
+
+/******************************************************************************/
+/**
+ * @brief Check if the user requested a disconnect.
+ *
+ * @param context The Polaris context to be checked.
+ *
+ * @return 1 if @ref Polaris_Disconnect() was called since the last connection
+ *         attempt started, or 0 otherwise.
+ */
+static int IsDisconnected(PolarisContext_t* context) {
+  return P1_AtomicLoad(&context->disconnected);
+}
+
+/******************************************************************************/
+/**
+ * @brief Record that an API call is about to use the connection.
+ *
+ * If @ref Polaris_Disconnect() is closing the connection, this waits for it to
+ * finish first.
+ *
+ * @param context The Polaris context to be used.
+ */
+static void BeginConnectionUse(PolarisContext_t* context) {
+  int state = P1_AtomicLoad(&context->connection_state);
+  while (1) {
+    if (state & P1_CONNECTION_CLOSING) {
+      state = P1_AtomicLoad(&context->connection_state);
+    } else if (P1_AtomicCompareExchange(&context->connection_state, &state,
+                                        state + 1)) {
+      break;
+    }
+  }
+}
+
+/******************************************************************************/
+/**
+ * @brief Record that an API call has finished using the connection.
+ *
+ * If @ref Polaris_Disconnect() interrupted the connection while it was in use,
+ * and this is the last call still using it, this closes the socket and frees
+ * the TLS session.
+ *
+ * @param context The Polaris context to be used.
+ */
+static void EndConnectionUse(PolarisContext_t* context) {
+  // Release this call's use of the connection. If a disconnect is pending and
+  // no other call is still using the connection, take exclusive access to close
+  // it.
+  int state = P1_AtomicLoad(&context->connection_state);
+  int new_state;
+  do {
+    new_state = state - 1;
+    if ((new_state & P1_CONNECTION_USERS_MASK) == 0 &&
+        (new_state & P1_CONNECTION_CLEANUP_PENDING)) {
+      new_state =
+          (new_state & ~P1_CONNECTION_CLEANUP_PENDING) | P1_CONNECTION_CLOSING;
+    }
+  } while (
+      !P1_AtomicCompareExchange(&context->connection_state, &state, new_state));
+
+  // Close the connection if required.
+  if (new_state & P1_CONNECTION_CLOSING) {
+    P1_PrintDebug("Closing Polaris connection after disconnect request.");
+    CloseSocket(context, 1);
+    P1_AtomicAnd(&context->connection_state, ~P1_CONNECTION_CLOSING);
+  }
+}
+
+#if POLARIS_ENABLE_TLS
+/******************************************************************************/
+/**
+ * @brief Send a TLS close notification to the server.
+ *
+ * The write fails if the server already closed the connection, or if @ref
+ * Polaris_Disconnect() shut down the socket from another thread. On Linux, that
+ * would also raise SIGPIPE, so it is blocked here as in @ref SendData().
+ *
+ * @param context The Polaris context to be used.
+ */
+static void ShutdownTLS(PolarisContext_t* context) {
+  P1_CallWithSigPipeBlocked(SSL_shutdown(context->ssl));
+}
+#endif  // POLARIS_ENABLE_TLS
 
 #if P1_BLOCK_SIGPIPE
 /******************************************************************************/
@@ -1742,19 +2018,7 @@ int SendData(PolarisContext_t* context, const void* buffer, size_t size) {
   int ret = 0;
 #if POLARIS_ENABLE_TLS
   if (context->use_tls) {
-#  if P1_BLOCK_SIGPIPE
-    sigset_t original_set;
-    int sigpipe_was_pending = 0;
-    int sigpipe_blocked = BlockSigPipe(&original_set, &sigpipe_was_pending);
-#  endif
-
-    ret = SSL_write(context->ssl, buffer, size);
-
-#  if P1_BLOCK_SIGPIPE
-    if (sigpipe_blocked) {
-      UnblockSigPipe(&original_set, sigpipe_was_pending);
-    }
-#  endif
+    P1_CallWithSigPipeBlocked(ret = SSL_write(context->ssl, buffer, size));
   } else {
     ret = send(context->socket, buffer, size, P1_MSG_NOSIGNAL);
   }
@@ -1769,7 +2033,10 @@ P1_RecvSize_t ReadData(PolarisContext_t* context, void* buffer, size_t size) {
   P1_RecvSize_t bytes_read = 0;
 #if POLARIS_ENABLE_TLS
   if (context->use_tls) {
-    bytes_read = SSL_read(context->ssl, buffer, size);
+    // Note that SSL_read() may also write to the socket, e.g., to complete the
+    // handshake.
+    P1_CallWithSigPipeBlocked(bytes_read =
+                                  SSL_read(context->ssl, buffer, size));
   } else {
     bytes_read = recv(context->socket, buffer, size, 0);
   }

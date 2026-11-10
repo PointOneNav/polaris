@@ -199,6 +199,10 @@ int PolarisTest_SendData(PolarisContext_t* context, const void* buffer,
   return SendData(context, buffer, size);
 }
 
+int PolarisTest_GetNumConnectionUsers(PolarisContext_t* context) {
+  return P1_AtomicLoad(&context->connection_state) & P1_CONNECTION_USERS_MASK;
+}
+
 #if POLARIS_ENABLE_TLS
 /******************************************************************************/
 void PolarisTest_AttachClientTLS(PolarisContext_t* context, int fd) {
